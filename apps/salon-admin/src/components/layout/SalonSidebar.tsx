@@ -334,9 +334,33 @@ const utilityNavItems: NavItem[] = [
   { label: "Help", icon: HelpCircle, path: "/salon/help" }, // Help is always visible
 ];
 
+// A page-level replacement for the "+" that used to float above the mobile
+// bottom nav on some pages (Appointments, Customers, Staff, Services,
+// Cashflow, Messaging, the Business Hub overview) while every page also
+// carried a second, unrelated "+" in the mobile header for the global
+// Quick Create dialog. Both are gone now — a page registers what its "+"
+// should do via useSidebar().setMobileQuickAction, and the single FAB
+// SalonSidebar renders reads it; a page that registers nothing falls back
+// to the same Quick Create dialog the header button used to open.
+export interface MobileQuickActionOption {
+  key: string;
+  label: string;
+  icon: React.ElementType;
+  onSelect: () => void;
+  disabled?: boolean;
+  badge?: string;
+  destructive?: boolean;
+  separatorBefore?: boolean;
+}
+
+export type MobileQuickAction =
+  | { kind: "single"; ariaLabel: string; onSelect: () => void }
+  | { kind: "menu"; ariaLabel: string; options: MobileQuickActionOption[] };
+
 interface SidebarContextType {
   isExpanded: boolean;
   toggleExpanded: () => void;
+  setMobileQuickAction: (action: MobileQuickAction | null) => void;
 }
 
 const SidebarContext = createContext<SidebarContextType | null>(null);
@@ -357,6 +381,8 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [mobileQuickAction, setMobileQuickAction] = useState<MobileQuickAction | null>(null);
+  const [quickActionMenuOpen, setQuickActionMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [confirmSignOutOpen, setConfirmSignOutOpen] = useState(false);
   const [accessRefreshNoticeId, setAccessRefreshNoticeId] = useState<string | null>(null);
@@ -1106,6 +1132,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 			value={{
 				isExpanded,
 				toggleExpanded: () => setIsExpanded(!isExpanded),
+				setMobileQuickAction,
 			}}
 		>
 			<BannerProvider platform="salon">
@@ -1185,20 +1212,14 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 								</div>
 
 								<div className="flex items-center gap-2">
-									{/* Quick Create Button */}
-									<Button
-										variant="outline"
-										size="icon"
-										className="sm:hidden"
-										data-tour-id="tour-quick-create-mobile"
-										onClick={() => setQuickCreateOpen(true)}
-									>
-										<Plus className="w-4 h-4" />
-									</Button>
+									{/* Quick Create Button — desktop only below lg the bottom nav's
+										own "+" covers this, reading whatever the current page
+										registered via useSidebar().setMobileQuickAction, with this
+										same dialog as its fallback when a page registers nothing. */}
 									<Button
 										variant="outline"
 										size="sm"
-										className="hidden sm:flex items-center gap-2"
+										className="hidden lg:flex items-center gap-2"
 										data-tour-id="tour-quick-create"
 										onClick={() => setQuickCreateOpen(true)}
 									>
@@ -1346,6 +1367,59 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 									})}
 								</div>
 							</nav>
+
+							{/* Mobile quick-action FAB — the single "+" that replaces both the old
+								per-page floating buttons (Appointments, Customers, Staff, Services,
+								Cashflow, Messaging, the Business Hub overview each had their own)
+								and the separate mobile header Quick Create icon. Whatever page is
+								mounted registers its own action(s) via setMobileQuickAction; a page
+								that registers nothing falls back to the same Quick Create dialog. */}
+							<DropdownMenu
+								open={mobileQuickAction?.kind === "menu" && quickActionMenuOpen}
+								onOpenChange={(open) => {
+									if (mobileQuickAction?.kind === "menu") {
+										setQuickActionMenuOpen(open);
+										return;
+									}
+									// No menu to show for a single-action page or one with no
+									// registered action at all — Radix still fires this on trigger
+									// click, so run the right thing directly instead of opening.
+									if (!open) return;
+									if (mobileQuickAction) mobileQuickAction.onSelect();
+									else setQuickCreateOpen(true);
+								}}
+							>
+								<DropdownMenuTrigger asChild>
+									<button
+										type="button"
+										aria-label={mobileQuickAction?.ariaLabel ?? "Quick create"}
+										data-tour-id="tour-quick-create-mobile"
+										className="lg:hidden fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95"
+									>
+										<Plus className="h-6 w-6" />
+									</button>
+								</DropdownMenuTrigger>
+								{mobileQuickAction?.kind === "menu" ? (
+									<DropdownMenuContent align="end" side="top" className="w-56 mb-2">
+										{mobileQuickAction.options.map((option) => (
+											<div key={option.key}>
+												{option.separatorBefore ? <DropdownMenuSeparator /> : null}
+												<DropdownMenuItem
+													disabled={option.disabled}
+													onClick={option.onSelect}
+													className={option.destructive ? "text-destructive" : undefined}
+												>
+													<option.icon className="mr-2 h-4 w-4" />
+													{option.label}
+													{option.badge ? (
+														<span className="ml-auto text-xs text-muted-foreground">{option.badge}</span>
+													) : null}
+												</DropdownMenuItem>
+											</div>
+										))}
+									</DropdownMenuContent>
+								) : null}
+							</DropdownMenu>
 
 							{/* "More" bottom sheet — mobile only. Same context switcher and the
 								same BOTTOM_NAV_PATHS-filtered overflow items as the side drawer,

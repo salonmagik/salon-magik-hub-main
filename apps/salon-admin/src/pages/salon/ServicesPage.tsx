@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, useSidebar } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -933,6 +933,97 @@ export default function ServicesPage() {
   const isActiveResourceFull =
     activeResourceLimit?.max != null && activeResourceLimit.count >= activeResourceLimit.max;
 
+  const { setMobileQuickAction } = useSidebar();
+  useEffect(() => {
+    // Bulk-selection mode has its own action bar — no quick-add action to
+    // register while items are selected, same as the FAB used to just not
+    // render then.
+    if (selectedItems.size > 0) {
+      setMobileQuickAction(null);
+      return;
+    }
+    setMobileQuickAction({
+      kind: "menu",
+      ariaLabel: "Add a catalog item",
+      options: [
+        {
+          key: "service",
+          label: "Add service",
+          icon: Scissors,
+          disabled: resourceLimits.service.max != null && resourceLimits.service.count >= resourceLimits.service.max,
+          badge:
+            resourceLimits.service.max != null && resourceLimits.service.count >= resourceLimits.service.max
+              ? "Limit reached"
+              : undefined,
+          onSelect: () => setServiceDialogOpen(true),
+        },
+        {
+          key: "product",
+          label: "Add product",
+          icon: ShoppingBag,
+          disabled: resourceLimits.product.max != null && resourceLimits.product.count >= resourceLimits.product.max,
+          badge:
+            resourceLimits.product.max != null && resourceLimits.product.count >= resourceLimits.product.max
+              ? "Limit reached"
+              : undefined,
+          onSelect: () => setProductDialogOpen(true),
+        },
+        {
+          key: "package",
+          label: "Create package",
+          icon: Package,
+          disabled: resourceLimits.package.max != null && resourceLimits.package.count >= resourceLimits.package.max,
+          badge:
+            resourceLimits.package.max != null && resourceLimits.package.count >= resourceLimits.package.max
+              ? "Limit reached"
+              : undefined,
+          onSelect: () => setPackageDialogOpen(true),
+        },
+        {
+          key: "voucher",
+          label: "Create voucher",
+          icon: Gift,
+          disabled: resourceLimits.voucher.max != null && resourceLimits.voucher.count >= resourceLimits.voucher.max,
+          badge:
+            resourceLimits.voucher.max != null && resourceLimits.voucher.count >= resourceLimits.voucher.max
+              ? "Limit reached"
+              : undefined,
+          onSelect: () => setVoucherDialogOpen(true),
+        },
+        {
+          key: "import",
+          label: "Import catalog",
+          icon: Download,
+          onSelect: () => {
+            setImportType("services");
+            setImportDialogOpen(true);
+          },
+        },
+        {
+          key: "bin",
+          label: `Bin (${binItems.length})`,
+          icon: Trash2,
+          destructive: true,
+          separatorBefore: true,
+          onSelect: () => setBinOpen(true),
+        },
+      ],
+    });
+    return () => setMobileQuickAction(null);
+  }, [
+    setMobileQuickAction,
+    selectedItems.size,
+    resourceLimits.service.max,
+    resourceLimits.service.count,
+    resourceLimits.product.max,
+    resourceLimits.product.count,
+    resourceLimits.package.max,
+    resourceLimits.package.count,
+    resourceLimits.voucher.max,
+    resourceLimits.voucher.count,
+    binItems.length,
+  ]);
+
   // Cleanup intervals on unmount
   useEffect(() => {
     return () => {
@@ -1402,76 +1493,6 @@ export default function ServicesPage() {
         canDelete={canDelete || canRequestDelete}
         canArchive={canArchive}
       />
-
-      {selectedItems.size === 0 && <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="Add a catalog item"
-            data-tour-id="tour-add-catalog-mobile"
-            className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
-          >
-            <Plus className="h-6 w-6" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="end"
-          side="top"
-          className="mb-2 w-56 duration-200 data-[side=top]:slide-in-from-bottom-4"
-        >
-          <DropdownMenuItem
-            disabled={resourceLimits.service.max != null && resourceLimits.service.count >= resourceLimits.service.max}
-            onClick={() => setServiceDialogOpen(true)}
-          >
-            <Scissors className="mr-2 h-4 w-4 text-primary" />
-            Add service
-            {resourceLimits.service.max != null && resourceLimits.service.count >= resourceLimits.service.max && (
-              <span className="ml-auto text-xs text-muted-foreground">Limit reached</span>
-            )}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={resourceLimits.product.max != null && resourceLimits.product.count >= resourceLimits.product.max}
-            onClick={() => setProductDialogOpen(true)}
-          >
-            <ShoppingBag className="mr-2 h-4 w-4 text-primary" />
-            Add product
-            {resourceLimits.product.max != null && resourceLimits.product.count >= resourceLimits.product.max && (
-              <span className="ml-auto text-xs text-muted-foreground">Limit reached</span>
-            )}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={resourceLimits.package.max != null && resourceLimits.package.count >= resourceLimits.package.max}
-            onClick={() => setPackageDialogOpen(true)}
-          >
-            <Package className="mr-2 h-4 w-4 text-primary" />
-            Create package
-            {resourceLimits.package.max != null && resourceLimits.package.count >= resourceLimits.package.max && (
-              <span className="ml-auto text-xs text-muted-foreground">Limit reached</span>
-            )}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={resourceLimits.voucher.max != null && resourceLimits.voucher.count >= resourceLimits.voucher.max}
-            onClick={() => setVoucherDialogOpen(true)}
-          >
-            <Gift className="mr-2 h-4 w-4 text-primary" />
-            Create voucher
-            {resourceLimits.voucher.max != null && resourceLimits.voucher.count >= resourceLimits.voucher.max && (
-              <span className="ml-auto text-xs text-muted-foreground">Limit reached</span>
-            )}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => {
-            setImportType("services");
-            setImportDialogOpen(true);
-          }}>
-            <Download className="mr-2 h-4 w-4 text-primary" />Import catalog
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setBinOpen(true)}>
-            <Trash2 className="mr-2 h-4 w-4 text-[#a23b3b]" />
-            Bin ({binItems.length})
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>}
 
       {/* Confirmation Dialogs */}
       <ReasonConfirmDialog

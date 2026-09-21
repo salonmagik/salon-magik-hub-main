@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { format, subDays } from "date-fns";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, useSidebar } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { useAuth } from "@/hooks/useAuth";
 import { useCustomers } from "@/hooks/useCustomers";
@@ -356,6 +356,11 @@ export default function MessagingPage() {
   const [editingEmailTemplate, setEditingEmailTemplate] = useState<TemplateType | null>(null);
   const [editingSmsTemplate, setEditingSmsTemplate] = useState<SMSTemplateType | null>(null);
   const [creditPurchaseDialogOpen, setCreditPurchaseDialogOpen] = useState(false);
+  const { setMobileQuickAction } = useSidebar();
+  useEffect(() => {
+    setMobileQuickAction({ kind: "single", ariaLabel: "Buy SMS credits", onSelect: () => setCreditPurchaseDialogOpen(true) });
+    return () => setMobileQuickAction(null);
+  }, [setMobileQuickAction]);
   const [creditPurchaseSuccessOpen, setCreditPurchaseSuccessOpen] = useState(false);
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -2342,16 +2347,6 @@ export default function MessagingPage() {
           }}
           templateType={editingSmsTemplate}
         />
-
-        {/* Mobile buy-credits FAB */}
-        <button
-          type="button"
-          aria-label="Buy SMS credits"
-          onClick={() => setCreditPurchaseDialogOpen(true)}
-          className="lg:hidden fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95"
-        >
-          <Plus className="h-6 w-6" />
-        </button>
 
         <CreditPurchaseDialog
           open={creditPurchaseDialogOpen}

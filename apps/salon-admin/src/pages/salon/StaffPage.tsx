@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, useSidebar } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
@@ -37,7 +37,7 @@ import {
 } from "@ui/dialog";
 import {
   UserPlus, Users, Shield, Mail, MoreHorizontal, Clock, X, RefreshCw, Lock, AlertTriangle,
-  User, History, XCircle, CheckCircle, Copy, Building2, Pencil, Loader2, Plus, CalendarOff, Info
+  User, History, XCircle, CheckCircle, Copy, Building2, Pencil, Loader2, CalendarOff, Info
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { cn } from "@shared/utils";
@@ -98,6 +98,11 @@ export default function StaffPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const { setMobileQuickAction } = useSidebar();
+  useEffect(() => {
+    setMobileQuickAction({ kind: "single", ariaLabel: "Invite staff", onSelect: () => setInviteDialogOpen(true) });
+    return () => setMobileQuickAction(null);
+  }, [setMobileQuickAction]);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedInvitationId, setSelectedInvitationId] = useState<string | null>(null);
   const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null);
@@ -1311,16 +1316,6 @@ export default function StaffPage() {
 					)}
 				</Tabs>
 			</div>
-
-			<button
-				type="button"
-				aria-label="Invite staff"
-				onClick={() => setInviteDialogOpen(true)}
-				data-tour-id="tour-invite-staff-mobile"
-				className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
-			>
-				<Plus className="h-6 w-6" />
-			</button>
 
 			<Dialog
 				open={staffOperationsConfirmOpen}

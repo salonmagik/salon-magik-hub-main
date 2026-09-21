@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BrandLoader } from "@/components/BrandLoader";
-import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, useSidebar } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@ui/card";
 import { Button } from "@ui/button";
@@ -91,6 +91,11 @@ export default function SalonsOverviewPage() {
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [addSalonOpen, setAddSalonOpen] = useState(false);
+  const { setMobileQuickAction } = useSidebar();
+  useEffect(() => {
+    setMobileQuickAction({ kind: "single", ariaLabel: "Add branch", onSelect: () => setAddSalonOpen(true) });
+    return () => setMobileQuickAction(null);
+  }, [setMobileQuickAction]);
   const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
   const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
   const [quickActionPopover, setQuickActionPopover] = useState<string | null>(null);
@@ -891,17 +896,6 @@ export default function SalonsOverviewPage() {
             await Promise.all([refetch(), refreshTenants()]);
           }}
         />
-
-        {/* Floating action button — mobile & tablet only */}
-        <button
-          type="button"
-          aria-label="Add branch"
-          onClick={() => setAddSalonOpen(true)}
-          data-tour-id="tour-manage-branches-mobile"
-          className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
-        >
-          <Plus className="w-6 h-6" />
-        </button>
       </div>
     </SalonSidebar>
   );

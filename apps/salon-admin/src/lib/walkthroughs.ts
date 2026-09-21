@@ -200,7 +200,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     buildStep: ({ isDesktop }) => ({
       id: "services.create-service",
       path: "/salon/services?tab=services",
-      target: isDesktop ? '[data-tour-id="tour-add-service"]' : '[data-tour-id="tour-add-catalog-mobile"]',
+      target: isDesktop ? '[data-tour-id="tour-add-service"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Add your services",
       content: isDesktop
         ? "This is where you build your service menu — set prices, durations, and staff assignments so bookings know what to schedule."
@@ -218,7 +218,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     buildStep: ({ isDesktop }) => ({
       id: "services.create-product",
       path: "/salon/services?tab=products",
-      target: isDesktop ? '[data-tour-id="tour-add-product"]' : '[data-tour-id="tour-add-catalog-mobile"]',
+      target: isDesktop ? '[data-tour-id="tour-add-product"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Add your products",
       content: isDesktop
         ? "Sell retail items alongside your services — set a price and stock level."
@@ -236,7 +236,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     buildStep: ({ isDesktop }) => ({
       id: "services.create-voucher",
       path: "/salon/services?tab=vouchers",
-      target: isDesktop ? '[data-tour-id="tour-add-voucher"]' : '[data-tour-id="tour-add-catalog-mobile"]',
+      target: isDesktop ? '[data-tour-id="tour-add-voucher"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Create a voucher",
       content: isDesktop
         ? "Gift vouchers your customers can buy or redeem — set a value and expiry."
@@ -255,7 +255,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     buildStep: ({ isDesktop }) => ({
       id: "services.create-package",
       path: "/salon/services?tab=packages",
-      target: isDesktop ? '[data-tour-id="tour-add-package"]' : '[data-tour-id="tour-add-catalog-mobile"]',
+      target: isDesktop ? '[data-tour-id="tour-add-package"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Bundle a package",
       content: isDesktop
         ? "Bundle services and products together at a discounted price."
@@ -275,7 +275,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     buildStep: ({ isDesktop }) => ({
       id: "team.invite",
       path: "/salon/staff",
-      target: isDesktop ? '[data-tour-id="tour-invite-staff"]' : '[data-tour-id="tour-invite-staff-mobile"]',
+      target: isDesktop ? '[data-tour-id="tour-invite-staff"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Invite your team",
       content: "Add staff members here and control what they can see and do with role-based permissions.",
     }),
@@ -309,7 +309,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     buildStep: ({ isDesktop }) => ({
       id: "appointments.book",
       path: "/salon/appointments",
-      target: isDesktop ? '[data-tour-id="tour-book-appointment"]' : '[data-tour-id="tour-book-or-walkin-mobile"]',
+      target: isDesktop ? '[data-tour-id="tour-book-appointment"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Book an appointment",
       content: isDesktop
         ? "Schedule a customer into an open slot on your calendar."
@@ -327,7 +327,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     buildStep: ({ isDesktop }) => ({
       id: "appointments.walkin",
       path: "/salon/appointments",
-      target: isDesktop ? '[data-tour-id="tour-record-walkin"]' : '[data-tour-id="tour-book-or-walkin-mobile"]',
+      target: isDesktop ? '[data-tour-id="tour-record-walkin"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Record a walk-in",
       content: isDesktop
         ? "Log a customer who showed up without booking ahead of time."
@@ -379,7 +379,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     buildStep: ({ isDesktop }) => ({
       id: "customers.add",
       path: "/salon/customers",
-      target: isDesktop ? '[data-tour-id="tour-add-customer"]' : '[data-tour-id="tour-add-customer-mobile"]',
+      target: isDesktop ? '[data-tour-id="tour-add-customer"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Add a customer",
       content: isDesktop
         ? "Save a customer's contact details and preferences."
@@ -527,7 +527,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     buildStep: ({ isDesktop }) => ({
       id: "hub.branches",
       path: "/salon/overview",
-      target: isDesktop ? '[data-tour-id="tour-manage-branches"]' : '[data-tour-id="tour-manage-branches-mobile"]',
+      target: isDesktop ? '[data-tour-id="tour-manage-branches"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Add a branch",
       content: "Add a new location from here.",
     }),
