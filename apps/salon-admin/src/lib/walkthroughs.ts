@@ -603,11 +603,11 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     buildStep: ({ isDesktop }) => ({
       id: "hub-switcher.switch-to-branch",
       path: "/salon/overview",
-      target: isDesktop ? '[data-tour-id="tour-context-switcher"]' : '[data-tour-id="tour-mobile-menu-toggle"]',
+      target: isDesktop ? '[data-tour-id="tour-context-switcher"]' : '[data-tour-id="tour-mobile-more"]',
       title: "Switch to a branch",
       content: isDesktop
         ? "Use this switcher any time to jump between the business hub and an individual branch."
-        : "Tap here to open your menu, then use the Switch dropdown at the top to jump to a branch.",
+        : "Tap More, then use the Switch to dropdown at the top to jump to a branch.",
       waitTimeoutMs: 1500,
     }),
   },

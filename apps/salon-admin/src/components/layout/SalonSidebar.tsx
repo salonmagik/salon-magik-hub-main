@@ -13,8 +13,6 @@ import {
   Settings,
   LogOut,
   HelpCircle,
-  Menu,
-  X,
   ChevronLeft,
   ChevronDown,
   ChevronRight,
@@ -33,6 +31,7 @@ import {
   PauseCircle,
   Wallet,
   MapPin,
+  MoreHorizontal,
 } from "lucide-react";
 import { MyProfileModal } from "@/components/profile/MyProfileModal";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
@@ -94,9 +93,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@ui/alert-dialog";
+import { Sheet, SheetContent, SheetTitle } from "@ui/sheet";
 
 // User profile section component
-function UserProfileSection({ isExpanded, isMobileOpen, onCloseMobile }: { isExpanded: boolean; isMobileOpen: boolean; onCloseMobile: () => void }) {
+function UserProfileSection({ isExpanded }: { isExpanded: boolean }) {
   const { user, profile } = useAuth();
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -114,10 +114,10 @@ function UserProfileSection({ isExpanded, isMobileOpen, onCloseMobile }: { isExp
     <>
       <button
         type="button"
-        onClick={() => { onCloseMobile(); setProfileOpen(true); }}
+        onClick={() => setProfileOpen(true)}
         className={cn(
           "flex items-center gap-3 px-3 py-2.5 mt-2 w-full rounded-lg transition-colors hover:bg-white/10 cursor-pointer",
-          !isExpanded && !isMobileOpen && "justify-center"
+          !isExpanded && "justify-center"
         )}
       >
         <div className="relative w-8 h-8 flex-shrink-0">
@@ -133,7 +133,7 @@ function UserProfileSection({ isExpanded, isMobileOpen, onCloseMobile }: { isExp
             </div>
           )}
         </div>
-        {(isExpanded || isMobileOpen) && (
+        {isExpanded && (
           <div className="flex-1 min-w-0 text-left">
             <p className="text-sm font-medium truncate text-white">
               {displayName}
@@ -143,7 +143,7 @@ function UserProfileSection({ isExpanded, isMobileOpen, onCloseMobile }: { isExp
             </p>
           </div>
         )}
-        {(isExpanded || isMobileOpen) && (
+        {isExpanded && (
           <ChevronRight className="h-3.5 w-3.5 text-white/50 shrink-0" />
         )}
       </button>
@@ -250,7 +250,8 @@ const BOTTOM_NAV_PATHS = new Set([
   "/salon/appointments",
   "/salon/services",
   "/salon/transactions",
-  "/salon/customers",
+  // Customers lives in "More" now — Home/Bookings/Services/Transactions/More
+  // keeps the branch bar at 5 tabs instead of 6.
   // Business Hub context's bottom nav (see the mobile nav render block) —
   // harmless to list unconditionally, since these paths don't exist in the
   // branch-context nav tree the filter also runs against.
@@ -335,10 +336,7 @@ const utilityNavItems: NavItem[] = [
 
 interface SidebarContextType {
   isExpanded: boolean;
-  isMobileOpen: boolean;
   toggleExpanded: () => void;
-  toggleMobile: () => void;
-  closeMobile: () => void;
 }
 
 const SidebarContext = createContext<SidebarContextType | null>(null);
@@ -357,7 +355,6 @@ interface SalonSidebarProps {
 
 export function SalonSidebar({ children }: SalonSidebarProps) {
   const [isExpanded, setIsExpanded] = useState(true);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -368,6 +365,14 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
   const mobileContentRef = useRef<HTMLDivElement | null>(null);
   const lastMobileScrollTopRef = useRef(0);
+  // "More" on the bottom nav — a dedicated bottom sheet, distinct from the
+  // full-height side drawer the top-header hamburger still opens. Only ever
+  // holds what isn't already on the bar: the context switcher (folded to
+  // the current context by default) and the same BOTTOM_NAV_PATHS-filtered
+  // overflow items the side drawer already computes.
+  const [moreSheetOpen, setMoreSheetOpen] = useState(false);
+  const [contextPickerOpen, setContextPickerOpen] = useState(false);
+  const [expandedOverflowPath, setExpandedOverflowPath] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -577,11 +582,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       (notification.entity_type === "user_role" || notification.entity_type === "staff_location")
   );
 
-  // Close mobile sidebar on route change
-  useEffect(() => {
-    setIsMobileOpen(false);
-  }, [location.pathname]);
-
   // Auto-switch to location context when navigating to a route that is not
   // available in owner_hub (e.g. Messaging, Appointments, Calendar).
   useEffect(() => {
@@ -616,17 +616,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       }
     }
   }, [location.pathname, location.search, filteredMainNavItems]);
-
-  // Handle escape key
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsMobileOpen(false);
-      }
-    };
-    window.addEventListener("keydown", handleEscape);
-    return () => window.removeEventListener("keydown", handleEscape);
-  }, []);
 
   // Keyboard shortcut for Quick Create
   useEffect(() => {
@@ -801,6 +790,17 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
     return true;
   };
 
+  // Whether the current route is one of the items living behind "More"
+  // rather than on the bar itself — so the bottom nav's More tab stays
+  // highlighted while browsing its pages, the same way any other tab does,
+  // not just while its sheet happens to be open. Children are query-string
+  // routes (?tab=...), so this must use isChildActive, not isActive.
+  const isOnOverflowPage = filteredMainNavItems.some((item) => {
+    if (BOTTOM_NAV_PATHS.has(item.path)) return false;
+    if (item.path && isActive(item.path)) return true;
+    return (item.children || []).some((child) => isChildActive(child.path));
+  });
+
   const ExpandableNavItemComponent = ({ item }: { item: NavItem }) => {
     const Icon = item.icon;
     const isOpen = expandedGroups.has(item.path);
@@ -827,7 +827,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 				)}
 			>
 				<Icon className="w-5 h-5 flex-shrink-0" />
-				{(isExpanded || isMobileOpen) && (
+				{isExpanded && (
 					<>
 						<span className="flex-1 text-left">{item.label}</span>
 						<ChevronDown
@@ -843,7 +843,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
     return (
       <div>
-        {!isExpanded && !isMobileOpen ? (
+        {!isExpanded ? (
           <Tooltip>
             <TooltipTrigger asChild>{trigger}</TooltipTrigger>
             <TooltipContent side="right" sideOffset={10}>
@@ -854,7 +854,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           trigger
         )}
 
-        {isOpen && (isExpanded || isMobileOpen) && item.children && (
+        {isOpen && isExpanded && item.children && (
           <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/15 pl-3">
             {item.children.map((child) => {
               const ChildIcon = child.icon;
@@ -899,10 +899,10 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 				aria-label={item.label}
 			>
 				<Icon className="w-5 h-5 flex-shrink-0" />
-				{(isExpanded || isMobileOpen) && (
+				{isExpanded && (
 					<span className="flex-1 text-left">{item.label}</span>
 				)}
-				{item.badge && (isExpanded || isMobileOpen) && (
+				{item.badge && isExpanded && (
 					<Badge variant="secondary" className="bg-white/20 text-white text-xs">
 						{item.badge}
 					</Badge>
@@ -910,7 +910,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 			</IntentionalSidebarLink>
 		);
 
-    if (!isExpanded && !isMobileOpen) {
+    if (!isExpanded) {
       return (
         <Tooltip>
           <TooltipTrigger asChild>{content}</TooltipTrigger>
@@ -928,7 +928,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 		<>
 			{/* Header */}
 			<div className="p-4 flex items-center justify-between">
-				{isExpanded || isMobileOpen ? (
+				{isExpanded ? (
 					<SalonMagikLogo variant="white" size="sm" />
 				) : (
 					<div className="w-8 h-8 flex items-center justify-center mx-auto">
@@ -943,14 +943,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						</svg>
 					</div>
 				)}
-				{isMobileOpen && (
-					<button
-						onClick={() => setIsMobileOpen(false)}
-						className="p-2 hover:bg-white/10 rounded-lg lg:hidden text-white"
-					>
-						<X className="w-5 h-5" />
-					</button>
-				)}
 			</div>
 
 			{/* Plan Badge */}
@@ -958,16 +950,16 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 				<div
 					className={cn(
 						"bg-white/10 rounded-lg py-1.5 px-3 text-xs font-medium flex items-center gap-2 text-white",
-						!isExpanded && !isMobileOpen && "justify-center",
+						!isExpanded && "justify-center",
 					)}
 				>
 					<span>{planDisplay.emoji}</span>
-					{(isExpanded || isMobileOpen) && <span>{planDisplay.label}</span>}
+					{isExpanded && <span>{planDisplay.label}</span>}
 				</div>
 			</div>
 
 			{/* Context Switcher */}
-			{(isExpanded || isMobileOpen) &&
+			{isExpanded &&
 				!isAssignmentPending &&
 				availableContexts.length > 1 && (() => {
 					const hubContext = availableContexts.find((c) => c.type === "owner_hub");
@@ -1076,15 +1068,13 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						))}
 					</div>
 				) : (
-					filteredMainNavItems
-						.filter((item) => !isMobileOpen || !BOTTOM_NAV_PATHS.has(item.path))
-						.map((item) =>
-							item.children ? (
-								<ExpandableNavItemComponent key={item.path} item={item} />
-							) : (
-								<NavItemComponent key={item.path} item={item} />
-							),
-						)
+					filteredMainNavItems.map((item) =>
+						item.children ? (
+							<ExpandableNavItemComponent key={item.path} item={item} />
+						) : (
+							<NavItemComponent key={item.path} item={item} />
+						),
+					)
 				)}
 			</nav>
 
@@ -1095,24 +1085,17 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 				))}
 
 				{/* User Info */}
-				<UserProfileSection
-					isExpanded={isExpanded}
-					isMobileOpen={isMobileOpen}
-					onCloseMobile={() => setIsMobileOpen(false)}
-				/>
+				<UserProfileSection isExpanded={isExpanded} />
 
 				<button
-					onClick={() => {
-						setIsMobileOpen(false);
-						setConfirmSignOutOpen(true);
-					}}
+					onClick={() => setConfirmSignOutOpen(true)}
 					className={cn(
 						"w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
 						"text-white/80 hover:text-white hover:bg-white/10",
 					)}
 				>
 					<LogOut className="w-5 h-5 flex-shrink-0" />
-					{(isExpanded || isMobileOpen) && <span>Sign out</span>}
+					{isExpanded && <span>Sign out</span>}
 				</button>
 			</div>
 		</>
@@ -1122,34 +1105,14 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 		<SidebarContext.Provider
 			value={{
 				isExpanded,
-				isMobileOpen,
 				toggleExpanded: () => setIsExpanded(!isExpanded),
-				toggleMobile: () => setIsMobileOpen(!isMobileOpen),
-				closeMobile: () => setIsMobileOpen(false),
 			}}
 		>
 			<BannerProvider platform="salon">
 				<InactivityGuard>
 					<div className="min-h-screen flex bg-surface">
-						{/* Mobile Overlay */}
-						{isMobileOpen && (
-							<div
-								className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-								onClick={() => setIsMobileOpen(false)}
-							/>
-						)}
-
-						{/* Sidebar - Mobile */}
-						<aside
-							className={cn(
-								"fixed inset-y-0 left-0 z-[60] w-[min(18rem,calc(100vw-1.5rem))] bg-primary flex flex-col transform transition-transform duration-300 lg:hidden",
-								isMobileOpen ? "translate-x-0" : "-translate-x-full",
-							)}
-						>
-							{sidebarContent}
-						</aside>
-
-						{/* Sidebar - Desktop */}
+						{/* Sidebar — desktop and up only. Mobile uses the bottom nav and its
+							"More" sheet exclusively; there is no side drawer to duplicate it. */}
 						<aside
 							className={cn(
 								"hidden lg:flex flex-col bg-primary fixed top-0 left-0 z-[60] transition-all duration-300 h-screen overflow-visible",
@@ -1176,7 +1139,13 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						{/* Main Content */}
 						<main
 							className={cn(
-								"flex-1 min-w-0 flex flex-col min-h-screen overflow-hidden transition-all duration-300",
+								// h-dvh + overflow-hidden makes this the scroll boundary on mobile, so
+								// the pb-adjacent content pane below (mobileContentRef) becomes its own
+								// scroll container — the auto-hide bottom nav's scroll listener is
+								// attached there and never fires if the whole page scrolls instead.
+								// Reverts to natural page-height flow on desktop, where there's no
+								// bottom nav to hide.
+								"flex-1 min-w-0 flex flex-col h-dvh overflow-hidden transition-all duration-300 lg:h-auto lg:min-h-screen",
 								isExpanded ? "lg:ml-64" : "lg:ml-[72px]",
 							)}
 						>
@@ -1185,14 +1154,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 
 							{/* Top Bar */}
 							<header className="h-16 bg-white border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-50">
-								<button
-									onClick={() => setIsMobileOpen(true)}
-									data-tour-id="tour-mobile-menu-toggle"
-									className="p-2 hover:bg-muted rounded-lg lg:hidden"
-								>
-									<Menu className="w-5 h-5" />
-								</button>
-
 								{/* Tenant display / switcher */}
 								<div className="flex-1 flex items-center gap-2.5 min-w-0 ml-1 lg:ml-0">
 									<TenantSwitcher />
@@ -1316,6 +1277,11 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												icon: UserCog,
 												path: "/salon/overview/staff",
 											},
+											{
+												label: "More",
+												icon: MoreHorizontal,
+												path: "__more__",
+											},
 										]
 										: [
 											{
@@ -1339,18 +1305,19 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												path: "/salon/transactions",
 											},
 											{
-												label: "Customers",
-												icon: Users,
-												path: "/salon/customers",
+												label: "More",
+												icon: MoreHorizontal,
+												path: "__more__",
 											},
 										]
 									).map(({ label, icon: Icon, path }) => {
-										const active = isActive(path);
+										const active = path === "__more__" ? moreSheetOpen || isOnOverflowPage : isActive(path);
 										return (
 											<button
 												key={path}
 												type="button"
-												onClick={() => navigate(path)}
+												data-tour-id={path === "__more__" ? "tour-mobile-more" : undefined}
+												onClick={() => (path === "__more__" ? setMoreSheetOpen(true) : navigate(path))}
 														className={cn(
 															"group flex min-w-0 flex-1 flex-col items-center gap-1 rounded-[22px] border border-transparent px-1.5 py-1.5 transition-all duration-200 hover:bg-white/10 motion-reduce:transition-none",
 															active && "border-[#F4C84E]/30 bg-white/[0.08]",
@@ -1379,6 +1346,202 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 									})}
 								</div>
 							</nav>
+
+							{/* "More" bottom sheet — mobile only. Same context switcher and the
+								same BOTTOM_NAV_PATHS-filtered overflow items as the side drawer,
+								just in a sheet that matches how the rest of the bottom bar behaves. */}
+							<Sheet
+								open={moreSheetOpen}
+								onOpenChange={(open) => {
+									setMoreSheetOpen(open);
+									if (!open) {
+										setContextPickerOpen(false);
+										setExpandedOverflowPath(null);
+									}
+								}}
+							>
+								<SheetContent
+									side="bottom"
+									className="lg:hidden flex max-h-[60vh] flex-col gap-0 rounded-t-3xl border-t-0 p-0 pb-[env(safe-area-inset-bottom)]"
+								>
+									<SheetTitle className="sr-only">More</SheetTitle>
+									<div className="mx-auto mt-3 h-1 w-9 shrink-0 rounded-full bg-border" />
+
+									<div className="flex-1 overflow-y-auto px-4 pb-3 pt-3">
+										{availableContexts.length > 1 && !isAssignmentPending && (() => {
+											const hubContext = availableContexts.find((c) => c.type === "owner_hub");
+											const branchContexts = availableContexts.filter((c) => c.type === "location");
+											const currentContext = availableContexts.find((c) =>
+												c.type === "owner_hub" ? contextValue === "owner_hub" : c.locationId === contextValue,
+											);
+											return (
+												// Shaded as one card — the same surface tone as the "Viewing" row
+												// itself — so this whole switcher reads as its own section,
+												// distinct from the plain overflow list below it.
+												<div className="mb-3 rounded-2xl bg-surface p-2">
+													<p className="mb-1 px-1.5 pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+														Switch to
+													</p>
+													<button
+														type="button"
+														onClick={() => setContextPickerOpen((current) => !current)}
+														className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left"
+													>
+														<span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+															{currentContext?.type === "owner_hub" ? (
+																<Building2 className="h-3.5 w-3.5" strokeWidth={2.5} />
+															) : (
+																<MapPin className="h-3.5 w-3.5" strokeWidth={2.5} />
+															)}
+														</span>
+														<span className="min-w-0 flex-1">
+															<span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Viewing</span>
+															<span className="block truncate text-sm font-semibold text-foreground">
+																{currentContext?.isPaused ? `⏸ ${currentContext.label}` : currentContext?.label || "Select"}
+															</span>
+														</span>
+														<ChevronDown
+															className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", contextPickerOpen && "rotate-180")}
+														/>
+													</button>
+
+													{contextPickerOpen && (
+														<div className="mt-0.5 space-y-0.5 border-t border-border/60 pt-1.5">
+															{hubContext && (
+																<button
+																	type="button"
+																	onClick={() => {
+																		if (hubContext !== currentContext) void handleContextChange("owner_hub");
+																		setMoreSheetOpen(false);
+																	}}
+																	className={cn(
+																		"flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm",
+																		hubContext === currentContext
+																			? "bg-primary/10 font-semibold text-primary"
+																			: "text-foreground hover:bg-white/60",
+																	)}
+																>
+																	<Building2 className={cn("h-3.5 w-3.5", hubContext === currentContext ? "text-primary" : "text-muted-foreground")} />
+																	<span className="flex-1 truncate">{hubContext.label}</span>
+																	{hubContext === currentContext && <Check className="h-3.5 w-3.5 text-primary" />}
+																</button>
+															)}
+															{branchContexts.map((context) => (
+																<button
+																	key={`sheet-location-${context.locationId}`}
+																	type="button"
+																	onClick={() => {
+																		if (context !== currentContext) void handleContextChange(context.locationId || "");
+																		setMoreSheetOpen(false);
+																	}}
+																	className={cn(
+																		"flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm",
+																		context === currentContext
+																			? "bg-primary/10 font-semibold text-primary"
+																			: "text-foreground hover:bg-white/60",
+																	)}
+																>
+																	<MapPin className={cn("h-3.5 w-3.5", context === currentContext ? "text-primary" : "text-muted-foreground")} />
+																	<span className="flex-1 truncate">{context.label}</span>
+																	{context.isPaused && <span className="text-xs text-muted-foreground">Paused</span>}
+																	{context === currentContext && <Check className="h-3.5 w-3.5 text-primary" />}
+																</button>
+															))}
+														</div>
+													)}
+												</div>
+											);
+										})()}
+
+										<nav className="space-y-0.5">
+											{filteredMainNavItems
+												.filter((item) => !BOTTOM_NAV_PATHS.has(item.path))
+												.map((item) => {
+													const hasChildren = Boolean(item.children?.length);
+													const anyChildActive = (item.children || []).some((child) => isChildActive(child.path));
+													const selfActive = isActive(item.path) && !hasChildren;
+													const isOpen = expandedOverflowPath === item.path;
+													// While collapsed, the parent row carries the highlight for
+													// whichever of its pages is current. Once expanded, that same
+													// child row shows its own highlight below — showing both at
+													// once would read as two different "active" answers.
+													const parentHighlighted = selfActive || (hasChildren && anyChildActive && !isOpen);
+													return (
+														<div key={item.path}>
+															<button
+																type="button"
+																onClick={() => {
+																	if (hasChildren) {
+																		setExpandedOverflowPath(isOpen ? null : item.path);
+																	} else {
+																		navigate(item.path);
+																		setMoreSheetOpen(false);
+																	}
+																}}
+																className={cn(
+																	"flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+																	parentHighlighted
+																		? "bg-primary/10 font-semibold text-primary"
+																		: "font-medium text-foreground hover:bg-surface",
+																)}
+															>
+																<item.icon
+																	className={cn(
+																		"h-[18px] w-[18px] shrink-0",
+																		parentHighlighted ? "text-primary" : "text-muted-foreground",
+																	)}
+																/>
+																<span className="flex-1 truncate">{item.label}</span>
+																{hasChildren ? (
+																	<ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-180")} />
+																) : (
+																	selfActive && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+																)}
+															</button>
+															{hasChildren && isOpen && (
+																<div className="ml-[1.375rem] space-y-0.5 border-l border-border pl-3">
+																	{item.children!.map((child) => (
+																		<button
+																			key={child.path}
+																			type="button"
+																			onClick={() => {
+																				navigate(child.path);
+																				setMoreSheetOpen(false);
+																			}}
+																			className={cn(
+																				"flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
+																				isChildActive(child.path)
+																					? "bg-primary/10 font-semibold text-primary"
+																					: "font-medium text-muted-foreground hover:bg-surface hover:text-foreground",
+																			)}
+																		>
+																			<span className="flex-1 truncate">{child.label}</span>
+																			{isChildActive(child.path) && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+																		</button>
+																	))}
+																</div>
+															)}
+														</div>
+													);
+												})}
+										</nav>
+
+										<div className="my-2 border-t border-border" />
+
+										<button
+											type="button"
+											onClick={() => {
+												setMoreSheetOpen(false);
+												setConfirmSignOutOpen(true);
+											}}
+											className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-destructive hover:bg-destructive/10"
+										>
+											<LogOut className="h-[18px] w-[18px] shrink-0" />
+											Sign out
+										</button>
+									</div>
+								</SheetContent>
+							</Sheet>
 						</main>
 					</div>
 
