@@ -1525,9 +1525,11 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 													);
 												})}
 										</nav>
+									</div>
 
-										<div className="my-2 border-t border-border" />
-
+									{/* Fixed footer — stays put while the overflow list above scrolls,
+										so "Sign out" is always reachable without hunting for it. */}
+									<div className="shrink-0 border-t border-border px-4 py-2">
 										<button
 											type="button"
 											onClick={() => {
