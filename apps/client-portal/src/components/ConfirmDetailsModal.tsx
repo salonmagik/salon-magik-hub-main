@@ -24,12 +24,39 @@ function splitName(fullName: string): { first: string; last: string } {
 }
 
 /**
- * One-time nudge shown after a customer's first login, prompting them to
- * confirm (or correct) details a salon may have entered on their behalf
- * when adding them — name, date of birth, gender. Skippable; either action
- * marks profiles.details_confirmed_at so it never shows again.
+ * True the first time a customer needs this nudge at all — before they've
+ * either confirmed for real or explicitly skipped. Shared with the profile
+ * page's "you skipped this" banner so the two can't drift on what counts as
+ * pending.
  */
-export function ConfirmDetailsModal() {
+export function needsDetailsConfirmation(profile: {
+  client_password_initialized?: boolean | null;
+  details_confirmed_at?: string | null;
+  details_confirmation_skipped_at?: string | null;
+} | null | undefined): boolean {
+  return (
+    profile?.client_password_initialized === true &&
+    !profile?.details_confirmed_at &&
+    !profile?.details_confirmation_skipped_at
+  );
+}
+
+interface ConfirmDetailsModalProps {
+  /** Opens the form even though the customer already skipped it once —
+   * used by the profile page's "confirm now" nudge to revisit on demand. */
+  forceOpen?: boolean;
+  onForceOpenChange?: (open: boolean) => void;
+}
+
+/**
+ * Nudge shown after a customer's first login, prompting them to confirm (or
+ * correct) details a salon may have entered on their behalf when adding
+ * them — name, date of birth, gender. Confirming marks details_confirmed_at
+ * for good; skipping only marks details_confirmation_skipped_at, so the
+ * profile page can still offer a way back in rather than losing the prompt
+ * forever.
+ */
+export function ConfirmDetailsModal({ forceOpen = false, onForceOpenChange }: ConfirmDetailsModalProps) {
   const { profile, customers, refreshAccount } = useClientAuth();
   const primaryCustomer = customers[0];
 
@@ -54,8 +81,7 @@ export function ConfirmDetailsModal() {
   const [isSaving, setIsSaving] = useState(false);
   const [isSkipping, setIsSkipping] = useState(false);
 
-  const shouldShow =
-    profile?.client_password_initialized === true && !profile?.details_confirmed_at;
+  const shouldShow = needsDetailsConfirmation(profile) || forceOpen;
 
   if (!shouldShow) return null;
 
@@ -84,7 +110,10 @@ export function ConfirmDetailsModal() {
         dobDay: dobDay || undefined,
         detailsConfirmed: true,
       });
-      if (ok) toast({ title: "Thanks — details saved" });
+      if (ok) {
+        toast({ title: "Thanks — details saved" });
+        onForceOpenChange?.(false);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -93,7 +122,8 @@ export function ConfirmDetailsModal() {
   const handleSkip = async () => {
     setIsSkipping(true);
     try {
-      await submit({ detailsConfirmed: true });
+      await submit({ detailsSkipped: true });
+      onForceOpenChange?.(false);
     } finally {
       setIsSkipping(false);
     }

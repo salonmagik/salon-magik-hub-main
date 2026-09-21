@@ -10,7 +10,7 @@ import ClientNotificationsPage from "@/pages/ClientNotificationsPage";
 import ClientProfilePage from "@/pages/ClientProfilePage";
 import ClientHelpPage from "@/pages/ClientHelpPage";
 import ClientCompleteAccountPage from "@/pages/ClientCompleteAccountPage";
-import { ClientAuthProvider } from "@/hooks";
+import { ClientAuthProvider, ConfirmDetailsPromptProvider } from "@/hooks";
 import { ClientProtectedRoute, ClientPublicOnlyRoute } from "@/components/ClientProtectedRoute";
 
 function App() {
@@ -18,6 +18,7 @@ function App() {
     <TooltipProvider>
       <BrowserRouter>
         <ClientAuthProvider>
+        <ConfirmDetailsPromptProvider>
           <Routes>
           <Route
             path="/login"
@@ -102,6 +103,7 @@ function App() {
           />
           <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+        </ConfirmDetailsPromptProvider>
         </ClientAuthProvider>
       </BrowserRouter>
     </TooltipProvider>

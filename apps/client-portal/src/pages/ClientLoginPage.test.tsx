@@ -82,7 +82,7 @@ describe("ClientLoginPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
-    expect(await screen.findByRole("button", { name: /verify code/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /verify and continue/i })).toBeInTheDocument();
   });
 
   it("shows password step when the account already has a password", async () => {

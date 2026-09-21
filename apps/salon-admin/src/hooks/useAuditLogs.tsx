@@ -105,6 +105,7 @@ export function useAuditLogs(filters?: AuditLogFilters, limit = 50) {
   const [error, setError] = useState<Error | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   const fetchLogs = useCallback(
     async (pageNum = 0) => {
@@ -121,7 +122,7 @@ export function useAuditLogs(filters?: AuditLogFilters, limit = 50) {
       try {
         let query = supabase
           .from("audit_logs")
-          .select("*")
+          .select("*", { count: "exact" })
           .eq("tenant_id", currentTenant.id)
           .order("created_at", { ascending: false })
           .range(pageNum * limit, (pageNum + 1) * limit - 1);
@@ -156,8 +157,9 @@ export function useAuditLogs(filters?: AuditLogFilters, limit = 50) {
             .lte("created_at", endOfDay(filters.endDate).toISOString());
         }
 
-        const { data, error: fetchError } = await query;
+        const { data, count, error: fetchError } = await query;
         if (fetchError) throw fetchError;
+        setTotalCount(count ?? 0);
 
         const rawLogs = (data || []) as AuditLog[];
         const actorIds = [
@@ -253,6 +255,7 @@ export function useAuditLogs(filters?: AuditLogFilters, limit = 50) {
     error,
     hasMore,
     loadMore,
+    totalCount,
     refetch: () => fetchLogs(0),
   };
 }

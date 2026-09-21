@@ -659,7 +659,7 @@ export default function ThemesSettingsPage() {
                   </div>
 
                   {/* Bio */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 mt-6">
                     <Label>Storefront Bio</Label>
                     <Textarea
                       placeholder="A short description of your salon…"
@@ -672,7 +672,7 @@ export default function ThemesSettingsPage() {
                   </div>
 
                   {/* Brand color */}
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 mt-6">
                     <Label>Brand Highlight Color</Label>
                     <div className="flex items-center gap-3">
                       <Input
@@ -724,10 +724,10 @@ export default function ThemesSettingsPage() {
                     </p>
                   </div>
 
-                  <div className="h-px bg-border" />
+                  {/* <div className="h-px bg-border my-9" /> */}
 
                   {/* E-commerce hero settings */}
-                  <div className="space-y-3 rounded-xl border border-dashed p-4">
+                  <div className="space-y-3 rounded-xl border border-dashed p-4 mt-6">
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-primary" />
                       <p className="text-sm font-medium">E-commerce content</p>
