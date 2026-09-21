@@ -133,14 +133,20 @@ serve(async (req) => {
       Deno.env.get("BASE_URL") ||
       "";
     const manageBookingsBase = manageBookingsUrl.replace(/\/+$/, "");
+    const isPaid = invoice.status === "paid" || Boolean(invoice.paid_at);
+    const bookingDetailsUrl = invoice.appointment_id
+      ? `${manageBookingsBase}/bookings/${invoice.appointment_id}`
+      : `${manageBookingsBase}/bookings`;
 
     const content = `
       ${heading(`Invoice ${invoice.invoice_number}`)}
       ${paragraph(`Hi ${customer.full_name},`)}
       ${paragraph(`Here is your invoice from <strong>${tenant?.name || "Salon"}</strong>.`)}
       ${paragraph(`Total: <strong>${formatCurrency(invoice.total, currency)}</strong>`)}
-      ${createButton("View & pay invoice", invoice.payment_link || `${manageBookingsBase}/invoices/${invoice.id}`)}
-      ${smallText("If you have any questions, reply to this email and we’ll help.")} 
+      ${isPaid
+        ? createButton("View paid invoice", bookingDetailsUrl)
+        : createButton("View & pay invoice", invoice.payment_link || bookingDetailsUrl)}
+      ${smallText("If you have any questions, reply to this email and we’ll help.")}
     `;
 
     const emailHtml = wrapEmailTemplate(content, {
