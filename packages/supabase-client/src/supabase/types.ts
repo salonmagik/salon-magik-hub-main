@@ -3711,6 +3711,7 @@ export type Database = {
           deleted_by_id: string | null
           deletion_reason: string | null
           description: string | null
+          flag_reason: string | null
           id: string
           image_urls: string[] | null
           is_flagged: boolean | null
@@ -3728,6 +3729,7 @@ export type Database = {
           deleted_by_id?: string | null
           deletion_reason?: string | null
           description?: string | null
+          flag_reason?: string | null
           id?: string
           image_urls?: string[] | null
           is_flagged?: boolean | null
@@ -3745,6 +3747,7 @@ export type Database = {
           deleted_by_id?: string | null
           deletion_reason?: string | null
           description?: string | null
+          flag_reason?: string | null
           id?: string
           image_urls?: string[] | null
           is_flagged?: boolean | null

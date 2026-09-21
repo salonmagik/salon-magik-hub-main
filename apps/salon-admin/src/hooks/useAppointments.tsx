@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { useLocationScope } from "./useLocationScope";
-import type { Tables, TablesInsert, Enums } from "@supabase-client";
+import type { Tables, TablesInsert, TablesUpdate, Enums } from "@supabase-client";
 import { toast } from "@ui/ui/use-toast";
 
 type Appointment = Tables<"appointments">;
@@ -332,7 +332,7 @@ export function useAppointmentActions() {
 
     setIsSubmitting(true);
     try {
-      const updateData: Record<string, unknown> = { status: newStatus, ...additionalData };
+      const updateData: TablesUpdate<"appointments"> = { status: newStatus, ...additionalData };
 
       // Set actual_start when starting
       if (newStatus === "started") {

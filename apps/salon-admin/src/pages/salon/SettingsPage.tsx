@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import type { TablesUpdate } from "@supabase-client";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
@@ -807,7 +808,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		value: boolean;
 		label: string;
 		stateUpdate: Partial<typeof bookingSettings>;
-		dbUpdate: Record<string, unknown>;
+		dbUpdate: TablesUpdate<"tenants">;
 	} | null>(null);
 	const [isToggleSaving, setIsToggleSaving] = useState(false);
 
