@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { SalonSidebar, useSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -85,18 +85,17 @@ export default function CustomersPage() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const { setMobileQuickAction } = useSidebar();
-  useEffect(() => {
-    setMobileQuickAction({
+  const mobileQuickAction = useMemo<MobileQuickAction>(
+    () => ({
       kind: "menu",
       ariaLabel: "Add or import customers",
       options: [
         { key: "import", label: "Import Customers", icon: UserPlus, onSelect: () => setImportDialogOpen(true) },
         { key: "add", label: "Add New Customer", icon: Calendar, onSelect: () => setCustomerDialogOpen(true) },
       ],
-    });
-    return () => setMobileQuickAction(null);
-  }, [setMobileQuickAction]);
+    }),
+    [],
+  );
   const [inactiveDialogOpen, setInactiveDialogOpen] = useState(false);
   const [inactiveDaysThreshold, setInactiveDaysThreshold] = useState(30);
   const [inactiveDaysThresholdInput, setInactiveDaysThresholdInput] = useState("30");
@@ -406,6 +405,7 @@ export default function CustomersPage() {
 
   return (
 		<SalonSidebar>
+			<MobileQuickActionEffect action={mobileQuickAction} />
 			<div className="mx-auto w-full max-w-[1500px] space-y-7">
 				{/* Page Header */}
 				<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

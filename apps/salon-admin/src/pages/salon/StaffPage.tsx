@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { SalonSidebar, useSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
@@ -98,11 +98,10 @@ export default function StaffPage() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const { setMobileQuickAction } = useSidebar();
-  useEffect(() => {
-    setMobileQuickAction({ kind: "single", ariaLabel: "Invite staff", onSelect: () => setInviteDialogOpen(true) });
-    return () => setMobileQuickAction(null);
-  }, [setMobileQuickAction]);
+  const mobileQuickAction = useMemo<MobileQuickAction>(
+    () => ({ kind: "single", ariaLabel: "Invite staff", onSelect: () => setInviteDialogOpen(true) }),
+    [],
+  );
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedInvitationId, setSelectedInvitationId] = useState<string | null>(null);
   const [resendingInvitationId, setResendingInvitationId] = useState<string | null>(null);
@@ -603,6 +602,7 @@ export default function StaffPage() {
 
   return (
 		<SalonSidebar>
+			<MobileQuickActionEffect action={mobileQuickAction} />
 			<div className="mx-auto w-full max-w-[1320px] space-y-[22px]">
 				{/* Header */}
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">

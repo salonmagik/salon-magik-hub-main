@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
-import { SalonSidebar, useSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
@@ -291,9 +291,8 @@ export default function CashflowPage() {
     }
   };
 
-  const { setMobileQuickAction } = useSidebar();
-  useEffect(() => {
-    setMobileQuickAction({
+  const mobileQuickAction = useMemo<MobileQuickAction>(
+    () => ({
       kind: "menu",
       ariaLabel: "Transaction actions",
       options: [
@@ -313,9 +312,9 @@ export default function CashflowPage() {
           onSelect: () => handleExport("xlsx"),
         },
       ],
-    });
-    return () => setMobileQuickAction(null);
-  }, [setMobileQuickAction, filteredTransactions]);
+    }),
+    [filteredTransactions],
+  );
 
   const handleDownloadReceipt = async (appointmentId: string, txnId: string, reference?: string) => {
     setDownloadingReceiptId(txnId);
@@ -801,6 +800,7 @@ export default function CashflowPage() {
 
   return (
     <SalonSidebar>
+      <MobileQuickActionEffect action={mobileQuickAction} />
       <div className="mx-auto w-full max-w-[1500px] space-y-6 sm:space-y-9">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">

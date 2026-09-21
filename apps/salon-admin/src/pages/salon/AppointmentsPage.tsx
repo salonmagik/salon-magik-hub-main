@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays, addWeeks, addMonths, subWeeks, subMonths } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@shared/utils";
-import { SalonSidebar, useSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -174,18 +174,17 @@ export default function AppointmentsPage() {
   const { createFromAppointment } = useInvoices();
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [walkInDialogOpen, setWalkInDialogOpen] = useState(false);
-  const { setMobileQuickAction } = useSidebar();
-  useEffect(() => {
-    setMobileQuickAction({
+  const mobileQuickAction = useMemo<MobileQuickAction>(
+    () => ({
       kind: "menu",
       ariaLabel: "Create appointment or walk-in",
       options: [
         { key: "walkin", label: "Record walk-in", icon: UserPlus, onSelect: () => setWalkInDialogOpen(true) },
         { key: "book", label: "Book appointment", icon: Calendar, onSelect: () => setAppointmentDialogOpen(true) },
       ],
-    });
-    return () => setMobileQuickAction(null);
-  }, [setMobileQuickAction]);
+    }),
+    [],
+  );
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
@@ -1023,6 +1022,7 @@ export default function AppointmentsPage() {
 
   return (
     <SalonSidebar>
+      <MobileQuickActionEffect action={mobileQuickAction} />
       <div className="space-y-5 pb-6">
         {/* Page Header */}
         <div className="flex flex-row items-start justify-between gap-4">

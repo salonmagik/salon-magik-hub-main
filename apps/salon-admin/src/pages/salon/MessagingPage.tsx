@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { format, subDays } from "date-fns";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { SalonSidebar, useSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { useAuth } from "@/hooks/useAuth";
 import { useCustomers } from "@/hooks/useCustomers";
@@ -356,11 +356,10 @@ export default function MessagingPage() {
   const [editingEmailTemplate, setEditingEmailTemplate] = useState<TemplateType | null>(null);
   const [editingSmsTemplate, setEditingSmsTemplate] = useState<SMSTemplateType | null>(null);
   const [creditPurchaseDialogOpen, setCreditPurchaseDialogOpen] = useState(false);
-  const { setMobileQuickAction } = useSidebar();
-  useEffect(() => {
-    setMobileQuickAction({ kind: "single", ariaLabel: "Buy SMS credits", onSelect: () => setCreditPurchaseDialogOpen(true) });
-    return () => setMobileQuickAction(null);
-  }, [setMobileQuickAction]);
+  const mobileQuickAction = useMemo<MobileQuickAction>(
+    () => ({ kind: "single", ariaLabel: "Buy SMS credits", onSelect: () => setCreditPurchaseDialogOpen(true) }),
+    [],
+  );
   const [creditPurchaseSuccessOpen, setCreditPurchaseSuccessOpen] = useState(false);
   const [filterPopoverOpen, setFilterPopoverOpen] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1205,6 +1204,7 @@ export default function MessagingPage() {
 
   return (
     <SalonSidebar>
+      <MobileQuickActionEffect action={mobileQuickAction} />
       <div className="space-y-6">
         <div className="flex flex-row items-start justify-between gap-4">
           <div>

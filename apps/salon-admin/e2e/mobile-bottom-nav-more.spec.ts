@@ -22,10 +22,11 @@ test("More on the mobile bottom nav opens a bottom sheet with the overflow items
   // No side drawer exists on mobile — the bottom nav is the only nav surface.
   await expect(page.locator("aside.lg\\:hidden")).toHaveCount(0);
 
-  // Home/Bookings/Services/Transactions/More — Customers moved into More so
-  // the branch bar stays at 5 tabs instead of 6.
+  // Home/Bookings/[+]/Transactions/More — Customers and Services both moved
+  // into More to make room for the "+" notched into the middle of the bar.
   const bottomNav = page.getByRole("navigation", { name: "Primary mobile navigation" });
   await expect(bottomNav.getByText("Customers", { exact: true })).toHaveCount(0);
+  await expect(bottomNav.getByText("Services", { exact: true })).toHaveCount(0);
 
   const moreTab = bottomNav.getByText("More");
   // Product-tour overlay (react-joyride) auto-launches on this page and isn't
@@ -44,6 +45,7 @@ test("More on the mobile bottom nav opens a bottom sheet with the overflow items
   // An overflow item — not on the bottom bar — must be reachable here.
   await expect(sheet.getByText("Reports", { exact: true })).toBeVisible();
   await expect(sheet.getByText("Customers", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("Services and Products", { exact: true })).toBeVisible();
   await expect(sheet.getByText("Sign out", { exact: true })).toBeVisible();
 });
 

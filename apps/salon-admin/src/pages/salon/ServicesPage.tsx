@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
-import { SalonSidebar, useSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -933,16 +933,12 @@ export default function ServicesPage() {
   const isActiveResourceFull =
     activeResourceLimit?.max != null && activeResourceLimit.count >= activeResourceLimit.max;
 
-  const { setMobileQuickAction } = useSidebar();
-  useEffect(() => {
+  const mobileQuickAction = useMemo<MobileQuickAction | null>(() => {
     // Bulk-selection mode has its own action bar — no quick-add action to
     // register while items are selected, same as the FAB used to just not
     // render then.
-    if (selectedItems.size > 0) {
-      setMobileQuickAction(null);
-      return;
-    }
-    setMobileQuickAction({
+    if (selectedItems.size > 0) return null;
+    return {
       kind: "menu",
       ariaLabel: "Add a catalog item",
       options: [
@@ -1008,10 +1004,8 @@ export default function ServicesPage() {
           onSelect: () => setBinOpen(true),
         },
       ],
-    });
-    return () => setMobileQuickAction(null);
+    };
   }, [
-    setMobileQuickAction,
     selectedItems.size,
     resourceLimits.service.max,
     resourceLimits.service.count,
@@ -1059,6 +1053,7 @@ export default function ServicesPage() {
 
   return (
     <SalonSidebar>
+      <MobileQuickActionEffect action={mobileQuickAction} />
       <div className="mx-auto w-full max-w-[1500px] space-y-5 sm:space-y-7">
         {/* Page Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

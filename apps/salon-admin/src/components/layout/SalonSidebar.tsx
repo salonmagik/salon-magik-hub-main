@@ -248,15 +248,14 @@ function IntentionalSidebarLink({
 const BOTTOM_NAV_PATHS = new Set([
   "/salon",
   "/salon/appointments",
-  "/salon/services",
   "/salon/transactions",
-  // Customers lives in "More" now — Home/Bookings/Services/Transactions/More
-  // keeps the branch bar at 5 tabs instead of 6.
+  // Customers and Services both live in "More" now — Home/Bookings/[+]/
+  // Transactions/More keeps the branch bar at 5 slots instead of 6, room
+  // for the "+" the bar notches in at the middle.
   // Business Hub context's bottom nav (see the mobile nav render block) —
   // harmless to list unconditionally, since these paths don't exist in the
   // branch-context nav tree the filter also runs against.
   "/salon/overview",
-  "/salon/payouts",
   "/salon/overview/staff",
 ]);
 
@@ -371,6 +370,21 @@ export function useSidebar() {
     throw new Error("useSidebar must be used within a SidebarProvider");
   }
   return context;
+}
+
+// A page calls `<SalonSidebar>{children}</SalonSidebar>` itself, so the
+// page's own top-level render runs BEFORE that provider exists — useSidebar()
+// can't be called there directly. This registers a page's quick action from
+// inside the tree instead: render it as a child anywhere inside
+// <SalonSidebar>, and it reads/writes the real context.
+export function MobileQuickActionEffect({ action }: { action: MobileQuickAction | null }) {
+  const { setMobileQuickAction } = useSidebar();
+  useEffect(() => {
+    setMobileQuickAction(action);
+    return () => setMobileQuickAction(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [action, setMobileQuickAction]);
+  return null;
 }
 
 interface SalonSidebarProps {
@@ -1289,9 +1303,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												path: "/salon/transactions",
 											},
 											{
-												label: "Payouts",
-												icon: Wallet,
-												path: "/salon/payouts",
+												label: "Quick",
+												icon: Plus,
+												path: "__quick__",
 											},
 											{
 												label: "Team",
@@ -1316,9 +1330,9 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												path: "/salon/appointments",
 											},
 											{
-												label: "Services",
-												icon: Scissors,
-												path: "/salon/services",
+												label: "Quick",
+												icon: Plus,
+												path: "__quick__",
 											},
 											{
 												label: "Transactions",
@@ -1332,6 +1346,58 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 											},
 										]
 									).map(({ label, icon: Icon, path }) => {
+										if (path === "__quick__") {
+											return (
+												<div key={path} className="flex min-w-0 flex-1 justify-center">
+													<DropdownMenu
+														open={mobileQuickAction?.kind === "menu" && quickActionMenuOpen}
+														onOpenChange={(open) => {
+															if (mobileQuickAction?.kind === "menu") {
+																setQuickActionMenuOpen(open);
+																return;
+															}
+															// No menu to show for a single-action page or one with no
+															// registered action — Radix still fires this on trigger
+															// click, so run the right thing directly instead of opening.
+															if (!open) return;
+															if (mobileQuickAction) mobileQuickAction.onSelect();
+															else setQuickCreateOpen(true);
+														}}
+													>
+														<DropdownMenuTrigger asChild>
+															<button
+																type="button"
+																aria-label={mobileQuickAction?.ariaLabel ?? "Quick create"}
+																data-tour-id="tour-quick-create-mobile"
+																className="-mt-7 flex h-14 w-14 items-center justify-center rounded-full border-[5px] border-[#211a32] bg-[#F4C84E] text-[#2E1F4E] shadow-[0_10px_20px_-6px_rgba(244,200,78,0.55)] transition-transform active:scale-95"
+															>
+																<Plus className="h-6 w-6" />
+															</button>
+														</DropdownMenuTrigger>
+														{mobileQuickAction?.kind === "menu" ? (
+															<DropdownMenuContent align="center" side="top" className="w-56 mb-3">
+																{mobileQuickAction.options.map((option) => (
+																	<div key={option.key}>
+																		{option.separatorBefore ? <DropdownMenuSeparator /> : null}
+																		<DropdownMenuItem
+																			disabled={option.disabled}
+																			onClick={option.onSelect}
+																			className={option.destructive ? "text-destructive" : undefined}
+																		>
+																			<option.icon className="mr-2 h-4 w-4" />
+																			{option.label}
+																			{option.badge ? (
+																				<span className="ml-auto text-xs text-muted-foreground">{option.badge}</span>
+																			) : null}
+																		</DropdownMenuItem>
+																	</div>
+																))}
+															</DropdownMenuContent>
+														) : null}
+													</DropdownMenu>
+												</div>
+											);
+										}
 										const active = path === "__more__" ? moreSheetOpen || isOnOverflowPage : isActive(path);
 										return (
 											<button
@@ -1367,59 +1433,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 									})}
 								</div>
 							</nav>
-
-							{/* Mobile quick-action FAB — the single "+" that replaces both the old
-								per-page floating buttons (Appointments, Customers, Staff, Services,
-								Cashflow, Messaging, the Business Hub overview each had their own)
-								and the separate mobile header Quick Create icon. Whatever page is
-								mounted registers its own action(s) via setMobileQuickAction; a page
-								that registers nothing falls back to the same Quick Create dialog. */}
-							<DropdownMenu
-								open={mobileQuickAction?.kind === "menu" && quickActionMenuOpen}
-								onOpenChange={(open) => {
-									if (mobileQuickAction?.kind === "menu") {
-										setQuickActionMenuOpen(open);
-										return;
-									}
-									// No menu to show for a single-action page or one with no
-									// registered action at all — Radix still fires this on trigger
-									// click, so run the right thing directly instead of opening.
-									if (!open) return;
-									if (mobileQuickAction) mobileQuickAction.onSelect();
-									else setQuickCreateOpen(true);
-								}}
-							>
-								<DropdownMenuTrigger asChild>
-									<button
-										type="button"
-										aria-label={mobileQuickAction?.ariaLabel ?? "Quick create"}
-										data-tour-id="tour-quick-create-mobile"
-										className="lg:hidden fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95"
-									>
-										<Plus className="h-6 w-6" />
-									</button>
-								</DropdownMenuTrigger>
-								{mobileQuickAction?.kind === "menu" ? (
-									<DropdownMenuContent align="end" side="top" className="w-56 mb-2">
-										{mobileQuickAction.options.map((option) => (
-											<div key={option.key}>
-												{option.separatorBefore ? <DropdownMenuSeparator /> : null}
-												<DropdownMenuItem
-													disabled={option.disabled}
-													onClick={option.onSelect}
-													className={option.destructive ? "text-destructive" : undefined}
-												>
-													<option.icon className="mr-2 h-4 w-4" />
-													{option.label}
-													{option.badge ? (
-														<span className="ml-auto text-xs text-muted-foreground">{option.badge}</span>
-													) : null}
-												</DropdownMenuItem>
-											</div>
-										))}
-									</DropdownMenuContent>
-								) : null}
-							</DropdownMenu>
 
 							{/* "More" bottom sheet — mobile only. Same context switcher and the
 								same BOTTOM_NAV_PATHS-filtered overflow items as the side drawer,
@@ -1528,6 +1541,25 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 										})()}
 
 										<nav className="space-y-0.5">
+											{activeContextType === "owner_hub" && (
+												<button
+													type="button"
+													onClick={() => {
+														navigate("/salon/payouts");
+														setMoreSheetOpen(false);
+													}}
+													className={cn(
+														"flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+														isActive("/salon/payouts")
+															? "bg-primary/10 font-semibold text-primary"
+															: "font-medium text-foreground hover:bg-surface",
+													)}
+												>
+													<Wallet className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+													<span className="flex-1 truncate">Payouts</span>
+													{isActive("/salon/payouts") && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+												</button>
+											)}
 											{filteredMainNavItems
 												.filter((item) => !BOTTOM_NAV_PATHS.has(item.path))
 												.map((item) => {
