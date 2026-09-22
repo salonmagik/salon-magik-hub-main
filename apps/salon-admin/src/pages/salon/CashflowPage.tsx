@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import * as XLSX from "xlsx";
-import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
@@ -40,7 +40,6 @@ import {
   MoreVertical,
   Banknote,
   ChevronRight,
-  Plus,
   FileText,
   FileSpreadsheet,
   Info,
@@ -178,7 +177,7 @@ export default function CashflowPage() {
     };
   };
 
-  const filteredTransactions = transactions.filter((txn) => {
+  const filteredTransactions = useMemo(() => transactions.filter((txn) => {
     const dateRange = getDateRange();
     if (dateRange) {
       const txnDate = new Date(txn.created_at);
@@ -207,7 +206,8 @@ export default function CashflowPage() {
     if (activeTab === "refunds") return matchesSearch && txn.type === "refund";
     if (activeTab === "purse") return matchesSearch && (txn.type === "purse_topup" || txn.type === "purse_redemption");
     return matchesSearch;
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [transactions, dateRange, isOwnerHub, effectiveCountry, searchQuery, hubTypeFilter, activeTab]);
 
   // "Today's Inflow" and pending-refund totals are money — they must respect
   // the country filter and never sum two currencies together, same as
@@ -291,6 +291,31 @@ export default function CashflowPage() {
       XLSX.writeFile(wb, `transactions-${format(new Date(), "yyyy-MM-dd")}.xlsx`);
     }
   };
+
+  const mobileQuickAction = useMemo<MobileQuickAction>(
+    () => ({
+      kind: "menu",
+      ariaLabel: "Transaction actions",
+      options: [
+        { key: "cash", label: "Record cash payment", icon: Banknote, onSelect: () => setRecordCashOpen(true) },
+        {
+          key: "csv",
+          label: "Export as CSV",
+          icon: FileText,
+          disabled: filteredTransactions.length === 0,
+          onSelect: () => handleExport("csv"),
+        },
+        {
+          key: "xlsx",
+          label: "Export as XLS",
+          icon: FileSpreadsheet,
+          disabled: filteredTransactions.length === 0,
+          onSelect: () => handleExport("xlsx"),
+        },
+      ],
+    }),
+    [filteredTransactions.length],
+  );
 
   const handleDownloadReceipt = async (appointmentId: string, txnId: string, reference?: string) => {
     setDownloadingReceiptId(txnId);
@@ -776,6 +801,7 @@ export default function CashflowPage() {
 
   return (
     <SalonSidebar>
+      <MobileQuickActionEffect action={mobileQuickAction} />
       <div className="mx-auto w-full max-w-[1500px] space-y-6 sm:space-y-9">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -825,38 +851,6 @@ export default function CashflowPage() {
           renderBranchView()
         )}
       </div>
-
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="Transaction actions"
-            className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 transition-transform active:scale-95 lg:hidden"
-          >
-            <Plus className="h-6 w-6" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" side="top" className="mb-2 w-52">
-          <DropdownMenuItem onClick={() => setRecordCashOpen(true)}>
-            <Banknote className="mr-2 h-4 w-4" />
-            Record cash payment
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={filteredTransactions.length === 0}
-            onClick={() => handleExport("csv")}
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            Export as CSV
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            disabled={filteredTransactions.length === 0}
-            onClick={() => handleExport("xlsx")}
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            Export as XLS
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
 
       {/* Dialogs */}
       <RecordPaymentDialog

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
@@ -18,7 +18,6 @@ import { Button } from "@ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { DatePicker } from "@ui/date-picker";
 import { Input } from "@ui/input";
-import { ScrollArea } from "@ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Skeleton } from "@ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@ui/table";
@@ -94,10 +93,28 @@ export default function AuditLogPage() {
     [actorUserId, filters]
   );
 
-  const { logs, branches, isLoading, error, hasMore, loadMore, refetch } = useAuditLogs(
+  const { logs, branches, isLoading, error, hasMore, loadMore, totalCount, refetch } = useAuditLogs(
     hookFilters,
     50
   );
+
+  // "Load More" only appears once the table's own scroll has actually
+  // reached bottom — otherwise it sits below rows the user hasn't scrolled
+  // through yet, as if there's nothing left above it to see.
+  const [scrolledToBottom, setScrolledToBottom] = useState(false);
+  const tableViewportRef = useRef<HTMLDivElement>(null);
+  const checkScrolledToBottom = (el: HTMLDivElement) => {
+    const { scrollTop, scrollHeight, clientHeight } = el;
+    setScrolledToBottom(scrollHeight - scrollTop - clientHeight < 8);
+  };
+  const handleTableViewportScroll = (event: React.UIEvent<HTMLDivElement>) => {
+    checkScrolledToBottom(event.currentTarget);
+  };
+  // A short list that doesn't overflow the viewport at all counts as
+  // "scrolled to bottom" too — there's nothing further to scroll through.
+  useEffect(() => {
+    if (tableViewportRef.current) checkScrolledToBottom(tableViewportRef.current);
+  }, [logs]);
 
   const actionOptions = useMemo(
     () => AUDIT_ACTION_FILTER_OPTIONS.filter((option) => (option.chainOnly ? isChainTenant : true)),
@@ -250,9 +267,18 @@ export default function AuditLogPage() {
         </Card>
 
         <Card data-tour-id="tour-audit-log-table">
-          <CardHeader>
-            <CardTitle>Activity History</CardTitle>
-            <CardDescription>Recent activity with business-friendly action labels.</CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div>
+              <CardTitle>Activity History</CardTitle>
+              <CardDescription>Recent activity with business-friendly action labels.</CardDescription>
+            </div>
+            {!isLoading && !error && totalCount > 0 ? (
+              <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
+                {searchQuery.trim()
+                  ? `${filteredLogs.length} matching · ${logs.length} of ${totalCount} loaded`
+                  : `${logs.length} of ${totalCount}`}
+              </span>
+            ) : null}
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -280,47 +306,64 @@ export default function AuditLogPage() {
               </div>
             ) : (
               <>
-                <ScrollArea className="h-[520px]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Action Type</TableHead>
-                        <TableHead>Where</TableHead>
-                        <TableHead>Who</TableHead>
-                        <TableHead>When</TableHead>
-                        <TableHead>Criticality</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredLogs.map((log) => (
-                        <TableRow key={log.id}>
-                          <TableCell className="font-medium">{getActionLabel(log)}</TableCell>
-                          <TableCell className="text-muted-foreground">{getWhereLabel(log)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <User className="w-3 h-3 text-muted-foreground" />
-                              <span className="text-sm text-muted-foreground">
-                                {log.actor_user_id ? log.actorName || "Staff" : "System"}
-                              </span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Clock className="w-3 h-3" />
-                              {format(
-                                new Date(log.started_at || log.created_at),
-                                "MMM d, yyyy HH:mm"
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>{getCriticalityBadge(log.criticality_score)}</TableCell>
+                {/*
+                  Plain scroll divs instead of the Radix ScrollArea: Radix's
+                  viewport hard-sets `overflow-x: hidden` inline whenever no
+                  horizontal ScrollAreaScrollbar is mounted (its own source
+                  computes overflowX from scrollbarXEnabled, defaulting to
+                  "hidden"), which clips wide content instead of letting it
+                  scroll — no CSS override can beat that inline style. A
+                  native overflow-y-auto outer / overflow-x-auto inner pair
+                  gives real horizontal scrolling on narrow viewports while
+                  scrollbar-hide keeps both bars invisible.
+                */}
+                <div
+                  ref={tableViewportRef}
+                  onScroll={handleTableViewportScroll}
+                  className="h-[520px] overflow-y-auto scrollbar-hide"
+                >
+                  <div className="overflow-x-auto scrollbar-hide">
+                    <Table className="min-w-[640px]">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Action Type</TableHead>
+                          <TableHead>Where</TableHead>
+                          <TableHead>Who</TableHead>
+                          <TableHead>When</TableHead>
+                          <TableHead>Criticality</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </ScrollArea>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredLogs.map((log) => (
+                          <TableRow key={log.id}>
+                            <TableCell className="font-medium">{getActionLabel(log)}</TableCell>
+                            <TableCell className="text-muted-foreground">{getWhereLabel(log)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <User className="w-3 h-3 text-muted-foreground" />
+                                <span className="text-sm text-muted-foreground">
+                                  {log.actor_user_id ? log.actorName || "Staff" : "System"}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Clock className="w-3 h-3" />
+                                {format(
+                                  new Date(log.started_at || log.created_at),
+                                  "MMM d, yyyy HH:mm"
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>{getCriticalityBadge(log.criticality_score)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
 
-                {hasMore ? (
+                {hasMore && scrolledToBottom ? (
                   <div className="flex justify-center pt-4">
                     <Button variant="outline" onClick={loadMore} className="gap-2">
                       <ChevronDown className="w-4 h-4" />

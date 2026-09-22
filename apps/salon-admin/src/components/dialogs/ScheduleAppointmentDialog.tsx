@@ -6,7 +6,7 @@ import { Label } from "@ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { ScrollArea } from "@ui/scroll-area";
 import { DatePicker, dateToString, stringToDate } from "@ui/date-picker";
-import { TimePicker } from "@ui/time-picker";
+import { getEarliestSelectableTime, TimePicker } from "@ui/time-picker";
 import { User, Plus, Check, Loader2 } from "lucide-react";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { AddServiceDialog } from "./AddServiceDialog";
@@ -64,6 +64,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
   const selectedLocation = locations.find((location) => location.id === formData.locationId) || defaultLocation;
   const currency = currencyForCountry(selectedLocation?.country, currentTenant?.currency || "NGN");
   const { createAppointment, isSubmitting } = useAppointmentActions();
+  const earliestStartTime = getEarliestSelectableTime(stringToDate(formData.date));
   // Owners can book into any branch; everyone else only sees their assigned branches
   const accessibleLocations = currentRole === "owner"
     ? locations
@@ -80,7 +81,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
         customerId: "",
         locationId: resolvedLocationId,
         date: new Date().toISOString().split("T")[0],
-        startTime: "09:00",
+        startTime: getEarliestSelectableTime(new Date()) || "",
         staffId: "",
         notes: "",
       });
@@ -95,6 +96,21 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
 
   const handleServiceCreated = () => {
     refetchServices();
+  };
+
+  const handleDateChange = (date: Date | undefined) => {
+    const nextDate = dateToString(date);
+    const nextMinTime = getEarliestSelectableTime(date);
+    setFormData((prev) => ({
+      ...prev,
+      date: nextDate,
+      startTime:
+        nextMinTime && nextMinTime !== "24:00" && (!prev.startTime || prev.startTime < nextMinTime)
+          ? nextMinTime
+          : nextMinTime === "24:00"
+            ? ""
+            : prev.startTime,
+    }));
   };
 
   const toggleService = (service: { id: string; name: string; price: number; duration_minutes: number }) => {
@@ -314,7 +330,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                 </Label>
                 <DatePicker
                   value={stringToDate(formData.date)}
-                  onChange={(date) => setFormData((prev) => ({ ...prev, date: dateToString(date) }))}
+                  onChange={handleDateChange}
                   minDate={new Date()}
                   placeholder="Select date"
                   disabled={isSubmitting}
@@ -329,6 +345,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                   onChange={(time) => setFormData((prev) => ({ ...prev, startTime: time }))}
                   placeholder="Select time"
                   disabled={isSubmitting}
+                  minTime={earliestStartTime}
                 />
               </div>
             </div>
@@ -382,7 +399,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSubmitting || !formData.customerId || selectedServices.length === 0}
+                  disabled={isSubmitting || !formData.customerId || selectedServices.length === 0 || !formData.startTime || earliestStartTime === "24:00"}
                   className="flex-1 sm:flex-initial"
                 >
                   {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

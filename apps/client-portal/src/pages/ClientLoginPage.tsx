@@ -509,49 +509,79 @@ export default function ClientLoginPage() {
           </form>
         )}
 
-        {step === "otp" && (
-          <form onSubmit={handleOtpSubmit} className="space-y-6">
-            <div className="flex flex-col items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                <ShieldCheck className="h-6 w-6 text-primary" />
+        {step === "otp" && (() => {
+          const otpSlotCount = resolution?.identifierType === "phone" ? 6 : 8;
+          const otpHalf = otpSlotCount / 2;
+          const isPhoneOtp = resolution?.identifierType === "phone";
+          return (
+            <form onSubmit={handleOtpSubmit} className="space-y-6">
+              <div className="flex flex-col items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                  <ShieldCheck className="h-6 w-6 text-primary" />
+                </div>
+
+                <div className="text-center">
+                  <p className="text-sm font-semibold text-foreground">
+                    Enter the {otpSlotCount}-digit code
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {isPhoneOtp
+                      ? "Check your messages for a text from Salon Magik."
+                      : "Check the inbox — and spam folder — for an email from Salon Magik."}
+                  </p>
+                </div>
+
+                <InputOTP maxLength={otpSlotCount} value={otp} onChange={setOtp} autoComplete="one-time-code" className="justify-center">
+                  <InputOTPGroup>
+                    {Array.from({ length: otpHalf }, (_, i) => (
+                      <InputOTPSlot key={i} index={i} />
+                    ))}
+                  </InputOTPGroup>
+                  <div className="w-2.5" aria-hidden="true" />
+                  <InputOTPGroup>
+                    {Array.from({ length: otpSlotCount - otpHalf }, (_, i) => (
+                      <InputOTPSlot key={otpHalf + i} index={otpHalf + i} />
+                    ))}
+                  </InputOTPGroup>
+                </InputOTP>
+
+                <p className="flex items-center gap-1 text-center text-[11px] text-muted-foreground">
+                  <Lock className="h-3 w-3 shrink-0" />
+                  For your security, this code expires shortly and works once.
+                </p>
+
+                {error && <p className="text-center text-sm text-destructive">{error}</p>}
               </div>
 
-              {(() => {
-                const otpSlotCount = resolution?.identifierType === "phone" ? 6 : 8;
-                return (
-                  <InputOTP maxLength={otpSlotCount} value={otp} onChange={setOtp} className="justify-center">
-                    <InputOTPGroup>
-                      {Array.from({ length: otpSlotCount }, (_, i) => (
-                        <InputOTPSlot key={i} index={i} />
-                      ))}
-                    </InputOTPGroup>
-                  </InputOTP>
-                );
-              })()}
-
-              {error && <p className="text-center text-sm text-destructive">{error}</p>}
-            </div>
-
-            <AuthButton
-              type="submit"
-              isLoading={isLoading}
-              disabled={otp.length !== (resolution?.identifierType === "phone" ? 6 : 8)}
-            >
-              Verify Code
-            </AuthButton>
-
-            <div className="text-center text-sm text-muted-foreground">
-              <button
-                type="button"
-                onClick={handleResendOtp}
-                disabled={isLoading || countdown > 0}
-                className="font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50"
+              <AuthButton
+                type="submit"
+                isLoading={isLoading}
+                disabled={otp.length !== otpSlotCount}
               >
-                {countdown > 0 ? `Resend available in ${countdown}s` : "Resend code"}
-              </button>
-            </div>
-          </form>
-        )}
+                Verify and continue
+              </AuthButton>
+
+              <div className="space-y-3 text-center text-sm text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={isLoading || countdown > 0}
+                  className="font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {countdown > 0 ? `Resend available in ${countdown}s` : "Resend code"}
+                </button>
+
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Still nothing after a few minutes? Contact the salon you booked with, or{" "}
+                  <a href="mailto:support@salonmagik.com" className="font-medium text-primary hover:underline">
+                    support@salonmagik.com
+                  </a>
+                  .
+                </p>
+              </div>
+            </form>
+          );
+        })()}
       </AuthCard>
     </AuthLayout>
   );

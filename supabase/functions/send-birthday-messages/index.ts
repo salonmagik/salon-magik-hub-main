@@ -150,8 +150,16 @@ serve(async (req) => {
           .maybeSingle(),
       ]);
 
+      if (tenantResult.error) {
+        console.error(`Failed to fetch tenant ${setting.tenant_id}:`, tenantResult.error);
+      }
       const tenant = tenantResult.data;
-      const salonName = tenant?.name ?? "Your Salon";
+      const salonName = tenant?.name || "Your Salon";
+      if (!tenant || !tenant.name) {
+        console.error(
+          `Tenant ${setting.tenant_id} has no name on record — birthday emails for it will show the generic "Your Salon" fallback instead of the real salon name.`,
+        );
+      }
       const customTemplate = templateResult.data?.is_active ? templateResult.data : null;
 
       for (const customer of todayBirthdays) {

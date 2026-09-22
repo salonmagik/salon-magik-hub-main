@@ -48,8 +48,17 @@ export function useClientBookings(filter: BookingFilter = "upcoming") {
 
       // Apply filter based on tab
       if (filter === "upcoming") {
-        // Upcoming = scheduled, started, paused (not yet completed/cancelled)
-        query = query.in("status", ["scheduled", "started", "paused"]);
+        // Upcoming = scheduled, started, paused AND not already in the past.
+        // Status alone isn't enough: a booking the salon never marked
+        // completed/cancelled stays "scheduled" forever and would otherwise
+        // sit in this list indefinitely, out of date order with genuinely
+        // future bookings. Unscheduled items (scheduled_start is null, e.g.
+        // "leave unscheduled" line items) still belong here.
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        query = query
+          .in("status", ["scheduled", "started", "paused"])
+          .or(`scheduled_start.is.null,scheduled_start.gte.${todayStart.toISOString()}`);
       } else if (filter === "completed") {
         query = query.eq("status", "completed");
       } else if (filter === "cancelled") {

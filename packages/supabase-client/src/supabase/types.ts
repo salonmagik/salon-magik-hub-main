@@ -3711,6 +3711,7 @@ export type Database = {
           deleted_by_id: string | null
           deletion_reason: string | null
           description: string | null
+          flag_reason: string | null
           id: string
           image_urls: string[] | null
           is_flagged: boolean | null
@@ -3728,6 +3729,7 @@ export type Database = {
           deleted_by_id?: string | null
           deletion_reason?: string | null
           description?: string | null
+          flag_reason?: string | null
           id?: string
           image_urls?: string[] | null
           is_flagged?: boolean | null
@@ -3745,6 +3747,7 @@ export type Database = {
           deleted_by_id?: string | null
           deletion_reason?: string | null
           description?: string | null
+          flag_reason?: string | null
           id?: string
           image_urls?: string[] | null
           is_flagged?: boolean | null
@@ -4574,6 +4577,7 @@ export type Database = {
           avatar_url: string | null
           client_password_initialized: boolean
           created_at: string
+          details_confirmation_skipped_at: string | null
           details_confirmed_at: string | null
           full_name: string
           id: string
@@ -4586,6 +4590,7 @@ export type Database = {
           avatar_url?: string | null
           client_password_initialized?: boolean
           created_at?: string
+          details_confirmation_skipped_at?: string | null
           details_confirmed_at?: string | null
           full_name: string
           id?: string
@@ -4598,6 +4603,7 @@ export type Database = {
           avatar_url?: string | null
           client_password_initialized?: boolean
           created_at?: string
+          details_confirmation_skipped_at?: string | null
           details_confirmed_at?: string | null
           full_name?: string
           id?: string

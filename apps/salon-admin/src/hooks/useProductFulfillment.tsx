@@ -4,6 +4,7 @@ import { useAuth } from "./useAuth";
 import { toast } from "@ui/ui/use-toast";
 import { startOfDay, endOfDay } from "date-fns";
 import type { FulfillmentStatus, AppointmentProduct } from "./useAppointmentProducts";
+import type { TablesUpdate } from "@supabase-client";
 
 export interface FulfillmentItem extends AppointmentProduct {
   customer_name?: string;
@@ -104,7 +105,7 @@ export function useProductFulfillment() {
 
   const updateStatus = async (id: string, status: FulfillmentStatus) => {
     try {
-      const updates: Record<string, any> = {
+      const updates: TablesUpdate<"appointment_products"> = {
         fulfillment_status: status,
       };
 

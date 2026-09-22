@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays, addWeeks, addMonths, subWeeks, subMonths } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@shared/utils";
-import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -174,6 +174,17 @@ export default function AppointmentsPage() {
   const { createFromAppointment } = useInvoices();
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
   const [walkInDialogOpen, setWalkInDialogOpen] = useState(false);
+  const mobileQuickAction = useMemo<MobileQuickAction>(
+    () => ({
+      kind: "menu",
+      ariaLabel: "Create appointment or walk-in",
+      options: [
+        { key: "walkin", label: "Record walk-in", icon: UserPlus, onSelect: () => setWalkInDialogOpen(true) },
+        { key: "book", label: "Book appointment", icon: Calendar, onSelect: () => setAppointmentDialogOpen(true) },
+      ],
+    }),
+    [],
+  );
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
@@ -1011,6 +1022,7 @@ export default function AppointmentsPage() {
 
   return (
     <SalonSidebar>
+      <MobileQuickActionEffect action={mobileQuickAction} />
       <div className="space-y-5 pb-6">
         {/* Page Header */}
         <div className="flex flex-row items-start justify-between gap-4">
@@ -1814,30 +1826,6 @@ export default function AppointmentsPage() {
         </Card>
         )}
       </div>
-
-      {/* Floating action button — mobile & tablet only */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label="Create appointment or walk-in"
-            data-tour-id="tour-book-or-walkin-mobile"
-            className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-primary  text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
-          >
-            <Plus className="w-6 h-6" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" side="top" className="w-52 mb-2">
-          <DropdownMenuItem onClick={() => setWalkInDialogOpen(true)}>
-            <UserPlus className="w-4 h-4 mr-2" />
-            Record walk-in
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setAppointmentDialogOpen(true)}>
-            <Calendar className="w-4 h-4 mr-2" />
-            Book appointment
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
 
       {/* Schedule Appointment Dialog */}
       <ScheduleAppointmentDialog

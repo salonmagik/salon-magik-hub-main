@@ -1,12 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useClientAuth } from "@/hooks";
 import { useClientNotifications } from "@/hooks";
+import { useConfirmDetailsPrompt } from "@/hooks";
 import { ClientInactivityGuard } from "./ClientInactivityGuard";
 import { Button } from "@ui/button";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@ui/sheet";
-import { ScrollArea } from "@ui/scroll-area";
-import { Separator } from "@ui/separator";
+import { Sheet, SheetContent, SheetTitle } from "@ui/sheet";
 import { cn } from "@shared/utils";
 import {
   LayoutDashboard,
@@ -17,13 +16,13 @@ import {
   User,
   HelpCircle,
   LogOut,
-  Menu,
+  MoreHorizontal,
 } from "lucide-react";
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { ProductAnnouncementCard } from "@shared/ProductAnnouncementCard";
 import { supabase } from "@/lib/supabase";
-import { ConfirmDetailsModal } from "@/components/ConfirmDetailsModal";
+import { ConfirmDetailsModal, needsDetailsConfirmation } from "@/components/ConfirmDetailsModal";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,6 +38,10 @@ interface ClientSidebarProps {
   children: React.ReactNode;
 }
 
+// Desktop keeps its own top nav (unchanged). Mobile's bottom bar below is a
+// separate, deliberately shorter set — the busiest four destinations get a
+// permanent tab, everything else lives behind "More" so nothing is ever
+// listed in both places at once.
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
   { label: "Bookings", icon: Calendar, path: "/bookings" },
@@ -48,6 +51,30 @@ const navItems = [
   { label: "Profile & Security", icon: User, path: "/profile" },
   { label: "Help & Support", icon: HelpCircle, path: "/help" },
 ];
+
+const BOTTOM_TABS = [
+  { label: "Home", icon: LayoutDashboard, path: "/", showBadge: false },
+  { label: "Bookings", icon: Calendar, path: "/bookings", showBadge: false },
+  { label: "Alerts", icon: Bell, path: "/notifications", showBadge: true },
+  { label: "Profile", icon: User, path: "/profile", showBadge: false },
+] as const;
+
+const MORE_ITEMS = [
+  { label: "History", icon: Clock, path: "/history" },
+  { label: "Store Credit", icon: RefreshCcw, path: "/balance" },
+  { label: "Help & Support", icon: HelpCircle, path: "/help" },
+] as const;
+
+// Kept in sync with MORE_ITEMS' paths (plus /refunds, which redirects into
+// /balance) — whatever "More" can navigate to, so the tab reads as active
+// for the whole time you're browsing one of its destinations, not just while
+// the sheet itself is open.
+const MORE_PATHS = ["/history", "/balance", "/refunds", "/help"];
+
+// The one deliberate exception to "the bar is always there": a booking's own
+// detail page has its own action menu and a Complete Payment button
+// competing for the same thumb zone.
+const BOOKING_DETAIL_PATTERN = /^\/bookings\/[^/]+/;
 
 const NAV_DRAG_THRESHOLD = 8;
 
@@ -115,10 +142,31 @@ function IntentionalClientLink({
 export function ClientSidebar({ children }: ClientSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut } = useClientAuth();
+  const { signOut, profile, isLoading: authLoading } = useClientAuth();
   const { unreadCount } = useClientNotifications();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const { forceOpen: confirmDetailsForceOpen, setForceOpen: setConfirmDetailsForceOpen } = useConfirmDetailsPrompt();
+  const [moreOpen, setMoreOpen] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [bottomNavVisible, setBottomNavVisible] = useState(true);
+  const [announcementsGateOpen, setAnnouncementsGateOpen] = useState(false);
+  const lastScrollYRef = useRef(0);
+
+  // The confirm-details prompt gets first claim on the user's attention —
+  // a just-signed-up customer shouldn't have a feature announcement stack
+  // on top of (or under) it. Once it's genuinely out of the way (confirmed,
+  // skipped, or was never needed), give it a few seconds of breathing room
+  // before the announcement card is allowed to appear at all.
+  useEffect(() => {
+    if (authLoading || needsDetailsConfirmation(profile) || confirmDetailsForceOpen) {
+      setAnnouncementsGateOpen(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setAnnouncementsGateOpen(true), 5000);
+    return () => window.clearTimeout(timer);
+  }, [authLoading, profile, confirmDetailsForceOpen]);
+
+  const isBookingDetailRoute = BOOKING_DETAIL_PATTERN.test(location.pathname);
+  const isMoreActive = MORE_PATHS.some((path) => location.pathname.startsWith(path));
 
   const handleLogout = async () => {
     await signOut();
@@ -130,55 +178,63 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
     return location.pathname.startsWith(path);
   };
 
-  const NavContent = ({ onItemClick }: { onItemClick?: () => void }) => (
-    <div className="flex flex-col h-full">
-      <div className="p-4 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
-          <SalonMagikLogo variant="white" transparentIcon size="sm" />
-        </Link>
-      </div>
+  // Same corrected pattern as the salon-admin bottom nav: hide on scroll
+  // down, reveal on scroll up or near the top. This app scrolls at the
+  // window level (no bounded content pane here), so the listener lives on
+  // window rather than a specific ref.
+  useEffect(() => {
+    const onScroll = () => {
+      const nextY = Math.max(0, window.scrollY);
+      const delta = nextY - lastScrollYRef.current;
+      if (Math.abs(delta) < 4) return;
 
-      <Separator className="bg-white/10" />
+      if (nextY < 24 || delta < 0) {
+        setBottomNavVisible(true);
+      } else if (delta > 0) {
+        setBottomNavVisible(false);
+      }
+      lastScrollYRef.current = nextY;
+    };
 
-      <ScrollArea className="flex-1 touch-pan-y overscroll-contain px-3 py-4">
-        <nav className="space-y-1">
-          {navItems.map((item) => {
-            const badgeCount = item.showBadge ? unreadCount : 0;
-            return (
-              <IntentionalClientLink
-                key={item.path}
-                to={item.path}
-                onActivate={onItemClick}
-                className={cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                  isActive(item.path)
-                    ? "bg-white/15 text-white"
-                    : "text-white/80 hover:bg-white/10 hover:text-white"
-                )}
-              >
-                <div className="relative shrink-0">
-                  <item.icon className="h-5 w-5" />
-                  {badgeCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white leading-none">
-                      {badgeCount > 9 ? "9+" : badgeCount}
-                    </span>
-                  )}
-                </div>
-                <span>{item.label}</span>
-              </IntentionalClientLink>
-            );
-          })}
-        </nav>
-      </ScrollArea>
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
-      <Separator className="bg-white/10" />
+  useEffect(() => {
+    setBottomNavVisible(true);
+    lastScrollYRef.current = 0;
+  }, [location.pathname]);
 
-      <div className="p-3">
+  const MoreSheetContent = ({ onItemClick }: { onItemClick?: () => void }) => (
+    <div className="flex flex-col">
+      <SheetTitle className="px-1 pb-2 text-base font-semibold">More</SheetTitle>
+      <nav className="space-y-1">
+        {MORE_ITEMS.map((item) => (
+          <IntentionalClientLink
+            key={item.path}
+            to={item.path}
+            onActivate={onItemClick}
+            className={cn(
+              "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+              isActive(item.path)
+                ? "bg-primary/8 text-primary"
+                : "text-foreground hover:bg-muted"
+            )}
+          >
+            <item.icon className="h-5 w-5 shrink-0" />
+            <span>{item.label}</span>
+          </IntentionalClientLink>
+        ))}
+      </nav>
+      <div className="mt-2 border-t pt-2">
         <button
-          onClick={() => setShowLogoutDialog(true)}
+          onClick={() => {
+            onItemClick?.();
+            setShowLogoutDialog(true);
+          }}
           className={cn(
             "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-            "text-white/80 hover:bg-white/10 hover:text-white"
+            "text-destructive hover:bg-destructive/10"
           )}
         >
           <LogOut className="h-5 w-5 shrink-0" />
@@ -191,28 +247,12 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
   return (
     <ClientInactivityGuard>
       <div className="min-h-screen min-w-0 overflow-x-hidden bg-background">
-        {/* Mobile Header */}
+        {/* Mobile Header — navigation itself lives on the bottom bar below;
+            this is chrome (brand) only, no duplicate nav entry point. */}
         <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-white/10 bg-primary px-4 text-white lg:hidden">
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 hover:text-white">
-                <Menu className="h-5 w-5" />
-                <span className="sr-only">Toggle menu</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent
-              side="left"
-              className="w-[min(18rem,calc(100vw-1.5rem))] max-w-none overscroll-contain border-white/10 bg-primary p-0 text-white"
-            >
-              <SheetTitle className="sr-only">Navigation menu</SheetTitle>
-              <NavContent onItemClick={() => setMobileOpen(false)} />
-            </SheetContent>
-          </Sheet>
-          <div className="flex-1">
-            <Link to="/" className="flex items-center gap-2">
-              <SalonMagikLogo variant="white" transparentIcon size="sm" />
-            </Link>
-          </div>
+          <Link to="/" className="flex items-center gap-2">
+            <SalonMagikLogo variant="white" transparentIcon size="sm" />
+          </Link>
         </header>
 
         {/* Desktop Header */}
@@ -266,18 +306,89 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
           </div>
         </header>
 
-        <main className="min-w-0 overflow-x-hidden bg-[#fbfaf8]">
+        <main
+          className={cn(
+            "min-w-0 overflow-x-hidden bg-[#fbfaf8]",
+            !isBookingDetailRoute && "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
+          )}
+        >
           <MaintenanceBanner />
           <div className="mx-auto w-full min-w-0 max-w-5xl px-4 py-5 sm:px-7 lg:py-10">
             <div className="client-content w-full min-w-0 [&>*]:min-w-0">{children}</div>
           </div>
         </main>
 
-        <ProductAnnouncementCard
-          client={supabase as any}
-          platform="client_portal"
-          onNavigate={(path) => navigate(path)}
-        />
+        {/* Mobile Bottom Navigation — hidden on a booking's own detail page,
+            which has its own action menu and payment button in this same
+            thumb zone. */}
+        {!isBookingDetailRoute && (
+          <nav
+            aria-label="Primary mobile navigation"
+            className={cn(
+              "fixed inset-x-0 bottom-0 z-40 flex justify-center pb-[calc(0.75rem+env(safe-area-inset-bottom))] transition-all duration-300 motion-reduce:transition-none lg:hidden",
+              bottomNavVisible
+                ? "translate-y-0 opacity-100"
+                : "pointer-events-none translate-y-[calc(100%+1rem)] opacity-0",
+            )}
+          >
+            <div className="mx-3 flex w-[min(94vw,27rem)] items-center justify-around gap-1 rounded-[30px] border border-white/10 bg-primary px-2 py-2 shadow-[0_18px_42px_rgba(28,18,49,0.42)] backdrop-blur-xl">
+              {BOTTOM_TABS.map((tab) => {
+                const badgeCount = tab.showBadge ? unreadCount : 0;
+                const active = isActive(tab.path);
+                return (
+                  <IntentionalClientLink
+                    key={tab.path}
+                    to={tab.path}
+                    className="group flex min-w-0 flex-1 flex-col items-center gap-1 rounded-[22px] border border-transparent px-1.5 py-1.5 transition-all hover:bg-white/10"
+                  >
+                    <span
+                      className={cn(
+                        "relative flex h-8 w-8 items-center justify-center rounded-full transition-all",
+                        active ? "bg-accent text-primary shadow-[0_0_0_4px_hsl(var(--accent)/0.14)]" : "text-white/60 group-hover:text-white/90",
+                      )}
+                    >
+                      <tab.icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.2 : 1.8} />
+                      {badgeCount > 0 && (
+                        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
+                          {badgeCount > 9 ? "9+" : badgeCount}
+                        </span>
+                      )}
+                    </span>
+                    <span className={cn("max-w-full truncate text-[10px] font-semibold leading-none transition-colors", active ? "text-white" : "text-white/60 group-hover:text-white/90")}>
+                      {tab.label}
+                    </span>
+                  </IntentionalClientLink>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setMoreOpen(true)}
+                className="group flex min-w-0 flex-1 flex-col items-center gap-1 rounded-[22px] border border-transparent px-1.5 py-1.5 transition-all hover:bg-white/10"
+              >
+                <span className={cn("flex h-8 w-8 items-center justify-center rounded-full transition-all", isMoreActive ? "bg-accent text-primary shadow-[0_0_0_4px_hsl(var(--accent)/0.14)]" : "text-white/60 group-hover:text-white/90")}>
+                  <MoreHorizontal className="h-[18px] w-[18px]" strokeWidth={isMoreActive ? 2.2 : 1.8} />
+                </span>
+                <span className={cn("max-w-full truncate text-[10px] font-semibold leading-none transition-colors", isMoreActive ? "text-white" : "text-white/60 group-hover:text-white/90")}>
+                  More
+                </span>
+              </button>
+            </div>
+          </nav>
+        )}
+
+        <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+          <SheetContent side="bottom" className="rounded-t-2xl pb-[calc(1.5rem+env(safe-area-inset-bottom))] lg:hidden">
+            <MoreSheetContent onItemClick={() => setMoreOpen(false)} />
+          </SheetContent>
+        </Sheet>
+
+        {announcementsGateOpen && (
+          <ProductAnnouncementCard
+            client={supabase as any}
+            platform="client_portal"
+            onNavigate={(path) => navigate(path)}
+          />
+        )}
 
         {/* Logout Confirmation Dialog */}
         <AlertDialog open={showLogoutDialog} onOpenChange={setShowLogoutDialog}>
@@ -295,7 +406,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
           </AlertDialogContent>
         </AlertDialog>
 
-        <ConfirmDetailsModal />
+        <ConfirmDetailsModal forceOpen={confirmDetailsForceOpen} onForceOpenChange={setConfirmDetailsForceOpen} />
       </div>
     </ClientInactivityGuard>
   );

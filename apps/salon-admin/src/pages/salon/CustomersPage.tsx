@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { SalonSidebar } from "@/components/layout/SalonSidebar";
+import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
@@ -31,7 +31,6 @@ import {
   Flag,
   Trash2,
   CheckCircle,
-  Plus,
   Info,
 } from "lucide-react";
 import { cn } from "@shared/utils";
@@ -86,6 +85,17 @@ export default function CustomersPage() {
   const [activeFilter, setActiveFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const mobileQuickAction = useMemo<MobileQuickAction>(
+    () => ({
+      kind: "menu",
+      ariaLabel: "Add or import customers",
+      options: [
+        { key: "import", label: "Import Customers", icon: UserPlus, onSelect: () => setImportDialogOpen(true) },
+        { key: "add", label: "Add New Customer", icon: Calendar, onSelect: () => setCustomerDialogOpen(true) },
+      ],
+    }),
+    [],
+  );
   const [inactiveDialogOpen, setInactiveDialogOpen] = useState(false);
   const [inactiveDaysThreshold, setInactiveDaysThreshold] = useState(30);
   const [inactiveDaysThresholdInput, setInactiveDaysThresholdInput] = useState("30");
@@ -395,6 +405,7 @@ export default function CustomersPage() {
 
   return (
 		<SalonSidebar>
+			<MobileQuickActionEffect action={mobileQuickAction} />
 			<div className="mx-auto w-full max-w-[1500px] space-y-7">
 				{/* Page Header */}
 				<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -821,30 +832,6 @@ export default function CustomersPage() {
 					</div>
 				)}
 			</div>
-			{/* Floating action button — mobile & tablet only */}
-			<DropdownMenu>
-				<DropdownMenuTrigger asChild>
-					<button
-						type="button"
-						aria-label="Add or import customers"
-						data-tour-id="tour-add-customer-mobile"
-						className="lg:hidden fixed bottom-24 right-5 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition-transform"
-					>
-						<Plus className="w-6 h-6" />
-					</button>
-				</DropdownMenuTrigger>
-				<DropdownMenuContent align="end" side="top" className="w-52 mb-2">
-					<DropdownMenuItem onClick={() => setImportDialogOpen(true)}>
-						<UserPlus className="w-4 h-4 mr-2" />
-						Import Customers
-					</DropdownMenuItem>
-					<DropdownMenuItem onClick={() => setCustomerDialogOpen(true)}>
-						<Calendar className="w-4 h-4 mr-2" />
-						Add New Customer
-					</DropdownMenuItem>
-				</DropdownMenuContent>
-			</DropdownMenu>
-
 			{/* Add Customer Dialog */}
 			<AddCustomerDialog
 				open={customerDialogOpen}
