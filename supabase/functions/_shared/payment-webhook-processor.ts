@@ -690,6 +690,13 @@ export async function processWebhook(
 
                 console.log(`Crediting payout balance from gateway funds: card=${actualServiceAmount}, net=${finalCreditAmount}`);
 
+                // Deliberately not passing p_location_id here: credit_salon_purse's
+                // own resolve_salon_wallet_location already infers the right wallet
+                // from this same appointment (branch wallet for a chain, central
+                // wallet when the tenant has only one location). Passing the
+                // appointment's location_id explicitly bypassed that single-location
+                // safeguard, silently starting a second, invisible wallet for every
+                // single-location tenant's bookings going forward.
                 const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                   p_tenant_id: primaryAppointment.tenant_id,
                   p_entry_type: "salon_purse_credit_booking",
@@ -697,7 +704,6 @@ export async function processWebhook(
                   p_reference_id: primaryAppointment.id,
                   p_amount: finalCreditAmount,
                   p_currency: settlementCurrency,
-                  p_location_id: primaryAppointment.location_id,
                   p_idempotency_key: `booking_${reference}`,
                   p_gateway_reference: reference,
                 });
