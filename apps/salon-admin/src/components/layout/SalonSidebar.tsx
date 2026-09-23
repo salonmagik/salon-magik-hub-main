@@ -836,8 +836,13 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   // not just while its sheet happens to be open. Children are query-string
   // routes (?tab=...), so this must use isChildActive, not isActive.
   const isOnOverflowPage = filteredMainNavItems.some((item) => {
-    if (BOTTOM_NAV_PATHS.has(item.path)) return false;
-    if (item.path && isActive(item.path)) return true;
+    // A group's own path being on the bar (e.g. "Cashflow & Payouts" keyed by
+    // /salon/transactions, same as the "Cashflow" tab) doesn't mean every one
+    // of its children is too — Payouts lives under that same group but isn't
+    // on the bar, so it still needs to light up "More". Check children
+    // regardless of whether the parent itself is skipped.
+    const parentOnBar = BOTTOM_NAV_PATHS.has(item.path);
+    if (!parentOnBar && item.path && isActive(item.path)) return true;
     return (item.children || []).some((child) => isChildActive(child.path));
   });
 

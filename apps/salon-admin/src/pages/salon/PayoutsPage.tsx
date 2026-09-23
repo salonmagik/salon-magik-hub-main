@@ -494,6 +494,7 @@ export default function PayoutsPage() {
         onWithdrawalCreated={async () => {
           await Promise.all([refetchWallet(), refetchAvailability(), refetchWithdrawals()]);
         }}
+        onAddPayoutDestination={() => setPayoutsSubTab("accounts")}
       />
 
       <Dialog open={!!assigningBranchId} onOpenChange={(o) => { if (!o) { setAssigningBranchId(null); setAssignDestId(""); } }}>
