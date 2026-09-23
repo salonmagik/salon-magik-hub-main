@@ -273,7 +273,7 @@ export async function getPaystackBalance(paystackKey: string): Promise<PaystackB
 }
 
 export interface PaystackTransferStatusResult {
-  /** Paystack's own transfer status: pending | success | failed | reversed | otp, or null if the lookup itself failed. */
+  /** Paystack's own transfer status: pending | success | failed | reversed | otp | rejected | abandoned | blocked, or null if the lookup itself failed. */
   status: string | null;
   error?: string;
 }
