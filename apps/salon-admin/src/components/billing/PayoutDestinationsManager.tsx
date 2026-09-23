@@ -1,13 +1,23 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
 import { usePayoutDestinations, type PayoutDestination } from "@/hooks/usePayoutDestinations";
 import { useBankList } from "@/hooks/useBankList";
 import { useAccountVerification } from "@/hooks/useAccountVerification";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { Loader2, Plus, Trash2, CheckCircle2, XCircle, Building, Smartphone } from "lucide-react";
 import { Badge } from "@ui/badge";
 import { Separator } from "@ui/separator";
@@ -22,8 +32,52 @@ interface PayoutDestinationsManagerProps {
 // Renders flat — no outer Card — intended to be embedded inside a settings section.
 export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsManagerProps = {}) {
   const { currentTenant } = useAuth();
-  const { destinations: allDestinations, isLoading, createDestination, deleteDestination } = usePayoutDestinations(currentTenant?.id);
+  const { destinations: allDestinations, isLoading, createDestination, deleteDestination, refetch: refetchDestinations } = usePayoutDestinations(currentTenant?.id);
   const destinations = countryFilter ? allDestinations.filter((d) => d.country === countryFilter) : allDestinations;
+  const { locations } = useSalonsOverview("today");
+
+  // A destination with its own location_id serves only that branch. One
+  // without a location_id but marked default serves Head Office plus every
+  // branch that has no destination of its own — matches the schema (one
+  // optional location per destination), so this is the full set of tags
+  // possible without a many-to-many model.
+  const branchesWithOwnDestination = new Set(allDestinations.map((d) => d.location_id).filter(Boolean));
+  const getBranchTags = (dest: PayoutDestination): string[] => {
+    if (dest.location_id) {
+      return [locations.find((l) => l.id === dest.location_id)?.name ?? "Branch"];
+    }
+    if (dest.is_default) {
+      return [
+        "Head Office",
+        ...locations.filter((l) => !branchesWithOwnDestination.has(l.id)).map((l) => l.name),
+      ];
+    }
+    return [];
+  };
+
+  const [changeBranchTarget, setChangeBranchTarget] = useState<PayoutDestination | null>(null);
+  const [changeBranchValue, setChangeBranchValue] = useState<string>("__unassigned__");
+  const [isChangingBranch, setIsChangingBranch] = useState(false);
+
+  const openChangeBranch = (dest: PayoutDestination) => {
+    setChangeBranchTarget(dest);
+    setChangeBranchValue(dest.location_id ?? "__unassigned__");
+  };
+
+  const handleSaveBranchChange = async () => {
+    if (!changeBranchTarget) return;
+    setIsChangingBranch(true);
+    try {
+      await supabase
+        .from("salon_payout_destinations")
+        .update({ location_id: changeBranchValue === "__unassigned__" ? null : changeBranchValue })
+        .eq("id", changeBranchTarget.id);
+      await refetchDestinations();
+      setChangeBranchTarget(null);
+    } finally {
+      setIsChangingBranch(false);
+    }
+  };
 
   const [showForm, setShowForm] = useState(false);
   const tenantCountry: "NG" | "GH" = currentTenant?.country === "GH" ? "GH" : "NG";
@@ -130,6 +184,21 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
 
   return (
     <div className="space-y-1">
+      {destinations.length > 0 && (
+        <div className="flex items-center justify-between pb-3">
+          <p className="text-sm text-muted-foreground">
+            {destinations.length} {destinations.length === 1 ? "account" : "accounts"}
+            {countryFilter ? "" : " across your chain"}
+          </p>
+          {!showForm && (
+            <Button onClick={() => setShowForm(true)} variant="outline" size="sm" className="gap-1.5">
+              <Plus className="h-4 w-4" />
+              Add account
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Destination list */}
       {destinations.length > 0 && (
         <div className="divide-y">
@@ -137,7 +206,9 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
             <DestinationRow
               key={dest.id}
               destination={dest}
+              branchTags={getBranchTags(dest)}
               onDelete={setDeleteTarget}
+              onChangeBranch={locations.length > 1 ? openChangeBranch : undefined}
             />
           ))}
         </div>
@@ -253,14 +324,14 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
             </Button>
           </div>
         </div>
-      ) : (
+      ) : destinations.length === 0 ? (
         <div className="pt-3">
           <Button onClick={() => setShowForm(true)} variant="outline" size="sm" className="gap-1.5">
             <Plus className="h-4 w-4" />
             Add account
           </Button>
         </div>
-      )}
+      ) : null}
 
       <ConfirmActionDialog
         open={!!deleteTarget}
@@ -276,16 +347,49 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
         onConfirm={handleConfirmDelete}
         isLoading={isDeleting}
       />
+
+      <Dialog open={!!changeBranchTarget} onOpenChange={(open) => { if (!open) setChangeBranchTarget(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader><DialogTitle>Which branch uses this account?</DialogTitle></DialogHeader>
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
+            <p className="text-sm text-muted-foreground">
+              {changeBranchTarget?.destination_type === "bank" ? changeBranchTarget.bank_name : changeBranchTarget?.momo_provider}
+              {" — "}
+              {changeBranchTarget?.destination_type === "bank" ? changeBranchTarget.account_number : changeBranchTarget?.momo_number}
+            </p>
+            <div className="space-y-2">
+              <Label>Branch</Label>
+              <Select value={changeBranchValue} onValueChange={setChangeBranchValue}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__unassigned__">Not assigned to a branch</SelectItem>
+                  {locations.map((location) => (
+                    <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setChangeBranchTarget(null)}>Cancel</Button>
+            <Button onClick={handleSaveBranchChange} disabled={isChangingBranch}>
+              {isChangingBranch ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 interface DestinationRowProps {
   destination: PayoutDestination;
+  branchTags: string[];
   onDelete: (destination: PayoutDestination) => void;
+  onChangeBranch?: (destination: PayoutDestination) => void;
 }
 
-function DestinationRow({ destination, onDelete }: DestinationRowProps) {
+function DestinationRow({ destination, branchTags, onDelete, onChangeBranch }: DestinationRowProps) {
   const isBank = destination.destination_type === "bank";
   const isReady = !!destination.paystack_recipient_code;
 
@@ -304,7 +408,24 @@ function DestinationRow({ destination, onDelete }: DestinationRowProps) {
           <p className="text-sm text-muted-foreground">{destination.account_name}</p>
           <p className="text-sm font-mono text-muted-foreground">{isBank ? destination.account_number : destination.momo_number}</p>
           <p className="text-xs text-muted-foreground">{destination.country} · {destination.currency}</p>
-
+          {onChangeBranch && (
+            branchTags.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                {branchTags.map((tag) => (
+                  <span key={tag} className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{tag}</span>
+                ))}
+                <button type="button" onClick={() => onChangeBranch(destination)} className="text-xs text-primary underline underline-offset-2">
+                  Change
+                </button>
+              </div>
+            ) : (
+              <div className="pt-1">
+                <button type="button" onClick={() => onChangeBranch(destination)} className="text-xs italic text-muted-foreground underline underline-offset-2">
+                  Not assigned to a branch — assign
+                </button>
+              </div>
+            )
+          )}
         </div>
       </div>
       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => onDelete(destination)}>
