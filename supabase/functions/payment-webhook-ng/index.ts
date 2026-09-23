@@ -119,6 +119,7 @@ Deno.serve(async (req) => {
           service_amount?: string | number;
           processing_fee_amount?: string | number;
           salon_net_amount?: string | number;
+          location_id?: string;
         };
         authorization?: {
           authorization_code?: string;
@@ -169,6 +170,7 @@ Deno.serve(async (req) => {
         serviceAmount: metadata?.service_amount ? parseFloat(String(metadata.service_amount)) : undefined,
         processingFeeAmount: metadata?.processing_fee_amount ? parseFloat(String(metadata.processing_fee_amount)) : undefined,
         salonNetAmount: metadata?.salon_net_amount ? parseFloat(String(metadata.salon_net_amount)) : undefined,
+        locationId: metadata?.location_id,
       },
     };
 

@@ -43,6 +43,8 @@ export interface WebhookEvent {
     authorizationReusable?: boolean;
     customerCode?: string;
     customerEmail?: string;
+    /** Which branch a salon-initiated payment (currently: wallet top-ups) should credit. Omitted/null keeps the existing central-wallet behavior. */
+    locationId?: string;
   };
 }
 
@@ -305,7 +307,7 @@ export async function processWebhook(
   try {
     // Handle payment success
     if (isPaymentSuccessEvent(event.type)) {
-      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, salonNetAmount, channel, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent, billingCycle, authorizationCode, authorizationReusable, customerCode, customerEmail } = event.data;
+      const { appointmentId, appointmentIds, paymentIntentId, amount, serviceAmount, processingFeeAmount, salonNetAmount, channel, reference, tenantId, customerId, invoiceId, credits, isDeposit, splitPurseAmount, splitCustomerId, intent, billingCycle, authorizationCode, authorizationReusable, customerCode, customerEmail, locationId } = event.data;
 
       const actualServiceAmount = serviceAmount ?? amount;
       const paymentMethod = mapPaystackChannelToPaymentMethod(channel);
@@ -801,8 +803,11 @@ export async function processWebhook(
 
             try {
               // Validate salon wallet currency matches tenant currency
-              await validateWalletCurrency(supabase, salonTenantId, salonTenant.currency);
+              await validateWalletCurrency(supabase, salonTenantId, salonTenant.currency, locationId ?? null);
 
+              // A chosen branch is honored as-is (credit_salon_purse trusts an
+              // explicit p_location_id over inference); omitted, it falls back
+              // to the central wallet, same as before this was branch-aware.
               const { error: creditError } = await supabase.rpc("credit_salon_purse", {
                 p_tenant_id: salonTenantId,
                 p_entry_type: "salon_purse_topup",
@@ -812,6 +817,7 @@ export async function processWebhook(
                 p_currency: salonTenant.currency,
                 p_idempotency_key: `salon_topup_${reference}`,
                 p_gateway_reference: reference,
+                p_location_id: locationId ?? undefined,
               });
 
               if (creditError) {

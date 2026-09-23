@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
+import { useSalonsOverview } from "@/hooks/useSalonsOverview";
 import { useTopUp } from "@/hooks/useTopUp";
 import { formatCurrency } from "@shared/currency";
 import {
@@ -14,6 +15,7 @@ import {
 import { Button } from "@ui/button";
 import { Label } from "@ui/label";
 import { Input } from "@ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { Alert, AlertDescription } from "@ui/alert";
 import { Loader2, AlertCircle, Wallet, Plus, TrendingUp } from "lucide-react";
 import { cn } from "@shared/utils";
@@ -28,8 +30,12 @@ export function TopUpDialog({ open, onOpenChange }: TopUpDialogProps) {
   const { currentTenant } = useAuth();
   const tenantId = currentTenant?.id;
   const currency = currentTenant?.currency || "USD";
+  const { locations } = useSalonsOverview("today");
 
-  const { wallet, isLoading: walletLoading } = useSalonWallet(tenantId);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("__central__");
+  const walletLocationId = selectedLocationId === "__central__" ? null : selectedLocationId;
+
+  const { wallet, isLoading: walletLoading } = useSalonWallet(tenantId, walletLocationId);
   const {
     createTopUp,
     recentTopUps,
@@ -37,7 +43,7 @@ export function TopUpDialog({ open, onOpenChange }: TopUpDialogProps) {
     isFetchingHistory,
     getMinimumAmount,
     getPresetAmounts,
-  } = useTopUp(tenantId, currency);
+  } = useTopUp(tenantId, currency, walletLocationId);
 
   const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
   const [customAmount, setCustomAmount] = useState<string>("");
@@ -53,6 +59,7 @@ export function TopUpDialog({ open, onOpenChange }: TopUpDialogProps) {
       setSelectedAmount(null);
       setCustomAmount("");
       setError("");
+      setSelectedLocationId("__central__");
     }
   }, [open]);
 
@@ -118,7 +125,7 @@ export function TopUpDialog({ open, onOpenChange }: TopUpDialogProps) {
     }
 
     try {
-      await createTopUp(amount);
+      await createTopUp(amount, walletLocationId);
       // Note: If successful, user will be redirected to payment gateway
       // Dialog will close automatically on redirect
     } catch (err) {
@@ -150,6 +157,21 @@ export function TopUpDialog({ open, onOpenChange }: TopUpDialogProps) {
           </div>
         ) : (
           <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
+            {locations.length > 1 && (
+              <div className="space-y-2">
+                <Label>Which wallet</Label>
+                <Select value={selectedLocationId} onValueChange={setSelectedLocationId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__central__">Salon-wide / unassigned</SelectItem>
+                    {locations.map((location) => (
+                      <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Current Wallet Balance */}
             <div className="rounded-lg border bg-muted/50 p-4">
               <p className="text-sm text-muted-foreground mb-1">Current Balance</p>
