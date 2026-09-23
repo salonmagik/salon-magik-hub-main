@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency, getPaystackBalance } from "../_shared/paystack-helpers.ts";
+import { getPaystackKeyForCurrency, getPaystackBalance, fetchPaystackTransferStatus } from "../_shared/paystack-helpers.ts";
+import { reconcileWithdrawalOutcome } from "../_shared/payment-webhook-processor.ts";
 
 import { quoteWithdrawal } from "../_shared/withdrawal-fees.ts";
 
@@ -20,6 +21,14 @@ interface WithdrawalRequest {
 
 // Duplicate detection time window (5 minutes in milliseconds)
 const DUPLICATE_WINDOW_MS = 5 * 60 * 1000;
+
+// Last-resort backstop only: used when a stuck pending/awaiting_otp
+// withdrawal exists AND we couldn't get a definitive answer from Paystack's
+// own transfer-status API (network error, API down). In the normal case
+// that live check resolves things immediately — success/failed/reversed
+// reconciles and unblocks right away, genuinely-in-flight correctly keeps
+// blocking. This only matters when Paystack itself can't be reached.
+const STALE_PENDING_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -98,15 +107,44 @@ Deno.serve(async (req) => {
     }
 
     // =====================================================
-    // STEP 1: CHECK FOR DUPLICATE WITHDRAWALS
+    // STEP 1: FETCH WALLET (needed early — reconciling a stuck withdrawal
+    // below requires knowing the currency to pick the right Paystack key)
     // =====================================================
-    
+
+    const { data: wallet, error: walletError } = await serviceSupabase
+      .from("salon_wallets")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .filter(locationId ? "location_id" : "location_id", locationId ? "eq" : "is", locationId ?? "null")
+      .single();
+
+    if (walletError || !wallet) {
+      console.error("Error fetching salon wallet:", walletError);
+      return new Response(
+        JSON.stringify({ error: "Salon wallet not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // =====================================================
+    // STEP 2: CHECK FOR DUPLICATE WITHDRAWALS
+    // =====================================================
+
     console.log(`[Withdrawal] Checking for duplicates - tenant: ${tenantId}, destination: ${payoutDestinationId}, amount: ${amount}`);
-    
-    // Check for existing pending/processing withdrawals with same destination
+
+    // A pending/awaiting_otp withdrawal to the same destination blocks a new
+    // one — but rather than trust our own record forever (a transfer.success/
+    // failed/reversed webhook can be delayed, or never arrive at all, e.g. one
+    // initiated under the retired subaccount flow that never reached
+    // Paystack's Transfer API in the first place), actively ask Paystack what
+    // its real status is and reconcile before deciding to block. This can
+    // clear a genuinely dead withdrawal in seconds instead of leaving it
+    // stuck indefinitely, while a transfer Paystack still reports as in
+    // flight correctly keeps blocking — that's the fraud protection working,
+    // not a bug.
     const { data: existingProcessing, error: processingCheckError } = await serviceSupabase
       .from("salon_withdrawals")
-      .select("id, status, amount, requested_at")
+      .select("id, status, amount, requested_at, paystack_transfer_code")
       .eq("tenant_id", tenantId)
       .filter(locationId ? "location_id" : "location_id", locationId ? "eq" : "is", locationId ?? "null")
       .eq("payout_destination_id", payoutDestinationId)
@@ -121,18 +159,54 @@ Deno.serve(async (req) => {
 
     if (existingProcessing && existingProcessing.length > 0) {
       const existing = existingProcessing[0];
-      return new Response(
-        JSON.stringify({ 
-          error: `A withdrawal is already being processed for this destination. Status: ${existing.status}, Amount: ${existing.amount}`,
-          existingWithdrawal: {
-            id: existing.id,
-            status: existing.status,
-            amount: existing.amount,
-            requestedAt: existing.requested_at,
-          }
-        }),
-        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      let stillBlocking = true;
+
+      if (!existing.paystack_transfer_code) {
+        // Never actually reached Paystack — nothing to double-spend against.
+        const result = await reconcileWithdrawalOutcome(serviceSupabase, existing.id, "failed", {
+          failureReason: "No transfer was ever initiated with Paystack for this request.",
+        });
+        if (result.ok) stillBlocking = false;
+        else console.error(`Failed to auto-fail withdrawal ${existing.id} with no transfer code:`, result.error);
+      } else {
+        const paystackKeyResult = getPaystackKeyForCurrency(wallet.currency);
+        const transferStatus = paystackKeyResult.key
+          ? await fetchPaystackTransferStatus(paystackKeyResult.key, existing.paystack_transfer_code)
+          : { status: null, error: paystackKeyResult.error };
+
+        if (transferStatus.status === "success" || transferStatus.status === "failed" || transferStatus.status === "reversed") {
+          const result = await reconcileWithdrawalOutcome(serviceSupabase, existing.id, transferStatus.status, {
+            failureReason: `Paystack reports this transfer ${transferStatus.status}.`,
+          });
+          if (result.ok) stillBlocking = false;
+          else console.error(`Failed to reconcile withdrawal ${existing.id} to ${transferStatus.status}:`, result.error);
+        } else if (transferStatus.status === "pending" || transferStatus.status === "otp") {
+          // Genuinely still in flight at Paystack — correctly keep blocking.
+          stillBlocking = true;
+        } else {
+          // Couldn't get a definitive answer from Paystack (network error,
+          // API down). Fall back to a short staleness backstop rather than
+          // either blocking forever or unblocking blind.
+          console.error(`Could not verify transfer status for withdrawal ${existing.id}:`, transferStatus.error);
+          const stalePendingCutoff = new Date(Date.now() - STALE_PENDING_WINDOW_MS);
+          stillBlocking = new Date(existing.requested_at ?? 0) > stalePendingCutoff;
+        }
+      }
+
+      if (stillBlocking) {
+        return new Response(
+          JSON.stringify({
+            error: `A withdrawal is already being processed for this destination. Status: ${existing.status}, Amount: ${existing.amount}`,
+            existingWithdrawal: {
+              id: existing.id,
+              status: existing.status,
+              amount: existing.amount,
+              requestedAt: existing.requested_at,
+            }
+          }),
+          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Check for duplicate withdrawal (same amount + destination) within time window
@@ -170,23 +244,8 @@ Deno.serve(async (req) => {
     }
 
     // =====================================================
-    // STEP 2: FETCH WALLET AND PAYOUT DESTINATION
+    // STEP 3: FETCH PAYOUT DESTINATION (wallet already fetched in step 1)
     // =====================================================
-    
-    const { data: wallet, error: walletError } = await serviceSupabase
-      .from("salon_wallets")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .filter(locationId ? "location_id" : "location_id", locationId ? "eq" : "is", locationId ?? "null")
-      .single();
-
-    if (walletError || !wallet) {
-      console.error("Error fetching salon wallet:", walletError);
-      return new Response(
-        JSON.stringify({ error: "Salon wallet not found" }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     // Enforce the app minimum before creating a record or sending money.
     const minWithdrawal = wallet.currency === "NGN" ? 500 : wallet.currency === "GHS" ? 50 : null;

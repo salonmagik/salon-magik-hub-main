@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
-import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Badge } from "@ui/badge";
@@ -14,21 +13,11 @@ import {
   SelectValue,
 } from "@ui/select";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@ui/dialog";
-import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
-import { Label } from "@ui/label";
-import {
   Wallet,
   Building2,
   History,
   Settings2,
   Info,
-  X,
   ShieldAlert,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
@@ -38,7 +27,6 @@ import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
 import { useWithdrawals } from "@/hooks/useWithdrawals";
-import { supabase } from "@/lib/supabase";
 import { format } from "date-fns";
 import { cn } from "@shared/utils";
 import { WithdrawalDialog } from "@/components/billing/WithdrawalDialog";
@@ -62,12 +50,8 @@ function getSalonFacingWithdrawalStatus(status: string | null | undefined): stri
 }
 
 export default function PayoutsPage() {
-  useWalkthroughAutoTrigger("transactions");
   const [payoutsSubTab, setPayoutsSubTab] = useState("history");
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
-  const [assigningBranchId, setAssigningBranchId] = useState<string | null>(null);
-  const [assignDestId, setAssignDestId] = useState<string>("");
-  const [isAssigning, setIsAssigning] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [selectedWalletScope, setSelectedWalletScope] = useState<string>("__central__");
 
@@ -82,7 +66,7 @@ export default function PayoutsPage() {
     currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor"
   );
 
-  const { destinations, isLoading: destinationsLoading, refetch: refetchDestinations } = usePayoutDestinations(
+  const { destinations } = usePayoutDestinations(
     canManagePayouts ? currentTenant?.id : undefined
   );
   const { wallet, isLoading: walletLoading, refetch: refetchWallet } = useSalonWallet(
@@ -152,29 +136,6 @@ export default function PayoutsPage() {
     if (nextCountry && availableCountries.includes(nextCountry)) setSelectedCountry(nextCountry);
   };
 
-  const tenantDefaultDest = destinations.find((d) => !d.location_id && d.is_default);
-  const getDestinationForBranch = (branchId: string) => destinations.find((d) => d.location_id === branchId);
-
-  const handleAssignDestination = async () => {
-    if (!assigningBranchId || !assignDestId) return;
-    setIsAssigning(true);
-    try {
-      await supabase.from("salon_payout_destinations").update({ location_id: assigningBranchId }).eq("id", assignDestId);
-      await refetchDestinations();
-      setAssigningBranchId(null);
-      setAssignDestId("");
-    } finally {
-      setIsAssigning(false);
-    }
-  };
-
-  const handleClearBranchAssignment = async (branchId: string) => {
-    const dest = getDestinationForBranch(branchId);
-    if (!dest) return;
-    await supabase.from("salon_payout_destinations").update({ location_id: null }).eq("id", dest.id);
-    await refetchDestinations();
-  };
-
   if (!canManagePayouts) {
     return (
       <SalonSidebar>
@@ -199,35 +160,76 @@ export default function PayoutsPage() {
           <div>
             <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Payouts</h1>
             <p className="mt-1.5 text-sm text-muted-foreground sm:mt-2 sm:text-base">
-              Withdraw your salon balance and manage where your earnings are paid out.
+              Withdraw a branch's balance and manage where it's paid out.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {locations.length > 1 && (
-              <Select value={selectedWalletScope} onValueChange={handleWalletScopeChange}>
-                <SelectTrigger className="w-[190px]"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__central__">Salon-wide / unassigned</SelectItem>
-                  {locations.map((location) => <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
-            {availableCountries.length > 1 && locations.length > 1 && (
-              <Select value={effectiveCountry} onValueChange={handleCountryChange}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableCountries.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      {c === "GH" ? "Ghana" : c === "NG" ? "Nigeria" : c}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
+          {availableCountries.length > 1 && locations.length > 1 && (
+            <Select value={effectiveCountry} onValueChange={handleCountryChange}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableCountries.map((c) => (
+                  <SelectItem key={c} value={c}>
+                    {c === "GH" ? "Ghana" : c === "NG" ? "Nigeria" : c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
+
+        {/* Branch switcher — a scrollable row of pills instead of a dropdown,
+            so every wallet is visible/reachable in one tap; scrolls sideways
+            (trackpad, touch, shift+wheel) with a soft edge fade as the only
+            hint there's more, no separate arrow buttons or counter. */}
+        {locations.length > 1 && (
+          <div className="relative max-w-full sm:max-w-2xl">
+            <div className="scrollbar-hide flex gap-1.5 overflow-x-auto overscroll-x-contain rounded-full bg-muted/70 p-1.5">
+              <button
+                type="button"
+                onClick={() => handleWalletScopeChange("__central__")}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  selectedWalletScope === "__central__" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-background/60",
+                )}
+              >
+                Head Office
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={cn(
+                        "flex h-3.5 w-3.5 items-center justify-center rounded-full text-[9px]",
+                        selectedWalletScope === "__central__" ? "bg-primary-foreground/20" : "bg-muted-foreground/15",
+                      )}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      i
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-56 text-xs">
+                    Money not yet linked to a specific branch — from invoices not tied to a booking, or manual top-ups.
+                  </TooltipContent>
+                </Tooltip>
+              </button>
+              {locations.map((location) => (
+                <button
+                  key={location.id}
+                  type="button"
+                  onClick={() => handleWalletScopeChange(location.id)}
+                  className={cn(
+                    "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                    selectedWalletScope === location.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-background/60",
+                  )}
+                >
+                  {location.name}
+                </button>
+              ))}
+            </div>
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-6 rounded-l-full bg-gradient-to-r from-surface to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-6 rounded-r-full bg-gradient-to-l from-surface to-transparent" />
+          </div>
+        )}
 
         {/* Wallet balance */}
         <Card>
@@ -254,7 +256,7 @@ export default function PayoutsPage() {
                         {sharedFormatCurrency(Number(wallet?.balance ?? 0), walletCurrency)}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {selectedWalletLocationId ? `${locations.find((location) => location.id === selectedWalletLocationId)?.name ?? "Branch"} wallet` : "Salon-wide / unassigned wallet"}
+                        {selectedWalletLocationId ? `${locations.find((location) => location.id === selectedWalletLocationId)?.name ?? "Branch"} wallet` : "Head Office wallet"}
                       </p>
                     </>
                   )}
@@ -390,66 +392,22 @@ export default function PayoutsPage() {
             </Card>
           </TabsContent>
 
-          {/* Accounts */}
-          <TabsContent value="accounts" className="mt-4 space-y-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Branch Payout Accounts</CardTitle>
-                <p className="text-sm text-muted-foreground">Each branch can have its own receiving account. Branches without one use the tenant default.</p>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {locationsLoading || destinationsLoading ? (
-                  [1,2].map((i) => <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-surface"><Skeleton className="h-4 w-40" /><Skeleton className="h-8 w-28" /></div>)
-                ) : locations.length === 0 ? (
-                  <p className="text-sm text-muted-foreground py-4 text-center">No branches found.</p>
-                ) : (
-                  locations.map((branch) => {
-                    const branchDest = getDestinationForBranch(branch.id);
-                    const displayDest = branchDest ?? tenantDefaultDest;
-                    const isDefault = !branchDest;
-                    return (
-                      <div key={branch.id} className="flex items-start justify-between p-3 rounded-lg bg-surface gap-4">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="p-2 rounded-lg bg-muted"><Building2 className="w-4 h-4 text-muted-foreground" /></div>
-                          <div className="min-w-0">
-                            <p className="font-medium text-sm truncate">{branch.name}</p>
-                            <p className="text-xs text-muted-foreground">{branch.city}, {branch.country}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {displayDest ? (
-                            <div className="text-right">
-                              <p className="text-sm font-medium">{displayDest.account_name || displayDest.bank_name || displayDest.momo_provider}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {displayDest.account_number || displayDest.momo_number}
-                                {isDefault && <span className="ml-1 text-primary">(default)</span>}
-                              </p>
-                            </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground italic">No account</p>
-                          )}
-                          <Button size="sm" variant="outline" onClick={() => { setAssigningBranchId(branch.id); setAssignDestId(branchDest?.id ?? ""); }}>
-                            {branchDest ? "Change" : "Assign"}
-                          </Button>
-                          {branchDest && (
-                            <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => handleClearBranchAssignment(branch.id)}>
-                              <X className="w-4 h-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </CardContent>
-            </Card>
-
+          {/* Accounts — one list, every account shows which branch(es) pay
+              into it, instead of a branch-first card and a full-accounts
+              card repeating the same data two different ways. */}
+          <TabsContent value="accounts" className="mt-4">
             <Card data-tour-id="tour-payout-destinations">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">All Payout Accounts</CardTitle>
-                <p className="text-sm text-muted-foreground">Manage bank accounts and mobile money accounts for receiving withdrawals.</p>
+                <CardTitle className="text-base">Payout Accounts</CardTitle>
+                <p className="text-sm text-muted-foreground">Bank accounts and mobile money accounts for receiving withdrawals.</p>
               </CardHeader>
-              <CardContent><PayoutDestinationsManager countryFilter={effectiveCountry || undefined} /></CardContent>
+              <CardContent>
+                {locationsLoading ? (
+                  <div className="space-y-3">{[1, 2].map((i) => <div key={i} className="flex items-center justify-between p-3"><Skeleton className="h-4 w-40" /><Skeleton className="h-8 w-28" /></div>)}</div>
+                ) : (
+                  <PayoutDestinationsManager countryFilter={effectiveCountry || undefined} />
+                )}
+              </CardContent>
             </Card>
           </TabsContent>
 
@@ -494,40 +452,8 @@ export default function PayoutsPage() {
         onWithdrawalCreated={async () => {
           await Promise.all([refetchWallet(), refetchAvailability(), refetchWithdrawals()]);
         }}
+        onAddPayoutDestination={() => setPayoutsSubTab("accounts")}
       />
-
-      <Dialog open={!!assigningBranchId} onOpenChange={(o) => { if (!o) { setAssigningBranchId(null); setAssignDestId(""); } }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Assign Payout Account to Branch</DialogTitle></DialogHeader>
-          <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
-            <p className="text-sm text-muted-foreground">Select which payout account should receive withdrawals for this branch.</p>
-            {destinations.length === 0 ? (
-              <p className="text-sm text-muted-foreground italic">No payout accounts configured yet. Add one in Accounts first.</p>
-            ) : (
-              <div className="space-y-2">
-                <Label>Payout Account</Label>
-                <Select value={assignDestId} onValueChange={setAssignDestId}>
-                  <SelectTrigger><SelectValue placeholder="Select an account…" /></SelectTrigger>
-                  <SelectContent>
-                    {destinations.map((dest) => (
-                      <SelectItem key={dest.id} value={dest.id}>
-                        {dest.account_name || dest.momo_provider} — {dest.account_number || dest.momo_number}
-                        {dest.is_default && " (default)"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAssigningBranchId(null)}>Cancel</Button>
-            <Button onClick={handleAssignDestination} disabled={!assignDestId || isAssigning}>
-              {isAssigning ? "Saving…" : "Assign Account"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </SalonSidebar>
   );
 }

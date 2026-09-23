@@ -25,6 +25,8 @@ interface ScheduleAppointmentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  /** Pre-selects a customer (e.g. opened from their profile) instead of starting blank. */
+  initialCustomerId?: string;
 }
 
 interface SelectedService {
@@ -34,7 +36,7 @@ interface SelectedService {
   duration: number;
 }
 
-export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: ScheduleAppointmentDialogProps) {
+export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess, initialCustomerId }: ScheduleAppointmentDialogProps) {
   const { currentTenant, activeLocationId, currentRole, assignedLocationIds } = useAuth();
   const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
@@ -78,7 +80,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
         accessibleLocations[0]?.id ||
         "";
       setFormData({
-        customerId: "",
+        customerId: initialCustomerId || "",
         locationId: resolvedLocationId,
         date: new Date().toISOString().split("T")[0],
         startTime: getEarliestSelectableTime(new Date()) || "",
@@ -88,7 +90,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess }: Sch
       setSelectedServices([]);
       setNoteAttachments([]);
     }
-  }, [open]);
+  }, [open, initialCustomerId]);
 
   const handleCustomerCreated = () => {
     refetchCustomers();

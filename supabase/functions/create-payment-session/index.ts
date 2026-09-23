@@ -28,6 +28,8 @@ interface PaymentRequest {
   customerId?: string;
   invoiceId?: string;
   credits?: number;
+  /** salon_purse_topup only: which branch wallet to credit. Omitted credits the central/unassigned wallet. */
+  locationId?: string;
 }
 
 function calculateDiscountedAmount(
@@ -79,10 +81,27 @@ Deno.serve(async (req) => {
       customerId,
       invoiceId,
       credits,
+      locationId,
     } = body;
 
     if (!tenantId || !amount || !customerEmail) {
       return jsonResponse({ error: "Missing required fields" }, 400);
+    }
+
+    if (intentType === "salon_purse_topup" && locationId) {
+      const { data: locationRecord, error: locationLookupError } = await supabase
+        .from("locations")
+        .select("id")
+        .eq("id", locationId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (locationLookupError) {
+        console.error("Error validating top-up location:", locationLookupError);
+        return jsonResponse({ error: "Failed to validate branch" }, 500);
+      }
+      if (!locationRecord) {
+        return jsonResponse({ error: "Branch does not belong to this salon" }, 400);
+      }
     }
 
     const requiresAuthenticatedCaller = intentType !== "appointment_payment";
@@ -302,6 +321,7 @@ Deno.serve(async (req) => {
             customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
             salon_net_amount: bookingCharge.salonNetAmount,
           } : {}),
+          ...(locationId ? { location_id: locationId } : {}),
         },
       })
       .select("id")
@@ -349,6 +369,7 @@ Deno.serve(async (req) => {
             customer_facing_fee_amount: bookingCharge.customerFacingFeeAmount,
             salon_net_amount: bookingCharge.salonNetAmount,
           } : {}),
+          ...(locationId ? { location_id: locationId } : {}),
         },
       }),
     });

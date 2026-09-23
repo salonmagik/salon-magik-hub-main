@@ -272,6 +272,46 @@ export async function getPaystackBalance(paystackKey: string): Promise<PaystackB
   }
 }
 
+export interface PaystackTransferStatusResult {
+  /** Paystack's own transfer status: pending | success | failed | reversed | otp, or null if the lookup itself failed. */
+  status: string | null;
+  error?: string;
+}
+
+/**
+ * Asks Paystack directly what a transfer's real status is, instead of only
+ * ever waiting on our own transfer.success/failed/reversed webhook (which
+ * can be delayed, or never arrive at all — e.g. a transfer initiated under
+ * the retired subaccount flow that never went through the Transfer API in
+ * the first place). Used to reconcile a withdrawal that's been sitting in
+ * pending/awaiting_otp before falling back to blocking a new one.
+ */
+export async function fetchPaystackTransferStatus(
+  paystackKey: string,
+  transferCodeOrId: string,
+): Promise<PaystackTransferStatusResult> {
+  try {
+    const res = await fetch(`https://api.paystack.co/transfer/${encodeURIComponent(transferCodeOrId)}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${paystackKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await res.json();
+
+    if (!res.ok || !data.status) {
+      return { status: null, error: data.message || `HTTP ${res.status}` };
+    }
+
+    return { status: data.data?.status ?? null };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error fetching Paystack transfer status";
+    return { status: null, error: message };
+  }
+}
+
 /**
  * Both monthly and annual tenants are fully self-managed (charged via a
  * saved authorization, on our own schedule) — annual never uses Paystack's

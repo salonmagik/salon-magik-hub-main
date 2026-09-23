@@ -30,7 +30,29 @@ vi.mock("@/hooks/useAppointments", () => ({
     appointments: [],
     isLoading: false,
   }),
+  useAppointmentActions: () => ({
+    createAppointment: vi.fn(),
+    isSubmitting: false,
+  }),
 }));
+
+// ScheduleAppointmentDialog (rendered by CustomerDetailDialog for its
+// "Book Appointment" action) pulls in these regardless of its own `open`
+// prop — a function component's hooks all run on every render.
+vi.mock("@/hooks/useCustomers", () => ({
+  useCustomers: () => ({ customers: [], isLoading: false, refetch: vi.fn() }),
+}));
+vi.mock("@/hooks/useServices", () => ({
+  useServices: () => ({ services: [], isLoading: false, refetch: vi.fn() }),
+}));
+vi.mock("@/hooks/useStaff", () => ({
+  useStaff: () => ({ staff: [], isLoading: false }),
+}));
+vi.mock("@/hooks/useLocations", () => ({
+  useLocations: () => ({ locations: [], defaultLocation: null }),
+}));
+vi.mock("./AddCustomerDialog", () => ({ AddCustomerDialog: () => null }));
+vi.mock("./AddServiceDialog", () => ({ AddServiceDialog: () => null }));
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: () => ({

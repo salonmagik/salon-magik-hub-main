@@ -49,7 +49,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { SendMessageDialog } from "@/components/messaging/SendMessageDialog";
 import { MessageHistory } from "@/components/messaging/MessageHistory";
-import { CreateInvoiceDialog } from "@/components/dialogs/CreateInvoiceDialog";
+import { ScheduleAppointmentDialog } from "@/components/dialogs/ScheduleAppointmentDialog";
 import { useInvoices } from "@/hooks/useInvoices";
 import type { CustomerVisitedLocation, CustomerWithVisitSummary } from "@/hooks/useCustomers";
 import type { Tables } from "@supabase-client";
@@ -153,7 +153,7 @@ export function CustomerDetailDialog({
   const { invoices, isLoading: invoicesLoading, sendInvoice, refetch: refetchInvoices } = useInvoices();
 
   const [sendMessageDialogOpen, setSendMessageDialogOpen] = useState(false);
-  const [createInvoiceDialogOpen, setCreateInvoiceDialogOpen] = useState(false);
+  const [bookAppointmentDialogOpen, setBookAppointmentDialogOpen] = useState(false);
 
   // Transaction filters
   const [txSearchQuery, setTxSearchQuery] = useState("");
@@ -164,7 +164,7 @@ export function CustomerDetailDialog({
   const customerId = customer?.id;
   const currency = currentTenant?.currency || "USD";
   const currencySymbol = getCurrencySymbol(currency);
-  const { data: customerDetail, isLoading: customerDetailLoading } = useQuery({
+  const { data: customerDetail, isLoading: customerDetailLoading, refetch: refetchCustomerDetail } = useQuery({
     queryKey: ["customer-detail-dialog", currentTenant?.id, customerId, open],
     queryFn: async () => {
       if (!currentTenant?.id || !customerId) return null;
@@ -598,11 +598,13 @@ export function CustomerDetailDialog({
 
             <TabsContent value="invoices" className="mt-4">
               <div className="space-y-4">
-                {/* Create Invoice Button */}
+                {/* Book Appointment Button — invoices are generated from an
+                    appointment (Appointments page), not created standalone
+                    here; this is the shortcut to get one on the books. */}
                 <div className="flex justify-end">
-                  <Button onClick={() => setCreateInvoiceDialogOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Invoice
+                  <Button onClick={() => setBookAppointmentDialogOpen(true)}>
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Book Appointment
                   </Button>
                 </div>
 
@@ -616,10 +618,10 @@ export function CustomerDetailDialog({
                 ) : customerInvoices.length === 0 ? (
                   <div className="text-center py-8">
                     <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                    <p className="text-muted-foreground mb-4">No invoices yet</p>
-                    <Button onClick={() => setCreateInvoiceDialogOpen(true)}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create First Invoice
+                    <p className="text-muted-foreground mb-4">No invoices yet — invoices are created from a completed appointment</p>
+                    <Button onClick={() => setBookAppointmentDialogOpen(true)}>
+                      <Calendar className="w-4 h-4 mr-2" />
+                      Book Appointment
                     </Button>
                   </div>
                 ) : (
@@ -1013,13 +1015,13 @@ export function CustomerDetailDialog({
           customerId={customer.id}
         />
 
-        {/* Create Invoice Dialog */}
-        <CreateInvoiceDialog
-          open={createInvoiceDialogOpen}
-          onOpenChange={setCreateInvoiceDialogOpen}
-          customerId={customer.id}
+        {/* Book Appointment Dialog */}
+        <ScheduleAppointmentDialog
+          open={bookAppointmentDialogOpen}
+          onOpenChange={setBookAppointmentDialogOpen}
+          initialCustomerId={customer.id}
           onSuccess={() => {
-            refetchInvoices();
+            refetchCustomerDetail();
           }}
         />
       </Dialog>

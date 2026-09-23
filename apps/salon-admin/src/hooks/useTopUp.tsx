@@ -31,7 +31,7 @@ export const MINIMUM_TOPUP: MinimumTopUp = {
   USD: 50,
 };
 
-export function useTopUp(tenantId?: string, currency: string = "USD") {
+export function useTopUp(tenantId?: string, currency: string = "USD", locationId?: string | null) {
   const [recentTopUps, setRecentTopUps] = useState<WalletLedgerEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
@@ -47,12 +47,14 @@ export function useTopUp(tenantId?: string, currency: string = "USD") {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from("wallet_ledger_entries")
         .select("*")
         .eq("tenant_id", tenantId)
         .eq("wallet_type", "salon")
-        .eq("entry_type", "salon_purse_topup")
+        .eq("entry_type", "salon_purse_topup");
+      query = locationId ? query.eq("location_id", locationId) : query.is("location_id", null);
+      const { data, error: fetchError } = await query
         .order("created_at", { ascending: false })
         .limit(5);
 
@@ -65,7 +67,7 @@ export function useTopUp(tenantId?: string, currency: string = "USD") {
     } finally {
       setIsFetchingHistory(false);
     }
-  }, [tenantId]);
+  }, [tenantId, locationId]);
 
   useEffect(() => {
     if (tenantId) {
@@ -82,7 +84,7 @@ export function useTopUp(tenantId?: string, currency: string = "USD") {
   }, []);
 
   const createTopUp = useCallback(
-    async (amount: number): Promise<{ success: boolean; checkoutUrl: string | null }> => {
+    async (amount: number, locationId?: string | null): Promise<{ success: boolean; checkoutUrl: string | null }> => {
       if (!tenantId) {
         toast({
           title: "Error",
@@ -122,6 +124,7 @@ export function useTopUp(tenantId?: string, currency: string = "USD") {
               successUrl,
               cancelUrl,
               intentType: "salon_purse_topup",
+              ...(locationId ? { locationId } : {}),
             },
           }
         );

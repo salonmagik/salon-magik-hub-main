@@ -36,15 +36,16 @@ interface WithdrawalDialogProps {
   locationId?: string | null;
   currencyOverride?: string;
   onWithdrawalCreated?: () => void | Promise<void>;
+  onAddPayoutDestination?: () => void;
 }
 
-export function WithdrawalDialog({ open, onOpenChange, locationId = null, currencyOverride, onWithdrawalCreated }: WithdrawalDialogProps) {
+export function WithdrawalDialog({ open, onOpenChange, locationId = null, currencyOverride, onWithdrawalCreated, onAddPayoutDestination }: WithdrawalDialogProps) {
   const { currentTenant } = useAuth();
   const tenantId = currentTenant?.id;
 
   const { wallet, isLoading: walletLoading } = useSalonWallet(tenantId, locationId);
   const { availability, isLoading: availabilityLoading, refetch: refetchAvailability } = useSalonWalletAvailability(tenantId, locationId);
-  const { destinations, isLoading: destinationsLoading } = usePayoutDestinations(tenantId);
+  const { destinations, isLoading: destinationsLoading, refetch: refetchDestinations } = usePayoutDestinations(tenantId);
   const { createWithdrawal } = useWithdrawals(tenantId, locationId);
   const currency = currencyOverride ?? wallet?.currency ?? availability?.currency ?? currentTenant?.currency ?? "NGN";
 
@@ -73,15 +74,20 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
     catch (error) { quoteError = error instanceof Error ? error.message : "Invalid withdrawal"; }
   }
 
-  // Reset form when dialog opens
+  // Reset form when dialog opens. Also refetch destinations — this dialog's
+  // own usePayoutDestinations instance fetches once at mount, which can be
+  // long before the salon actually has a destination configured (or before
+  // one added on the Accounts tab exists yet), leaving it permanently stale
+  // for the life of the page without this.
   useEffect(() => {
     if (open) {
       setSelectedDestinationId("");
       setAmount("");
       setError("");
       refetchAvailability();
+      refetchDestinations();
     }
-  }, [open, refetchAvailability]);
+  }, [open, refetchAvailability, refetchDestinations]);
 
   // Validate amount
   const validateAmount = (value: string): string | null => {
@@ -248,8 +254,18 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
               {scopedDestinations.length === 0 ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    No payout destinations configured. Please add a bank account or mobile money account first.
+                  <AlertDescription className="space-y-2">
+                    <p>No payout destinations configured. Please add a bank account or mobile money account first.</p>
+                    {onAddPayoutDestination && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => { onOpenChange(false); onAddPayoutDestination(); }}
+                      >
+                        Add payout account
+                      </Button>
+                    )}
                   </AlertDescription>
                 </Alert>
               ) : (
@@ -295,7 +311,7 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
                 <div className="flex justify-between"><span>Paystack transfer fee (salon pays)</span><span>{formatCurrency(quote.transferFee, currency)}</span></div>
                 {quote.stampDuty > 0 && <div className="flex justify-between"><span>Stamp duty</span><span>{formatCurrency(quote.stampDuty, currency)}</span></div>}
                 <div className="flex justify-between border-t pt-2 font-semibold"><span>Total wallet deduction</span><span>{formatCurrency(quote.totalDebit, currency)}</span></div>
-                <p className="text-xs text-muted-foreground">Your salon pays these charges. No Salon Magik markup. Funds and fees are reserved while the transfer is pending.</p>
+                <p className="text-xs text-muted-foreground">This amount is reserved until the transfer completes.</p>
                 {quote.stampDuty > 0 && <p className="text-xs text-muted-foreground">Once applied by Paystack, stamp duty is non-refundable, including if the transfer is reversed.</p>}
               </div>
             )}
