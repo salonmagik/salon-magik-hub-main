@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
-import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
 import { Badge } from "@ui/badge";
@@ -51,7 +50,6 @@ function getSalonFacingWithdrawalStatus(status: string | null | undefined): stri
 }
 
 export default function PayoutsPage() {
-  useWalkthroughAutoTrigger("transactions");
   const [payoutsSubTab, setPayoutsSubTab] = useState("history");
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
