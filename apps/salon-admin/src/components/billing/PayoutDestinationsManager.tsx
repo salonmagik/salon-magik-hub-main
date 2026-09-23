@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { ConfirmActionDialog } from "@/components/dialogs/ConfirmActionDialog";
 import { usePayoutDestinations, type PayoutDestination } from "@/hooks/usePayoutDestinations";
 import { useBankList } from "@/hooks/useBankList";
 import { useAccountVerification } from "@/hooks/useAccountVerification";
@@ -92,8 +93,18 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
     }
   };
 
-  const handleDeleteDestination = async (id: string) => {
-    if (confirm("Remove this payout account?")) await deleteDestination(id);
+  const [deleteTarget, setDeleteTarget] = useState<PayoutDestination | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteDestination(deleteTarget.id);
+    } finally {
+      setIsDeleting(false);
+      setDeleteTarget(null);
+    }
   };
 
   const isAccountNumberValid = () => {
@@ -126,7 +137,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
             <DestinationRow
               key={dest.id}
               destination={dest}
-              onDelete={handleDeleteDestination}
+              onDelete={setDeleteTarget}
             />
           ))}
         </div>
@@ -250,13 +261,28 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
           </Button>
         </div>
       )}
+
+      <ConfirmActionDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="Remove payout account?"
+        description={
+          deleteTarget
+            ? `${deleteTarget.destination_type === "bank" ? deleteTarget.bank_name : deleteTarget.momo_provider} — ${deleteTarget.destination_type === "bank" ? deleteTarget.account_number : deleteTarget.momo_number} will no longer be available to receive withdrawals.`
+            : ""
+        }
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeleting}
+      />
     </div>
   );
 }
 
 interface DestinationRowProps {
   destination: PayoutDestination;
-  onDelete: (id: string) => void;
+  onDelete: (destination: PayoutDestination) => void;
 }
 
 function DestinationRow({ destination, onDelete }: DestinationRowProps) {
@@ -281,7 +307,7 @@ function DestinationRow({ destination, onDelete }: DestinationRowProps) {
 
         </div>
       </div>
-      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => onDelete(destination.id)}>
+      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10" onClick={() => onDelete(destination)}>
         <Trash2 className="h-4 w-4" />
       </Button>
     </div>
