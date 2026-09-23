@@ -311,7 +311,7 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
                 <div className="flex justify-between"><span>Paystack transfer fee (salon pays)</span><span>{formatCurrency(quote.transferFee, currency)}</span></div>
                 {quote.stampDuty > 0 && <div className="flex justify-between"><span>Stamp duty</span><span>{formatCurrency(quote.stampDuty, currency)}</span></div>}
                 <div className="flex justify-between border-t pt-2 font-semibold"><span>Total wallet deduction</span><span>{formatCurrency(quote.totalDebit, currency)}</span></div>
-                <p className="text-xs text-muted-foreground">Your salon pays these charges. No Salon Magik markup. Funds and fees are reserved while the transfer is pending.</p>
+                <p className="text-xs text-muted-foreground">This amount is reserved until the transfer completes.</p>
                 {quote.stampDuty > 0 && <p className="text-xs text-muted-foreground">Once applied by Paystack, stamp duty is non-refundable, including if the transfer is reversed.</p>}
               </div>
             )}
