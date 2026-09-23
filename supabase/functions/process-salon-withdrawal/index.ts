@@ -22,6 +22,14 @@ interface WithdrawalRequest {
 // Duplicate detection time window (5 minutes in milliseconds)
 const DUPLICATE_WINDOW_MS = 5 * 60 * 1000;
 
+// Every terminal-failure status Paystack's transfer API can report, besides
+// "success". Used both at withdrawal creation (from the synchronous
+// POST /transfer response) and during active reconciliation (from a later
+// GET status check) — kept as one list so the two can't drift, which is
+// exactly how a "rejected" transfer previously stayed stuck at "pending"
+// forever: creation-time code already knew about it, reconciliation didn't.
+const TRANSFER_FAILURE_STATUSES = new Set(["failed", "reversed", "abandoned", "blocked", "rejected"]);
+
 // Last-resort backstop only: used when a stuck pending/awaiting_otp
 // withdrawal exists AND we couldn't get a definitive answer from Paystack's
 // own transfer-status API (network error, API down). In the normal case
@@ -174,12 +182,19 @@ Deno.serve(async (req) => {
           ? await fetchPaystackTransferStatus(paystackKeyResult.key, existing.paystack_transfer_code)
           : { status: null, error: paystackKeyResult.error };
 
-        if (transferStatus.status === "success" || transferStatus.status === "failed" || transferStatus.status === "reversed") {
-          const result = await reconcileWithdrawalOutcome(serviceSupabase, existing.id, transferStatus.status, {
+        const reconcileOutcome = transferStatus.status === "success"
+          ? "success"
+          : transferStatus.status === "reversed"
+          ? "reversed"
+          : transferStatus.status && TRANSFER_FAILURE_STATUSES.has(transferStatus.status)
+          ? "failed"
+          : null;
+        if (reconcileOutcome) {
+          const result = await reconcileWithdrawalOutcome(serviceSupabase, existing.id, reconcileOutcome, {
             failureReason: `Paystack reports this transfer ${transferStatus.status}.`,
           });
           if (result.ok) stillBlocking = false;
-          else console.error(`Failed to reconcile withdrawal ${existing.id} to ${transferStatus.status}:`, result.error);
+          else console.error(`Failed to reconcile withdrawal ${existing.id} to ${reconcileOutcome}:`, result.error);
         } else if (transferStatus.status === "pending" || transferStatus.status === "otp") {
           // Genuinely still in flight at Paystack — correctly keep blocking.
           stillBlocking = true;
@@ -503,7 +518,7 @@ Deno.serve(async (req) => {
       .update({ paystack_transfer_code: paystackData.data.transfer_code }).eq("id", withdrawal.id);
     if (transferCodeError) throw transferCodeError;
     const transferStatus = paystackData.data.status;
-    const isFinalFailure = ["failed", "reversed", "abandoned", "blocked", "rejected"].includes(transferStatus);
+    const isFinalFailure = TRANSFER_FAILURE_STATUSES.has(transferStatus);
     const internalStatus = transferStatus === "otp" ? "awaiting_otp" : isFinalFailure ? "failed" : "pending";
     if (transferStatus === "success" || isFinalFailure) {
       const { error } = await serviceSupabase.rpc("finalize_fee_bearing_withdrawal", {

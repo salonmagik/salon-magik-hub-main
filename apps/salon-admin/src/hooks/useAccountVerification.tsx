@@ -13,7 +13,7 @@ export function useAccountVerification() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [result, setResult] = useState<VerificationResult | null>(null);
 
-  const verify = useCallback(async (accountNumber: string, bankCode: string): Promise<VerificationResult> => {
+  const verify = useCallback(async (accountNumber: string, bankCode: string, currency: string): Promise<VerificationResult> => {
     setIsVerifying(true);
     setResult(null);
 
@@ -22,6 +22,7 @@ export function useAccountVerification() {
         body: {
           accountNumber,
           bankCode,
+          currency,
         },
       });
 
