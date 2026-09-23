@@ -117,7 +117,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
     if (!accountNumber || !selectedBank) return;
     const bank = banks.find((b) => b.code === selectedBank);
     if (!bank) return;
-    const res = await verify(accountNumber, bank.code);
+    const res = await verify(accountNumber, bank.code, currency);
     if (res.verified && res.accountName) setAccountName(res.accountName);
   };
 
@@ -167,11 +167,8 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
     return accountNumber.length > 0;
   };
 
-  const canVerify = destinationType === "bank" && selectedBank && isAccountNumberValid();
-  const canSave =
-    destinationType === "mobile_money"
-      ? accountName && selectedBank && isAccountNumberValid()
-      : result?.verified && accountName && selectedBank && isAccountNumberValid();
+  const canVerify = selectedBank && isAccountNumberValid();
+  const canSave = result?.verified && accountName && selectedBank && isAccountNumberValid();
 
   if (isLoading) {
     return (
@@ -273,11 +270,9 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
                 onChange={(e) => setAccountNumber(e.target.value)}
                 placeholder={country === "NG" && destinationType === "bank" ? "10-digit account number" : "Enter number"}
               />
-              {destinationType === "bank" && (
-                <Button type="button" onClick={handleVerifyAccount} disabled={!canVerify || isVerifying} variant="outline" size="sm" className="shrink-0">
-                  {isVerifying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
-                </Button>
-              )}
+              <Button type="button" onClick={handleVerifyAccount} disabled={!canVerify || isVerifying} variant="outline" size="sm" className="shrink-0">
+                {isVerifying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify"}
+              </Button>
             </div>
             {country === "NG" && destinationType === "bank" && accountNumber && !isAccountNumberValid() && (
               <p className="text-xs text-destructive">Must be 10 digits</p>
@@ -296,13 +291,6 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
             <div className="space-y-1.5">
               <Label>Account Name</Label>
               <Input value={accountName} readOnly className="bg-muted" />
-            </div>
-          )}
-
-          {destinationType === "mobile_money" && (
-            <div className="space-y-1.5">
-              <Label htmlFor="accountName">Account Name</Label>
-              <Input id="accountName" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="Account holder name" />
             </div>
           )}
 

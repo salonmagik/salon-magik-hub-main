@@ -49,10 +49,13 @@ Deno.serve(async (req) => {
     }
     const paystackSecretKey = paystackKeyResult.key;
 
-    // Build Paystack API URL
+    // Build Paystack API URL. Resolve Account Number covers both NG and GH,
+    // but GH resolution requires an explicit currency — without it Paystack
+    // has no way to know which rail (NUBAN vs GHIPSS) to resolve against.
     const paystackUrl = new URL("https://api.paystack.co/bank/resolve");
     paystackUrl.searchParams.set("account_number", accountNumber);
     paystackUrl.searchParams.set("bank_code", bankCode);
+    paystackUrl.searchParams.set("currency", currency);
 
     // Call Paystack API
     const paystackResponse = await fetch(paystackUrl.toString(), {
