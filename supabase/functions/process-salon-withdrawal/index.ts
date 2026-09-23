@@ -21,6 +21,14 @@ interface WithdrawalRequest {
 // Duplicate detection time window (5 minutes in milliseconds)
 const DUPLICATE_WINDOW_MS = 5 * 60 * 1000;
 
+// A pending/awaiting_otp withdrawal older than this no longer blocks a new
+// one to the same destination. Real transfers resolve same-day; awaiting_otp
+// needs a manual completion step from our own team, which can take a while,
+// but not indefinitely — without this, one withdrawal that never got a
+// transfer.success/failed webhook (e.g. initiated under the old subaccount
+// flow, before that was retired) permanently blocks that destination.
+const STALE_PENDING_WINDOW_MS = 72 * 60 * 60 * 1000;
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -104,6 +112,7 @@ Deno.serve(async (req) => {
     console.log(`[Withdrawal] Checking for duplicates - tenant: ${tenantId}, destination: ${payoutDestinationId}, amount: ${amount}`);
     
     // Check for existing pending/processing withdrawals with same destination
+    const stalePendingCutoff = new Date(Date.now() - STALE_PENDING_WINDOW_MS).toISOString();
     const { data: existingProcessing, error: processingCheckError } = await serviceSupabase
       .from("salon_withdrawals")
       .select("id, status, amount, requested_at")
@@ -111,6 +120,7 @@ Deno.serve(async (req) => {
       .filter(locationId ? "location_id" : "location_id", locationId ? "eq" : "is", locationId ?? "null")
       .eq("payout_destination_id", payoutDestinationId)
       .in("status", ["pending", "awaiting_otp"])
+      .gte("requested_at", stalePendingCutoff)
       .order("requested_at", { ascending: false })
       .limit(1);
 
