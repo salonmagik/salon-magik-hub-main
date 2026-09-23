@@ -141,6 +141,88 @@ async function debitWalletWithRetry(
   };
 }
 
+/**
+ * Resolves a withdrawal to a final outcome — the one place that knows how to
+ * do that correctly for both fee-bearing withdrawals (atomic accounting via
+ * finalize_fee_bearing_withdrawal) and legacy ones (debit-then-mark-complete,
+ * or just mark-failed since a legacy withdrawal was never pre-debited).
+ * Used by the transfer.success/failed/reversed webhook below, and reused by
+ * process-salon-withdrawal for active reconciliation against Paystack's own
+ * transfer-status API when a stuck pending withdrawal is blocking a new one
+ * — reusing this instead of duplicating the fee-bearing/legacy branching.
+ *
+ * `verifyAgainst`, when given, cross-checks an externally-claimed reference/
+ * amount/currency against the stored withdrawal before applying the outcome
+ * (the webhook's own anti-spoofing check). Omit it when the caller already
+ * looked the withdrawal up itself (nothing external to cross-check).
+ */
+export async function reconcileWithdrawalOutcome(
+  supabase: SupabaseClient,
+  withdrawalId: string,
+  outcome: "success" | "failed" | "reversed",
+  options: {
+    verifyAgainst?: { reference: string; amount: number; currency: string };
+    failureReason?: string;
+  } = {},
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: feeWithdrawal, error: feeLookupError } = await supabase
+    .from("salon_withdrawals").select("fee_version, paystack_reference, amount, currency, status")
+    .eq("id", withdrawalId).single();
+  if (feeLookupError) return { ok: false, error: feeLookupError.message };
+
+  if (feeWithdrawal?.fee_version) {
+    if (options.verifyAgainst && (
+      feeWithdrawal.paystack_reference !== options.verifyAgainst.reference
+      || Number(feeWithdrawal.amount) !== options.verifyAgainst.amount
+      || feeWithdrawal.currency !== options.verifyAgainst.currency
+    )) {
+      return { ok: false, error: "Transfer reference, amount or currency mismatch" };
+    }
+    const { error } = await supabase.rpc("finalize_fee_bearing_withdrawal", {
+      p_withdrawal_id: withdrawalId,
+      p_outcome: outcome,
+    });
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  }
+
+  // Legacy (pre fee-tracking) withdrawal.
+  if (outcome === "success") {
+    if (feeWithdrawal.status === "completed") return { ok: true };
+
+    const { data: withdrawal, error: fetchError } = await supabase
+      .from("salon_withdrawals")
+      .select("tenant_id, amount, currency")
+      .eq("id", withdrawalId)
+      .single();
+    if (fetchError || !withdrawal) return { ok: false, error: fetchError?.message || "Withdrawal not found" };
+
+    const debitResult = await debitWalletWithRetry(
+      supabase, withdrawal.tenant_id, withdrawalId, withdrawal.amount, withdrawal.currency,
+    );
+    if (!debitResult.success) {
+      await supabase.from("salon_withdrawals").update({
+        status: "failed",
+        failure_reason: `CRITICAL: Transfer successful but wallet debit failed after retries. Error: ${debitResult.error}. Requires manual reconciliation.`,
+      }).eq("id", withdrawalId);
+      return { ok: false, error: debitResult.error };
+    }
+
+    const { error: updateError } = await supabase
+      .from("salon_withdrawals").update({ status: "completed" }).eq("id", withdrawalId);
+    if (updateError) return { ok: false, error: updateError.message };
+    return { ok: true };
+  }
+
+  // failed / reversed — no wallet reversal needed, a legacy withdrawal was
+  // never pre-debited.
+  const { error: updateError } = await supabase
+    .from("salon_withdrawals")
+    .update({ status: "failed", failure_reason: options.failureReason || `Transfer ${outcome}` })
+    .eq("id", withdrawalId);
+  if (updateError) return { ok: false, error: updateError.message };
+  return { ok: true };
+}
 
 function calculateProportionalAmount(
   appointmentAmount: number,
@@ -1050,99 +1132,18 @@ export async function processWebhook(
       const withdrawalId = withdrawalIdMatch[1];
       console.log(`Processing ${event.type} for withdrawal ${withdrawalId}`);
 
-      // Fee-bearing withdrawals use atomic accounting; legacy records retain
-      // their original zero-fee policy.
-      const { data: feeWithdrawal, error: feeLookupError } = await supabase
-        .from("salon_withdrawals").select("fee_version, paystack_reference, amount, currency")
-        .eq("id", withdrawalId).single();
-      if (feeLookupError) throw feeLookupError;
-      if (feeWithdrawal?.fee_version) {
-        if (feeWithdrawal.paystack_reference !== event.data.reference
-          || Number(feeWithdrawal.amount) !== event.data.amount || feeWithdrawal.currency !== event.data.currency) {
-          throw new Error("Transfer reference, amount or currency mismatch");
-        }
-        const { error } = await supabase.rpc("finalize_fee_bearing_withdrawal", {
-          p_withdrawal_id: withdrawalId,
-          p_outcome: event.type === "transfer.success" ? "success" : event.type === "transfer.reversed" ? "reversed" : "failed",
-        });
-        if (error) throw error;
-        return;
+      const outcome = event.type === "transfer.success" ? "success" : event.type === "transfer.reversed" ? "reversed" : "failed";
+      const result = await reconcileWithdrawalOutcome(supabase, withdrawalId, outcome, {
+        verifyAgainst: event.data.reference
+          ? { reference: event.data.reference, amount: event.data.amount ?? 0, currency: event.data.currency ?? "" }
+          : undefined,
+        failureReason: event.data.status || undefined,
+      });
+      if (!result.ok) {
+        console.error(`Failed to reconcile withdrawal ${withdrawalId} to ${outcome}:`, result.error);
+        throw new Error(result.error);
       }
-
-      if (event.type === "transfer.success") {
-        // Fetch withdrawal record to get tenant_id, amount, and currency
-        const { data: withdrawal, error: fetchError } = await supabase
-          .from("salon_withdrawals")
-          .select("tenant_id, amount, currency, status")
-          .eq("id", withdrawalId)
-          .single();
-
-        if (fetchError || !withdrawal) {
-          console.error("Failed to fetch withdrawal record:", fetchError);
-          return;
-        }
-
-        // If already completed, this is a duplicate webhook - skip processing
-        if (withdrawal.status === "completed") {
-          console.log("Withdrawal already completed, skipping:", withdrawalId);
-          return;
-        }
-
-        // Debit the wallet with retry logic
-        console.log(`[Transfer Success] Debiting wallet for withdrawal ${withdrawalId}`);
-        const debitResult = await debitWalletWithRetry(
-          supabase,
-          withdrawal.tenant_id,
-          withdrawalId,
-          withdrawal.amount,
-          withdrawal.currency
-        );
-
-        if (!debitResult.success) {
-          // Wallet debit failed after retries - mark as failed
-          console.error(`[CRITICAL] Failed to debit wallet for successful transfer ${withdrawalId}`);
-          const { error: updateError } = await supabase
-            .from("salon_withdrawals")
-            .update({
-              status: "failed",
-              failure_reason: `CRITICAL: Transfer successful but wallet debit failed after retries. Error: ${debitResult.error}. Requires manual reconciliation.`
-            })
-            .eq("id", withdrawalId);
-
-          if (updateError) {
-            console.error("Failed to update withdrawal status after debit failure:", updateError);
-          }
-          return;
-        }
-
-        // Wallet debited successfully - mark withdrawal as completed
-        const { error: updateError } = await supabase
-          .from("salon_withdrawals")
-          .update({ status: "completed" })
-          .eq("id", withdrawalId);
-
-        if (updateError) {
-          console.error("Failed to update withdrawal status to completed:", updateError);
-        } else {
-          console.log(`[Transfer Success] Withdrawal ${withdrawalId} completed successfully`);
-        }
-      } else if (event.type === "transfer.failed" || event.type === "transfer.reversed") {
-        // Transfer failed or reversed - no wallet reversal needed since wallet was never debited
-        const failureReason = event.data.status || `Transfer ${event.type === "transfer.failed" ? "failed" : "reversed"}`;
-        
-        console.log(`[Transfer ${event.type}] Marking withdrawal ${withdrawalId} as failed (no wallet reversal needed)`);
-
-        const { error: updateError } = await supabase
-          .from("salon_withdrawals")
-          .update({ status: "failed", failure_reason: failureReason })
-          .eq("id", withdrawalId);
-
-        if (updateError) {
-          console.error("Failed to update withdrawal status:", updateError);
-        } else {
-          console.log(`Withdrawal ${withdrawalId} marked as failed:`, failureReason);
-        }
-      }
+      console.log(`Withdrawal ${withdrawalId} reconciled to ${outcome}`);
     }
 
     console.log("Webhook processing completed:", event.type, event.gateway);
