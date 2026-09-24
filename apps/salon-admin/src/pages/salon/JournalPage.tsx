@@ -39,7 +39,7 @@ export default function JournalPage() {
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Cash Tracker</h1>
+            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Cash Tracker</h1>
             <p className="text-muted-foreground">Offline cash payments linked to booked appointments.</p>
           </div>
           <Button onClick={() => setDialogOpen(true)}>

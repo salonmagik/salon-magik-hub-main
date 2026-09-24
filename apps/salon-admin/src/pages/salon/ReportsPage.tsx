@@ -246,7 +246,7 @@ export default function ReportsPage() {
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-medium tracking-[-0.3px]">Reports</h1>
+            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Reports</h1>
             <p className="mt-1 text-[13.5px] text-muted-foreground">
               How your business is doing compared to {stats.prevPeriodLabel.toLowerCase()}.
             </p>

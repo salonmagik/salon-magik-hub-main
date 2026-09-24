@@ -1027,7 +1027,7 @@ export default function AppointmentsPage() {
         {/* Page Header */}
         <div className="flex flex-row items-start justify-between gap-4">
           <div>
-            <h1 className="text-[22px] tracking-tight">Appointments</h1>
+            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Appointments</h1>
             <p className="text-[13.5px] text-muted-foreground mt-1">
               Manage upcoming bookings and stay on top of today's schedule.
             </p>
