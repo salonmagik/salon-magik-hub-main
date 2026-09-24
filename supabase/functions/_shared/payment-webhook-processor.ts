@@ -7,6 +7,7 @@ import {
 } from "./salon-notifications.ts";
 import { buildFromAddress, wrapEmailTemplate } from "./email-template.ts";
 import { mapPaystackChannelToPaymentMethod, getNextBillingAt } from "./paystack-helpers.ts";
+import { notifyWithdrawalOutcome } from "./withdrawal-notifications.ts";
 
 function currencyForCountry(country: string | null | undefined, fallback: string): string {
   const normalized = (country || "").trim().toUpperCase();
@@ -1144,6 +1145,8 @@ export async function processWebhook(
         throw new Error(result.error);
       }
       console.log(`Withdrawal ${withdrawalId} reconciled to ${outcome}`);
+      await notifyWithdrawalOutcome(supabase, withdrawalId, outcome, { resendApiKey, resendFromEmail })
+        .catch((err) => console.error(`Failed to send withdrawal-outcome notification for ${withdrawalId}:`, err));
     }
 
     console.log("Webhook processing completed:", event.type, event.gateway);

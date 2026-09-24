@@ -175,6 +175,7 @@ export type EmailTemplateType =
   | "low_balance_alert"
   | "payout_destination_changed"
   | "withdrawal_requested"
+  | "withdrawal_outcome"
   | "payment_alert";
 
 export interface EmailLogContext {
