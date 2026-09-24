@@ -370,7 +370,7 @@ export default function SalonsOverviewPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold flex items-center gap-2">
+            <h1 className="font-serif text-2xl font-medium flex items-center gap-2">
               <Building2 className="w-6 h-6" />
               Business Overview
             </h1>
@@ -383,7 +383,7 @@ export default function SalonsOverviewPage() {
           <div className="flex items-center gap-2">
             {availableCountries.length > 1 && (
               <Select value={effectiveCountry} onValueChange={setSelectedCountry}>
-                <SelectTrigger className="w-[150px]">
+                <SelectTrigger className="w-[150px] rounded-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -396,7 +396,7 @@ export default function SalonsOverviewPage() {
               </Select>
             )}
             <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
-              <SelectTrigger className="w-[150px]">
+              <SelectTrigger className="w-[150px] rounded-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -405,7 +405,7 @@ export default function SalonsOverviewPage() {
                 <SelectItem value="month">This Month</SelectItem>
               </SelectContent>
             </Select>
-            <Button onClick={() => setAddSalonOpen(true)} data-tour-id="tour-manage-branches" className="hidden lg:flex gap-2">
+            <Button onClick={() => setAddSalonOpen(true)} data-tour-id="tour-manage-branches" className="hidden lg:flex gap-2 rounded-full">
               <Plus className="w-4 h-4" />
               Add Branch
             </Button>
@@ -633,7 +633,7 @@ export default function SalonsOverviewPage() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Branches</p>
-                      <div className="text-2xl font-bold mt-0.5">{aggregateStats.locationCount}</div>
+                      <div className="font-serif text-2xl font-medium tabular-nums mt-0.5">{aggregateStats.locationCount}</div>
                     </div>
                   </CardContent>
                 </Card>
@@ -655,7 +655,7 @@ export default function SalonsOverviewPage() {
                             </TooltipContent>
                           </Tooltip>
                         </p>
-                        <div className="text-2xl font-bold mt-0.5">
+                        <div className="font-serif text-2xl font-medium tabular-nums mt-0.5">
                           {formatCurrency(aggregateStats.totalRevenue, aggregateStats.revenueCurrency)}
                         </div>
                       </div>
@@ -669,7 +669,7 @@ export default function SalonsOverviewPage() {
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Bookings</p>
-                      <div className="text-2xl font-bold mt-0.5">{aggregateStats.totalBookings}</div>
+                      <div className="font-serif text-2xl font-medium tabular-nums mt-0.5">{aggregateStats.totalBookings}</div>
                     </div>
                   </CardContent>
                 </Card>
@@ -690,7 +690,7 @@ export default function SalonsOverviewPage() {
                           </TooltipContent>
                         </Tooltip>
                       </p>
-                      <div className="text-2xl font-bold text-success mt-0.5">
+                      <div className="font-serif text-2xl font-medium tabular-nums text-success mt-0.5">
                         {aggregateStats.totalStaffOnline}
                       </div>
                     </div>
@@ -713,7 +713,7 @@ export default function SalonsOverviewPage() {
                           </TooltipContent>
                         </Tooltip>
                       </p>
-                      <div className="text-2xl font-bold text-warning-foreground mt-0.5">
+                      <div className="font-serif text-2xl font-medium tabular-nums text-warning-foreground mt-0.5">
                         {aggregateStats.totalOutstanding}
                       </div>
                     </div>
@@ -822,7 +822,7 @@ export default function SalonsOverviewPage() {
             {/* Branch Breakdown Table */}
             <Card data-tour-id="tour-branch-performance">
               <CardHeader>
-                <CardTitle>Branch Performance</CardTitle>
+                <CardTitle className="font-serif font-medium">Branch Performance</CardTitle>
                 <CardDescription>
                   Detailed metrics for each branch
                 </CardDescription>
@@ -903,7 +903,7 @@ export default function SalonsOverviewPage() {
                             </div>
                           </TableCell>
                           {canViewRevenueAnalytics && (
-                            <TableCell className="text-right font-medium">
+                            <TableCell className="text-right font-serif font-medium tabular-nums">
                               {formatCurrency(location.revenue, location.currency)}
                             </TableCell>
                           )}
@@ -1007,11 +1007,11 @@ export default function SalonsOverviewPage() {
                         </div>
                         <p className="mt-2 text-sm text-muted-foreground">{label}</p>
                         <div className="mt-1 flex items-center gap-4">
-                          <span className="flex items-center gap-1 text-lg font-semibold tabular-nums">
+                          <span className="flex items-center gap-1 font-serif text-lg font-medium tabular-nums">
                             <Mail className="h-3.5 w-3.5 text-muted-foreground" />
                             {email}
                           </span>
-                          <span className="flex items-center gap-1 text-lg font-semibold tabular-nums">
+                          <span className="flex items-center gap-1 font-serif text-lg font-medium tabular-nums">
                             <Phone className="h-3.5 w-3.5 text-muted-foreground" />
                             {sms}
                           </span>
