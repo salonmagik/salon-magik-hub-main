@@ -1208,7 +1208,7 @@ export default function MessagingPage() {
       <div className="space-y-6">
         <div className="flex flex-row items-start justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Messaging</h1>
+            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Messaging</h1>
             <p className="mt-1 text-muted-foreground">
               Reach your customers the way they prefer.
             </p>

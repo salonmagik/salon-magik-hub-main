@@ -5497,7 +5497,7 @@ export type Database = {
           destination_type: Database["public"]["Enums"]["payout_destination_type"]
           id: string
           is_default: boolean | null
-          location_id: string | null
+          location_ids: string[]
           momo_number: string | null
           momo_provider: string | null
           paystack_recipient_code: string | null
@@ -5522,7 +5522,7 @@ export type Database = {
           destination_type: Database["public"]["Enums"]["payout_destination_type"]
           id?: string
           is_default?: boolean | null
-          location_id?: string | null
+          location_ids?: string[]
           momo_number?: string | null
           momo_provider?: string | null
           paystack_recipient_code?: string | null
@@ -5547,7 +5547,7 @@ export type Database = {
           destination_type?: Database["public"]["Enums"]["payout_destination_type"]
           id?: string
           is_default?: boolean | null
-          location_id?: string | null
+          location_ids?: string[]
           momo_number?: string | null
           momo_provider?: string | null
           paystack_recipient_code?: string | null
@@ -5574,13 +5574,6 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "salon_payout_destinations_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]

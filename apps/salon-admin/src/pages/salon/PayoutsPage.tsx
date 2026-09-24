@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
@@ -30,7 +30,9 @@ import { useWithdrawals } from "@/hooks/useWithdrawals";
 import { format } from "date-fns";
 import { cn } from "@shared/utils";
 import { WithdrawalDialog } from "@/components/billing/WithdrawalDialog";
+import { WithdrawalDetailDialog } from "@/components/billing/WithdrawalDetailDialog";
 import { PayoutDestinationsManager } from "@/components/billing/PayoutDestinationsManager";
+import type { SalonWithdrawal } from "@/hooks/useWithdrawals";
 import { formatCurrency as sharedFormatCurrency, getMinimumWithdrawal } from "@shared/currency";
 import { currencyForCountry } from "@/lib/countryCurrency";
 
@@ -52,11 +54,13 @@ function getSalonFacingWithdrawalStatus(status: string | null | undefined): stri
 export default function PayoutsPage() {
   const [payoutsSubTab, setPayoutsSubTab] = useState("history");
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
+  const [selectedWithdrawal, setSelectedWithdrawal] = useState<SalonWithdrawal | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
   const [selectedWalletScope, setSelectedWalletScope] = useState<string>("__central__");
 
   const { currentTenant, activeContextType, currentRole } = useAuth();
   const { locations, isLoading: locationsLoading } = useSalonsOverview("today");
+  const pillRowRef = useRef<HTMLDivElement>(null);
 
   const isOwnerHub = activeContextType === "owner_hub";
   const selectedWalletLocationId = selectedWalletScope === "__central__" ? null : selectedWalletScope;
@@ -81,6 +85,13 @@ export default function PayoutsPage() {
     canManagePayouts ? currentTenant?.id : undefined,
     canManagePayouts ? selectedWalletLocationId : null,
   );
+
+  // The active pill can be scrolled out of view (many branches) — never
+  // leave it selected-but-invisible off-screen when the page loads or the
+  // scope changes elsewhere (e.g. the withdrawal dialog's destination picker).
+  useEffect(() => {
+    pillRowRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [selectedWalletScope, locations.length]);
 
   useEffect(() => {
     if (locations.length <= 1 && selectedWalletScope !== "__central__") {
@@ -185,16 +196,17 @@ export default function PayoutsPage() {
             hint there's more, no separate arrow buttons or counter. */}
         {locations.length > 1 && (
           <div className="relative max-w-full sm:max-w-2xl">
-            <div className="scrollbar-hide flex gap-1.5 overflow-x-auto overscroll-x-contain rounded-full bg-muted/70 p-1.5">
+            <div ref={pillRowRef} className="scrollbar-hide flex gap-1.5 overflow-x-auto overscroll-x-contain rounded-full bg-muted/70 p-1.5">
               <button
                 type="button"
+                data-active={selectedWalletScope === "__central__"}
                 onClick={() => handleWalletScopeChange("__central__")}
                 className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium",
                   selectedWalletScope === "__central__" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-background/60",
                 )}
               >
-                Head Office
+                General
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
@@ -216,9 +228,10 @@ export default function PayoutsPage() {
                 <button
                   key={location.id}
                   type="button"
+                  data-active={selectedWalletScope === location.id}
                   onClick={() => handleWalletScopeChange(location.id)}
                   className={cn(
-                    "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                    "shrink-0 rounded-full px-4 py-2 text-sm font-medium",
                     selectedWalletScope === location.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-background/60",
                   )}
                 >
@@ -256,7 +269,7 @@ export default function PayoutsPage() {
                         {sharedFormatCurrency(Number(wallet?.balance ?? 0), walletCurrency)}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {selectedWalletLocationId ? `${locations.find((location) => location.id === selectedWalletLocationId)?.name ?? "Branch"} wallet` : "Head Office wallet"}
+                        {selectedWalletLocationId ? `${locations.find((location) => location.id === selectedWalletLocationId)?.name ?? "Branch"} wallet` : "General wallet"}
                       </p>
                     </>
                   )}
@@ -362,7 +375,12 @@ export default function PayoutsPage() {
                       const displayStatus = getSalonFacingWithdrawalStatus(w.status);
                       const wStyle = withdrawalStatusStyles[displayStatus] || withdrawalStatusStyles.pending;
                       return (
-                        <div key={w.id} className="flex items-center justify-between p-3 rounded-lg bg-surface">
+                        <button
+                          key={w.id}
+                          type="button"
+                          onClick={() => setSelectedWithdrawal(w)}
+                          className="flex w-full items-center justify-between p-3 rounded-lg bg-surface text-left transition-colors hover:bg-muted"
+                        >
                           <div>
                             <p className="font-medium text-sm">{sharedFormatCurrency(Number(w.amount), w.currency)}</p>
                             {w.fee_version && <p className="text-xs text-muted-foreground">
@@ -383,7 +401,7 @@ export default function PayoutsPage() {
                             )}
                           </div>
                           <Badge className={cn("text-xs", wStyle.bg, wStyle.text)}>{displayStatus}</Badge>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
@@ -453,6 +471,11 @@ export default function PayoutsPage() {
           await Promise.all([refetchWallet(), refetchAvailability(), refetchWithdrawals()]);
         }}
         onAddPayoutDestination={() => setPayoutsSubTab("accounts")}
+      />
+      <WithdrawalDetailDialog
+        withdrawal={selectedWithdrawal}
+        destination={selectedWithdrawal ? destinations.find((d) => d.id === selectedWithdrawal.payout_destination_id) : undefined}
+        onOpenChange={(next) => { if (!next) setSelectedWithdrawal(null); }}
       />
     </SalonSidebar>
   );

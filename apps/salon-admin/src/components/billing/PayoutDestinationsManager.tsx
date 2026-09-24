@@ -36,32 +36,28 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
   const destinations = countryFilter ? allDestinations.filter((d) => d.country === countryFilter) : allDestinations;
   const { locations } = useSalonsOverview("today");
 
-  // A destination with its own location_id serves only that branch. One
-  // without a location_id but marked default serves Head Office plus every
-  // branch that has no destination of its own — matches the schema (one
-  // optional location per destination), so this is the full set of tags
-  // possible without a many-to-many model.
-  const branchesWithOwnDestination = new Set(allDestinations.map((d) => d.location_id).filter(Boolean));
-  const getBranchTags = (dest: PayoutDestination): string[] => {
-    if (dest.location_id) {
-      return [locations.find((l) => l.id === dest.location_id)?.name ?? "Branch"];
-    }
-    if (dest.is_default) {
-      return [
-        "Head Office",
-        ...locations.filter((l) => !branchesWithOwnDestination.has(l.id)).map((l) => l.name),
-      ];
-    }
-    return [];
-  };
+  // A destination lists every branch it explicitly serves in location_ids —
+  // no more implicit "default covers whatever's left" fallback. "General"
+  // (the central/unassigned wallet) is governed separately by is_default,
+  // independent of which specific branches are also listed.
+  const getBranchTags = (dest: PayoutDestination): string[] => [
+    ...(dest.is_default ? ["General"] : []),
+    ...dest.location_ids.map((id) => locations.find((l) => l.id === id)?.name ?? "Branch"),
+  ];
 
   const [changeBranchTarget, setChangeBranchTarget] = useState<PayoutDestination | null>(null);
-  const [changeBranchValue, setChangeBranchValue] = useState<string>("__unassigned__");
+  const [changeBranchValue, setChangeBranchValue] = useState<string[]>([]);
   const [isChangingBranch, setIsChangingBranch] = useState(false);
 
   const openChangeBranch = (dest: PayoutDestination) => {
     setChangeBranchTarget(dest);
-    setChangeBranchValue(dest.location_id ?? "__unassigned__");
+    setChangeBranchValue(dest.location_ids ?? []);
+  };
+
+  const toggleChangeBranchValue = (locationId: string) => {
+    setChangeBranchValue((prev) =>
+      prev.includes(locationId) ? prev.filter((id) => id !== locationId) : [...prev, locationId],
+    );
   };
 
   const handleSaveBranchChange = async () => {
@@ -70,7 +66,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
     try {
       await supabase
         .from("salon_payout_destinations")
-        .update({ location_id: changeBranchValue === "__unassigned__" ? null : changeBranchValue })
+        .update({ location_ids: changeBranchValue })
         .eq("id", changeBranchTarget.id);
       await refetchDestinations();
       setChangeBranchTarget(null);
@@ -338,7 +334,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
 
       <Dialog open={!!changeBranchTarget} onOpenChange={(open) => { if (!open) setChangeBranchTarget(null); }}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Which branch uses this account?</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Which branches use this account?</DialogTitle></DialogHeader>
           <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <p className="text-sm text-muted-foreground">
               {changeBranchTarget?.destination_type === "bank" ? changeBranchTarget.bank_name : changeBranchTarget?.momo_provider}
@@ -346,16 +342,27 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
               {changeBranchTarget?.destination_type === "bank" ? changeBranchTarget.account_number : changeBranchTarget?.momo_number}
             </p>
             <div className="space-y-2">
-              <Label>Branch</Label>
-              <Select value={changeBranchValue} onValueChange={setChangeBranchValue}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__unassigned__">Not assigned to a branch</SelectItem>
+              <Label>Branches</Label>
+              {locations.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No branches to assign yet.</p>
+              ) : (
+                <div className="rounded-lg border divide-y">
                   {locations.map((location) => (
-                    <SelectItem key={location.id} value={location.id}>{location.name}</SelectItem>
+                    <label key={location.id} className="flex items-center gap-2.5 px-3 py-2.5 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 rounded"
+                        checked={changeBranchValue.includes(location.id)}
+                        onChange={() => toggleChangeBranchValue(location.id)}
+                      />
+                      {location.name}
+                    </label>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              )}
+              {changeBranchValue.length === 0 && (
+                <p className="text-xs text-muted-foreground">Not assigned to any branch — it'll only appear if picked for one during a withdrawal.</p>
+              )}
             </div>
           </div>
           <DialogFooter>

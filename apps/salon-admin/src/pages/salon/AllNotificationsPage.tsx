@@ -74,7 +74,7 @@ export default function AllNotificationsPage() {
       <div className="space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">All Notifications</h1>
+            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">All Notifications</h1>
             <p className="text-muted-foreground">Activity across all branches.</p>
           </div>
           {unreadCount > 0 && (

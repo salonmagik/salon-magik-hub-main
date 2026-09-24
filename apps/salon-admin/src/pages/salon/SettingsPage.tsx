@@ -4581,7 +4581,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				<div className="space-y-6">
 					{header && (
 						<div>
-							<h1 className="text-2xl font-semibold">{header.title}</h1>
+							<h1 className="text-2xl font-medium tracking-tight sm:text-3xl">{header.title}</h1>
 							<p className="text-muted-foreground">{header.subtitle}</p>
 						</div>
 					)}
@@ -4604,7 +4604,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		<SalonSidebar>
 			<div className="space-y-6">
 				<div>
-					<h1 className="text-2xl font-semibold">Settings</h1>
+					<h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Settings</h1>
 					<p className="text-muted-foreground">
 						Manage your salon's configuration and preferences
 					</p>

@@ -410,7 +410,7 @@ export default function CustomersPage() {
 				{/* Page Header */}
 				<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
 					<div>
-						<h1 className="text-3xl font-medium tracking-tight">Customers</h1>
+						<h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Customers</h1>
 						<p className="mt-1.5 text-sm text-muted-foreground sm:text-base">
 							Manage customer relationships and celebrate key moments.
 						</p>

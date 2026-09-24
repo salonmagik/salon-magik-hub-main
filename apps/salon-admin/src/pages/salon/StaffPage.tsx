@@ -607,7 +607,7 @@ export default function StaffPage() {
 				{/* Header */}
 				<div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 					<div>
-						<h1 className="text-[22px] font-medium leading-tight tracking-[-0.3px]">
+						<h1 className="text-2xl font-medium tracking-tight sm:text-3xl">
 							Team Members
 						</h1>
 						<p className="mt-1 text-[13.5px] text-muted-foreground">

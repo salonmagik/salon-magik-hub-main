@@ -92,9 +92,9 @@ export function CustomerBalancesPanel({ canAdjust }: { canAdjust: boolean }) {
         ))}
       </div>
       <Card>
-        <CardHeader className="flex-row items-center justify-between gap-4">
+        <CardHeader className="flex-col items-stretch gap-4 md:flex-row md:items-center md:justify-between">
           <div><CardTitle className="text-base">Customer salon balances</CardTitle><p className="mt-1 text-sm text-muted-foreground">Paid funds and salon-issued credit remain source-aware.</p></div>
-          <div className="relative w-full max-w-xs"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer…" /></div>
+          <div className="relative w-full md:max-w-xs"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer…" /></div>
         </CardHeader>
         <CardContent className="space-y-2">
           {isLoading ? [1,2,3].map((item) => <Skeleton key={item} className="h-16 w-full" />) : error ? (

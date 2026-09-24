@@ -142,7 +142,7 @@ export default function SalonDashboard() {
 			<div className="space-y-6 max-w-[1320px]">
 				{/* ── Page header ────────────────────────────────────────────── */}
 				<div>
-					<h1 className="text-[22px] tracking-tight">Dashboard</h1>
+					<h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Dashboard</h1>
 					<p className="text-[13.5px] text-muted-foreground mt-1">
 						{firstName ? `Welcome back, ${firstName}!` : "Welcome back!"} Here's
 						what's happening today.

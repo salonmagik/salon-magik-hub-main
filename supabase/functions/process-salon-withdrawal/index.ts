@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getPaystackKeyForCurrency, getPaystackBalance, fetchPaystackTransferStatus } from "../_shared/paystack-helpers.ts";
 import { reconcileWithdrawalOutcome } from "../_shared/payment-webhook-processor.ts";
+import { notifyWithdrawalRequested, notifyWithdrawalOutcome } from "../_shared/withdrawal-notifications.ts";
 
 import { quoteWithdrawal } from "../_shared/withdrawal-fees.ts";
 
@@ -47,6 +48,8 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const resendFromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
 
     // Verify the user's JWT
     const authHeader = req.headers.get("Authorization");
@@ -174,8 +177,11 @@ Deno.serve(async (req) => {
         const result = await reconcileWithdrawalOutcome(serviceSupabase, existing.id, "failed", {
           failureReason: "No transfer was ever initiated with Paystack for this request.",
         });
-        if (result.ok) stillBlocking = false;
-        else console.error(`Failed to auto-fail withdrawal ${existing.id} with no transfer code:`, result.error);
+        if (result.ok) {
+          stillBlocking = false;
+          await notifyWithdrawalOutcome(serviceSupabase, existing.id, "failed", { resendApiKey, resendFromEmail })
+            .catch((err) => console.error(`Failed to send withdrawal-outcome notification for ${existing.id}:`, err));
+        } else console.error(`Failed to auto-fail withdrawal ${existing.id} with no transfer code:`, result.error);
       } else {
         const paystackKeyResult = getPaystackKeyForCurrency(wallet.currency);
         const transferStatus = paystackKeyResult.key
@@ -193,8 +199,11 @@ Deno.serve(async (req) => {
           const result = await reconcileWithdrawalOutcome(serviceSupabase, existing.id, reconcileOutcome, {
             failureReason: `Paystack reports this transfer ${transferStatus.status}.`,
           });
-          if (result.ok) stillBlocking = false;
-          else console.error(`Failed to reconcile withdrawal ${existing.id} to ${reconcileOutcome}:`, result.error);
+          if (result.ok) {
+            stillBlocking = false;
+            await notifyWithdrawalOutcome(serviceSupabase, existing.id, reconcileOutcome, { resendApiKey, resendFromEmail })
+              .catch((err) => console.error(`Failed to send withdrawal-outcome notification for ${existing.id}:`, err));
+          } else console.error(`Failed to reconcile withdrawal ${existing.id} to ${reconcileOutcome}:`, result.error);
         } else if (transferStatus.status === "pending" || transferStatus.status === "otp") {
           // Genuinely still in flight at Paystack — correctly keep blocking.
           stillBlocking = true;
@@ -292,8 +301,16 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Payout destination currency does not match wallet" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    if (payoutDestination.location_id && payoutDestination.location_id !== locationId) {
-      return new Response(JSON.stringify({ error: "This payout account is assigned to a different branch" }),
+    // A General-wallet withdrawal (locationId null) needs the tenant's
+    // default destination; a branch withdrawal needs one explicitly pinned
+    // to that branch — no more implicit fallback either way. The DB trigger
+    // (reserve_fee_bearing_withdrawal) enforces this too; this is the
+    // friendlier pre-check.
+    const destinationUsable = locationId
+      ? (payoutDestination.location_ids ?? []).includes(locationId)
+      : !!payoutDestination.is_default;
+    if (!destinationUsable) {
+      return new Response(JSON.stringify({ error: "This payout account isn't assigned to this branch" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     let quote;
@@ -428,6 +445,17 @@ Deno.serve(async (req) => {
 
     console.log(`[Withdrawal] Created withdrawal record: ${withdrawal.id} with reference: ${transferReference}`);
 
+    // Awaited (not fire-and-forget) — this edge function's isolate can be
+    // torn down as soon as the response is sent, same reason every other
+    // notification send in this codebase is awaited rather than detached.
+    // A failure here must never block the actual transfer below, so it's
+    // caught and logged, not thrown.
+    try {
+      await notifyWithdrawalRequested(serviceSupabase, withdrawal.id, { resendApiKey, resendFromEmail });
+    } catch (err) {
+      console.error(`Failed to send withdrawal-requested notification for ${withdrawal.id}:`, err);
+    }
+
     // =====================================================
     // STEP 4: CALL PAYSTACK API FIRST (BEFORE DEBITING WALLET)
     // =====================================================
@@ -521,11 +549,15 @@ Deno.serve(async (req) => {
     const isFinalFailure = TRANSFER_FAILURE_STATUSES.has(transferStatus);
     const internalStatus = transferStatus === "otp" ? "awaiting_otp" : isFinalFailure ? "failed" : "pending";
     if (transferStatus === "success" || isFinalFailure) {
+      const syncOutcome: "success" | "reversed" | "failed" =
+        transferStatus === "success" ? "success" : transferStatus === "reversed" ? "reversed" : "failed";
       const { error } = await serviceSupabase.rpc("finalize_fee_bearing_withdrawal", {
         p_withdrawal_id: withdrawal.id,
-        p_outcome: transferStatus === "success" ? "success" : transferStatus === "reversed" ? "reversed" : "failed",
+        p_outcome: syncOutcome,
       });
       if (error) throw error; // Keep funds reserved for reconciliation on failure.
+      await notifyWithdrawalOutcome(serviceSupabase, withdrawal.id, syncOutcome, { resendApiKey, resendFromEmail })
+        .catch((err) => console.error(`Failed to send withdrawal-outcome notification for ${withdrawal.id}:`, err));
     } else {
       const { error } = await serviceSupabase.from("salon_withdrawals")
         .update({ status: internalStatus, paystack_transfer_code: paystackData.data.transfer_code })

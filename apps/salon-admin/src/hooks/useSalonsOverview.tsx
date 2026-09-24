@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { useLocationScope } from "./useLocationScope";
@@ -50,6 +50,13 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
   const [locations, setLocations] = useState<LocationPerformance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  // This hook mounts more than once at a time (e.g. PayoutsPage and the
+  // PayoutDestinationsManager it renders inside its Accounts tab both call
+  // it for the same tenant) — a hardcoded channel name meant a second
+  // instance's .subscribe() collided with the first's already-joined
+  // channel of the same topic, throwing "cannot add postgres_changes
+  // callbacks ... after subscribe()". Each instance needs its own channel.
+  const instanceIdRef = useRef(crypto.randomUUID());
 
   const fetchOverview = useCallback(async () => {
     if (permissionsLoading) {
@@ -265,7 +272,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
     if (!currentTenant?.id) return;
 
     const channel = supabase
-      .channel("salon-overview-sessions")
+      .channel(`salon-overview-sessions-${instanceIdRef.current}`)
       .on(
         "postgres_changes",
         {
