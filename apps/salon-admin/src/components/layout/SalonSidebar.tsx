@@ -303,7 +303,7 @@ const mainNavItems: NavItem[] = [
 		module: "reports",
 	},
 	{
-		label: "Messaging",
+		label: "Marketing",
 		icon: MessageSquare,
 		path: "/salon/messaging",
 		module: "messaging",
