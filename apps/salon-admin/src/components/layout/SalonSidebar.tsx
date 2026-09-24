@@ -291,7 +291,7 @@ const mainNavItems: NavItem[] = [
 		module: "services",
 	},
 	{
-		label: "Transactions",
+		label: "Cashflow",
 		icon: CreditCard,
 		path: "/salon/transactions",
 		module: "payments",
@@ -1340,7 +1340,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												path: "__quick__",
 											},
 											{
-												label: "Transactions",
+												label: "Cashflow",
 												icon: CreditCard,
 												path: "/salon/transactions",
 											},

@@ -116,7 +116,6 @@ export default function CashflowPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || "all");
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
-  const [hubTypeFilter, setHubTypeFilter] = useState(() => searchParams.get("type") || "all");
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [selectedRefund, setSelectedRefund] = useState<RefundWithDetails | null>(null);
@@ -139,7 +138,6 @@ export default function CashflowPage() {
   const isOwnerHub = activeContextType === "owner_hub";
   const canCompleteRefunds = currentRole === "owner" || currentRole === "manager";
 
-  const pageTitle = isOwnerHub ? "Cashflow" : "Transactions";
   const currency = currentTenant?.currency || "USD";
 
   // Chain tenants can span more than one country. The page always shows
@@ -157,12 +155,9 @@ export default function CashflowPage() {
   useEffect(() => {
     const tab = searchParams.get("tab");
     const type = searchParams.get("type");
-    if (type) {
-      setHubTypeFilter(type);
-      if (!isOwnerHub && type === "cash") setActiveTab("cash");
-    }
+    if (type) setActiveTab(type);
     if (tab) setActiveTab(tab);
-  }, [searchParams, isOwnerHub]);
+  }, [searchParams]);
 
   const formatCurrency = (amount: number) => {
     const symbols: Record<string, string> = { USD: "$", GHS: "₵", NGN: "₦", EUR: "€", GBP: "£" };
@@ -192,14 +187,6 @@ export default function CashflowPage() {
       txn.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       txn.appointment?.location?.name?.toLowerCase().includes(searchQuery.toLowerCase());
 
-    if (isOwnerHub) {
-      if (hubTypeFilter === "revenue") return matchesSearch && txn.type === "payment";
-      if (hubTypeFilter === "refunds") return matchesSearch && txn.type === "refund";
-      if (hubTypeFilter === "purse") return matchesSearch && (txn.type === "purse_topup" || txn.type === "purse_redemption");
-      if (hubTypeFilter === "cash") return matchesSearch && txn.method === "cash";
-      return matchesSearch;
-    }
-
     if (activeTab === "cash") return matchesSearch && txn.method === "cash";
     if (activeTab === "all") return matchesSearch;
     if (activeTab === "revenue") return matchesSearch && txn.type === "payment";
@@ -207,7 +194,7 @@ export default function CashflowPage() {
     if (activeTab === "purse") return matchesSearch && (txn.type === "purse_topup" || txn.type === "purse_redemption");
     return matchesSearch;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [transactions, dateRange, isOwnerHub, effectiveCountry, searchQuery, hubTypeFilter, activeTab]);
+  }), [transactions, dateRange, isOwnerHub, effectiveCountry, searchQuery, activeTab]);
 
   // "Today's Inflow" and pending-refund totals are money — they must respect
   // the country filter and never sum two currencies together, same as
@@ -527,48 +514,57 @@ export default function CashflowPage() {
     </div>
   );
 
-  // ─── Hub: All Transactions content ───────────────────────────────────────────
-  const renderHubAllTransactions = () => (
-    <div className="space-y-6">
-      {/* Stats */}
-      <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
-        {[
-          {
-            title: "Today's Inflow",
-            value: sharedFormatCurrency(
-              todayRevenueByCurrency[0]?.total ?? 0,
-              todayRevenueByCurrency[0]?.currency ?? currencyForCountry(effectiveCountry, currency)
-            ),
-            icon: TrendingUp,
-            color: "text-success",
-            bg: "bg-success/10",
-            description: "Completed payments collected today.",
-          },
-          {
-            title: "Pending Refunds",
-            value: String(countryFilteredPendingRefunds.length),
-            icon: AlertCircle,
-            color: "text-warning-foreground",
-            bg: "bg-warning-bg",
-            description: "Refund requests awaiting your approval, across all branches.",
-          },
-          {
-            title: "Store Credit",
-            value: formatCurrency(stats.totalPurseBalance),
-            icon: Wallet,
-            color: "text-primary",
-            bg: "bg-primary/10",
-            description: "Every customer's combined salon balance — paid funds plus salon-issued credit, added together. Not split by country: customer balances are tracked per tenant, not per branch.",
-            subtitle: availableCountries.length > 1 ? "All branches" : undefined,
-          },
-        ].map((s) => {
+  // ─── Stats + pending-refunds banner — same for Business Hub and branch
+  // context, just sourced from country-scoped vs plain totals. ──────────────
+  const statCards = [
+    {
+      title: "Today's Inflow",
+      value: isOwnerHub
+        ? sharedFormatCurrency(
+            todayRevenueByCurrency[0]?.total ?? 0,
+            todayRevenueByCurrency[0]?.currency ?? currencyForCountry(effectiveCountry, currency)
+          )
+        : formatCurrency(stats.todayRevenue),
+      icon: TrendingUp,
+      color: "text-success",
+      bg: "bg-success/10",
+      description: "Completed payments collected today.",
+    },
+    {
+      title: "Pending Refunds",
+      value: String(countryFilteredPendingRefunds.length),
+      icon: AlertCircle,
+      color: "text-warning-foreground",
+      bg: "bg-warning-bg",
+      description: "Refund requests awaiting your approval, across all branches.",
+    },
+    {
+      title: "Store Credit",
+      value: formatCurrency(stats.totalPurseBalance),
+      icon: Wallet,
+      color: "text-primary",
+      bg: "bg-primary/10",
+      description: isOwnerHub
+        ? "Every customer's combined salon balance — paid funds plus salon-issued credit, added together. Not split by country: customer balances are tracked per tenant, not per branch."
+        : "Every customer's combined salon balance — paid funds plus salon-issued credit, added together.",
+      subtitle: isOwnerHub && availableCountries.length > 1 ? "All branches" : undefined,
+    },
+  ];
+
+  const renderStatsAndBanner = () => (
+    <>
+      {/* Stats — md: breakpoint (not sm:) so a card's label never wraps to
+          two lines in the 640-767px range, where a 3-col grid would otherwise
+          squeeze "Pending Refunds" into a column too narrow for one line. */}
+      <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start md:grid md:grid-cols-3 md:gap-4 md:overflow-visible md:pb-0 md:[&>*]:min-w-0">
+        {statCards.map((s) => {
           const Icon = s.icon;
           return (
             <Card key={s.title} className="rounded-[14px] border-border/60 bg-white shadow-sm">
               <CardContent className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
                 <div>
                   <div className="flex items-center gap-1">
-                    <p className="text-xs text-muted-foreground sm:text-sm">{s.title}</p>
+                    <p className="whitespace-nowrap text-xs text-muted-foreground sm:text-sm">{s.title}</p>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Info className="h-3 w-3 text-muted-foreground cursor-default" />
@@ -611,192 +607,78 @@ export default function CashflowPage() {
                 </p>
               </div>
             </div>
-            <Button variant="outline" className="w-full bg-background sm:w-auto" onClick={() => setRefundRequestsOpen(true)}>
+            <Button variant="outline" className="w-full shrink-0 border-warning/50 bg-background sm:w-auto" onClick={() => setRefundRequestsOpen(true)}>
               Review requests <ChevronRight className="ml-2 h-4 w-4" />
             </Button>
           </CardContent>
         </Card>
       )}
-
-      {/* Filters */}
-      <div className="scrollbar-hide flex max-w-full items-center gap-2 overflow-x-auto overscroll-x-contain pb-1">
-        {[
-          { value: "all", label: "All" },
-          { value: "revenue", label: "Inflow" },
-          { value: "refunds", label: "Refunds" },
-          { value: "purse", label: "Store credit" },
-          { value: "cash", label: "Cash" },
-        ].map((filter) => (
-          <Button
-            key={filter.value}
-            type="button"
-            variant={hubTypeFilter === filter.value ? "default" : "outline"}
-            className="h-11 shrink-0 rounded-full px-6"
-            onClick={() => setHubTypeFilter(filter.value)}
-          >
-            {filter.label}
-          </Button>
-        ))}
-      </div>
-      <div className="flex flex-row items-center gap-3 sm:flex-wrap">
-        <div className="relative min-w-0 flex-1 sm:min-w-[240px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Search transactions…" className="h-12 rounded-[12px] bg-white pl-10 shadow-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-        </div>
-        <DateRangePicker
-          from={dateRange.from}
-          to={dateRange.to}
-          onChange={(range) => setDateRange(range)}
-          onClear={() => setDateRange({})}
-          clearLabel="All time"
-          placeholder="All time"
-          presets={TRANSACTION_RANGE_PRESETS}
-          className="h-12 w-[138px] shrink-0 rounded-[12px] bg-white shadow-sm sm:w-auto sm:min-w-[220px]"
-        />
-        <div className="hidden lg:block [&>button]:h-12 [&>button]:rounded-full">
-          <ExportDropdown onExport={handleExport} disabled={filteredTransactions.length === 0} />
-        </div>
-      </div>
-
-      {/* Transactions */}
-      <Card className="overflow-visible border-0 bg-transparent shadow-none md:overflow-hidden md:rounded-[14px] md:border md:border-border/60 md:bg-white md:shadow-sm">
-        <CardHeader className="hidden pb-3 md:flex">
-          <CardTitle className="text-base">
-            All Transactions
-            {filteredTransactions.length > 0 && (
-              <span className="text-muted-foreground font-normal ml-2 text-sm">({filteredTransactions.length})</span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="flex items-center gap-3 p-3"><Skeleton className="w-9 h-9 rounded-full" /><div><Skeleton className="h-4 w-36 mb-1" /><Skeleton className="h-3 w-24" /></div><Skeleton className="h-5 w-20 ml-auto" /></div>)}</div>
-          ) : filteredTransactions.length === 0 ? (
-            <div className="text-center py-10"><CreditCard className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" /><p className="text-muted-foreground">No transactions found</p></div>
-          ) : (
-            <div className="space-y-3 md:space-y-0">{transactionTableHeader}{filteredTransactions.map((txn) => renderTransactionRow(txn, true))}</div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    </>
   );
 
-  // ─── Branch-level view (unchanged) ────────────────────────────────────────
-  const renderBranchView = () => (
-    <>
-      {/* Stats */}
-      <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-3 sm:gap-4 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
-        {[
-          { title: "Today's Inflow", value: formatCurrency(stats.todayRevenue), icon: TrendingUp, color: "text-success", bg: "bg-success/10", description: "Completed payments collected today." },
-          { title: "Pending Refunds", value: String(pendingRefunds.length), icon: AlertCircle, color: "text-warning-foreground", bg: "bg-warning-bg", description: "Refund requests awaiting your approval, across all branches." },
-          { title: "Store Credit", value: formatCurrency(stats.totalPurseBalance), icon: Wallet, color: "text-primary", bg: "bg-primary/10", description: "Every customer's combined salon balance — paid funds plus salon-issued credit, added together." },
-        ].map((s) => {
-          const Icon = s.icon;
-          return (
-            <Card key={s.title} className="rounded-[14px] border-border/60 bg-white shadow-sm">
-              <CardContent className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5">
-                <div>
-                  <div className="flex items-center gap-1">
-                    <p className="text-xs text-muted-foreground sm:text-sm">{s.title}</p>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-3 w-3 text-muted-foreground cursor-default" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-56 text-xs">{s.description}</TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{s.value}</p>
-                </div>
-                <div className={`flex h-10 w-10 items-center justify-center rounded-[10px] ${s.bg}`}><Icon className={`h-5 w-5 ${s.color}`} /></div>
+  // ─── Tabs + content — one shared row (All / Inflow / Refunds / Store
+  // credit / Cash / Customer balances) for both Business Hub and branch
+  // context, instead of Business Hub's old separate two-level tabs. ────────
+  const renderTabsAndContent = () => (
+    <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <TabsList
+        data-tour-id="tour-transactions-tabs"
+        className="scrollbar-hide h-auto max-w-full justify-start overflow-x-auto overscroll-x-contain rounded-full bg-[#eee9e1] p-1.5"
+      >
+        <TabsTrigger value="all" className="shrink-0 rounded-full px-6">All</TabsTrigger>
+        <TabsTrigger value="revenue" className="shrink-0 rounded-full px-6"><ArrowUpRight className="mr-2 w-4 h-4" />Inflow</TabsTrigger>
+        <TabsTrigger value="refunds" className="shrink-0 rounded-full px-6"><ArrowDownLeft className="mr-2 w-4 h-4" />Refunds</TabsTrigger>
+        <TabsTrigger value="purse" className="shrink-0 rounded-full px-6"><Wallet className="mr-2 w-4 h-4" />Store credit</TabsTrigger>
+        <TabsTrigger value="cash" className="shrink-0 rounded-full px-6"><Banknote className="mr-2 w-4 h-4" />Cash</TabsTrigger>
+        <TabsTrigger value="balances" className="shrink-0 rounded-full px-6"><Wallet className="mr-2 w-4 h-4" />Customer balances</TabsTrigger>
+      </TabsList>
+      <div className="mt-6">
+        {activeTab === "balances" ? (
+          <CustomerBalancesPanel canAdjust={canCompleteRefunds} />
+        ) : (
+          <>
+            <div className="mb-6 flex flex-row items-center gap-3 sm:flex-wrap sm:gap-4">
+              <div className="relative min-w-0 flex-1 sm:max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input placeholder="Search transactions…" className="h-12 rounded-[12px] bg-white pl-10 shadow-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              </div>
+              <DateRangePicker
+                from={dateRange.from}
+                to={dateRange.to}
+                onChange={(range) => setDateRange(range)}
+                onClear={() => setDateRange({})}
+                clearLabel="All time"
+                placeholder="All time"
+                presets={TRANSACTION_RANGE_PRESETS}
+                className="h-12 w-[138px] shrink-0 rounded-[12px] bg-white shadow-sm sm:w-auto sm:min-w-[220px]"
+              />
+              <div className="hidden lg:block [&>button]:h-12 [&>button]:rounded-full">
+                <ExportDropdown onExport={handleExport} disabled={filteredTransactions.length === 0} />
+              </div>
+            </div>
+            <Card className="overflow-visible border-0 bg-transparent shadow-none md:overflow-hidden md:rounded-[14px] md:border md:border-border/60 md:bg-white md:shadow-sm">
+              <CardHeader className="hidden pb-3 md:flex">
+                <CardTitle className="text-base">
+                  Transactions
+                  {filteredTransactions.length > 0 && (
+                    <span className="text-muted-foreground font-normal ml-2 text-sm">({filteredTransactions.length})</span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {isLoading ? (
+                  <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="flex items-center gap-3 p-3"><Skeleton className="w-9 h-9 rounded-full" /><div><Skeleton className="h-4 w-36 mb-1" /><Skeleton className="h-3 w-24" /></div><Skeleton className="h-5 w-20 ml-auto" /></div>)}</div>
+                ) : filteredTransactions.length === 0 ? (
+                  <div className="text-center py-10"><CreditCard className="w-10 h-10 mx-auto text-muted-foreground/40 mb-2" /><p className="text-muted-foreground">No transactions found</p></div>
+                ) : (
+                  <div className="space-y-3 md:space-y-0">{transactionTableHeader}{filteredTransactions.map((txn) => renderTransactionRow(txn, isOwnerHub))}</div>
+                )}
               </CardContent>
             </Card>
-          );
-        })}
-      </div>
-
-      {/* Pending Refunds */}
-      {canCompleteRefunds && pendingRefunds.length > 0 && (
-        <Card className="border-warning/40 bg-warning-bg/20">
-          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warning-bg">
-                <AlertCircle className="h-5 w-5 text-warning-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-medium">
-                  {pendingRefunds.length} refund {pendingRefunds.length === 1 ? "request" : "requests"} need review
-                </p>
-                <p className="truncate text-sm text-muted-foreground">
-                  {formatCurrency(pendingRefunds.reduce((total, refund) => total + Number(refund.amount), 0))} pending in total
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              className="w-full shrink-0 border-warning/50 bg-background sm:w-auto"
-              onClick={() => setRefundRequestsOpen(true)}
-            >
-              Review requests
-              <ChevronRight className="ml-2 h-4 w-4" />
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList
-          data-tour-id="tour-transactions-tabs"
-          className="scrollbar-hide h-auto max-w-full justify-start overflow-x-auto overscroll-x-contain rounded-full bg-[#eee9e1] p-1.5"
-        >
-          <TabsTrigger value="all" className="shrink-0 rounded-full px-6">All</TabsTrigger>
-          <TabsTrigger value="revenue" className="shrink-0 rounded-full px-6"><ArrowUpRight className="mr-2 w-4 h-4" />Inflow</TabsTrigger>
-          <TabsTrigger value="refunds" className="shrink-0 rounded-full px-6"><ArrowDownLeft className="mr-2 w-4 h-4" />Refunds</TabsTrigger>
-          <TabsTrigger value="purse" className="shrink-0 rounded-full px-6"><Wallet className="mr-2 w-4 h-4" />Store credit</TabsTrigger>
-          <TabsTrigger value="cash" className="shrink-0 rounded-full px-6"><Banknote className="mr-2 w-4 h-4" />Cash</TabsTrigger>
-          <TabsTrigger value="balances" className="shrink-0 rounded-full px-6"><Wallet className="mr-2 w-4 h-4" />Customer balances</TabsTrigger>
-        </TabsList>
-        <div className="mt-6">
-          {activeTab === "balances" ? (
-            <CustomerBalancesPanel canAdjust={canCompleteRefunds} />
-          ) : (
-          <>
-          <div className="mb-6 flex flex-row items-center gap-3 sm:flex-wrap sm:gap-4">
-            <div className="relative min-w-0 flex-1 sm:max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Search transactions…" className="h-12 rounded-[12px] bg-white pl-10 shadow-sm" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
-            </div>
-            <DateRangePicker
-              from={dateRange.from}
-              to={dateRange.to}
-              onChange={(range) => setDateRange(range)}
-              onClear={() => setDateRange({})}
-              clearLabel="All time"
-              placeholder="All time"
-              presets={TRANSACTION_RANGE_PRESETS}
-              className="h-12 w-[138px] shrink-0 rounded-[12px] bg-white shadow-sm sm:w-auto sm:min-w-[220px]"
-            />
-            <div className="hidden lg:block [&>button]:h-12 [&>button]:rounded-full">
-              <ExportDropdown onExport={handleExport} disabled={filteredTransactions.length === 0} />
-            </div>
-          </div>
-          <Card className="overflow-visible border-0 bg-transparent shadow-none md:overflow-hidden md:rounded-[14px] md:border md:border-border/60 md:bg-white md:shadow-sm">
-            <CardHeader className="hidden md:flex"><CardTitle className="text-lg">Transactions</CardTitle></CardHeader>
-            <CardContent className="p-0">
-              {isLoading ? (
-                <div className="space-y-4">{[1,2,3,4].map((i) => <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-surface"><div className="flex items-center gap-4"><Skeleton className="w-10 h-10 rounded-full" /><div><Skeleton className="h-4 w-32 mb-1" /><Skeleton className="h-3 w-24" /></div></div><Skeleton className="h-6 w-20" /></div>)}</div>
-              ) : filteredTransactions.length === 0 ? (
-                <div className="text-center py-12"><CreditCard className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" /><p className="text-muted-foreground">No transactions found</p></div>
-              ) : (
-                <div className="space-y-3 md:space-y-0">{transactionTableHeader}{filteredTransactions.map((txn) => renderTransactionRow(txn, false))}</div>
-              )}
-            </CardContent>
-          </Card>
           </>
-          )}
-        </div>
-      </Tabs>
-    </>
+        )}
+      </div>
+    </Tabs>
   );
 
   return (
@@ -806,7 +688,7 @@ export default function CashflowPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">{pageTitle}</h1>
+            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Cashflow</h1>
             <p className="mt-1.5 text-sm text-muted-foreground sm:mt-2 sm:text-base">
               {isOwnerHub ? "Income and refunds across all branches." : "Track transactions, manage refunds, and monitor customer balances."}
             </p>
@@ -833,23 +715,8 @@ export default function CashflowPage() {
           </div>
         </div>
 
-        {isOwnerHub ? (
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList
-              data-tour-id="tour-transactions-tabs"
-              className="scrollbar-hide max-w-full justify-start overflow-x-auto overscroll-x-contain"
-            >
-              <TabsTrigger value="all">All Transactions</TabsTrigger>
-              <TabsTrigger value="balances">Customer Balances</TabsTrigger>
-            </TabsList>
-            <TabsContent value="all" className="mt-6">{renderHubAllTransactions()}</TabsContent>
-            <TabsContent value="balances" className="mt-6">
-              <CustomerBalancesPanel canAdjust={canCompleteRefunds} />
-            </TabsContent>
-          </Tabs>
-        ) : (
-          renderBranchView()
-        )}
+        {renderStatsAndBanner()}
+        {renderTabsAndContent()}
       </div>
 
       {/* Dialogs */}
