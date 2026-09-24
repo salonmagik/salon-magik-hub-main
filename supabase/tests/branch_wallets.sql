@@ -45,10 +45,10 @@ begin
   values (v_transaction_b, v_tenant, v_customer, v_appointment_b, 'payment', 'card', 100, 'GHS',
     'paystack', 'branch-payment-b', 'completed', v_owner);
   insert into public.salon_payout_destinations (id, tenant_id, destination_type, country, currency,
-    bank_name, account_number, account_name, paystack_recipient_code, location_id)
+    bank_name, account_number, account_name, paystack_recipient_code, location_ids)
   values
-    (v_destination_a, v_tenant, 'bank', 'GH', 'GHS', 'Test Bank', '0001', 'Branch A', 'RCP_A', v_branch_a),
-    (v_destination_b, v_tenant, 'bank', 'GH', 'GHS', 'Test Bank', '0002', 'Branch B', 'RCP_B', v_branch_b);
+    (v_destination_a, v_tenant, 'bank', 'GH', 'GHS', 'Test Bank', '0001', 'Branch A', 'RCP_A', array[v_branch_a]),
+    (v_destination_b, v_tenant, 'bank', 'GH', 'GHS', 'Test Bank', '0002', 'Branch B', 'RCP_B', array[v_branch_b]);
 
   v_credit_a := public.credit_salon_purse(v_tenant, 'salon_purse_credit_booking', 'appointment', v_appointment_a, 100, 'GHS', 'branch-credit-a', 'branch-payment-a');
   v_credit_b := public.credit_salon_purse(v_tenant, 'salon_purse_credit_booking', 'appointment', v_appointment_b, 100, 'GHS', 'branch-credit-b', 'branch-payment-b');

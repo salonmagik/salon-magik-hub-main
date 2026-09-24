@@ -202,11 +202,11 @@ export default function PayoutsPage() {
                 data-active={selectedWalletScope === "__central__"}
                 onClick={() => handleWalletScopeChange("__central__")}
                 className={cn(
-                  "flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium",
                   selectedWalletScope === "__central__" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-background/60",
                 )}
               >
-                Head Office
+                General
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
@@ -231,7 +231,7 @@ export default function PayoutsPage() {
                   data-active={selectedWalletScope === location.id}
                   onClick={() => handleWalletScopeChange(location.id)}
                   className={cn(
-                    "shrink-0 rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                    "shrink-0 rounded-full px-4 py-2 text-sm font-medium",
                     selectedWalletScope === location.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-background/60",
                   )}
                 >
@@ -269,7 +269,7 @@ export default function PayoutsPage() {
                         {sharedFormatCurrency(Number(wallet?.balance ?? 0), walletCurrency)}
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {selectedWalletLocationId ? `${locations.find((location) => location.id === selectedWalletLocationId)?.name ?? "Branch"} wallet` : "Head Office wallet"}
+                        {selectedWalletLocationId ? `${locations.find((location) => location.id === selectedWalletLocationId)?.name ?? "Branch"} wallet` : "General wallet"}
                       </p>
                     </>
                   )}

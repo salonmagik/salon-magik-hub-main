@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { useSalonWalletAvailability } from "@/hooks/useSalonWalletAvailability";
@@ -49,7 +50,18 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
   const { createWithdrawal } = useWithdrawals(tenantId, locationId);
   const currency = currencyOverride ?? wallet?.currency ?? availability?.currency ?? currentTenant?.currency ?? "NGN";
 
-  const scopedDestinations = destinations.filter((item) => !item.location_id || item.location_id === locationId);
+  // No implicit fallback: a branch only sees destinations explicitly pinned
+  // to it; the General wallet only sees the tenant's default destination(s).
+  const pinnedDestinations = destinations.filter((item) =>
+    locationId ? item.location_ids.includes(locationId) : !!item.is_default
+  );
+  // A branch with nothing pinned yet gets nudged to pick any existing,
+  // currency-matching account instead of just being told to go add one —
+  // picking here pins it to this branch going forward (see handleWithdraw).
+  const needsBranchAssignment = !!locationId && pinnedDestinations.length === 0;
+  const scopedDestinations = needsBranchAssignment
+    ? destinations.filter((item) => item.currency === currency)
+    : pinnedDestinations;
 
   const [selectedDestinationId, setSelectedDestinationId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -147,6 +159,23 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
     setError("");
 
     try {
+      // First withdrawal from a branch with no pinned account yet — the
+      // one just picked becomes that branch's explicit account going
+      // forward, matching what the backend now requires (no more implicit
+      // fallback to a "default" destination for an unassigned branch).
+      if (needsBranchAssignment && locationId) {
+        const { error: pinError } = await supabase
+          .from("salon_payout_destinations")
+          .update({ location_ids: [...(destination?.location_ids ?? []), locationId] })
+          .eq("id", selectedDestinationId);
+        if (pinError) {
+          setError("Couldn't assign this account to the branch. Please try again.");
+          setIsSubmitting(false);
+          return;
+        }
+        await refetchDestinations();
+      }
+
       const result = await createWithdrawal({
         tenantId,
         payoutDestinationId: selectedDestinationId,
@@ -251,6 +280,11 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
             {/* Payout Destination Selection */}
             <div className="space-y-2">
               <Label htmlFor="destination">Payout Destination</Label>
+              {needsBranchAssignment && scopedDestinations.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  This branch doesn't have a payout account yet — pick one below and it'll be used for this branch going forward.
+                </p>
+              )}
               {scopedDestinations.length === 0 ? (
                 <Alert>
                   <AlertCircle className="h-4 w-4" />

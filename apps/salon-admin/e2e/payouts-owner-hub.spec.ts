@@ -6,7 +6,7 @@ import { installSupabaseMocks, seedSession, makeTenant, OWNER_USER, DEFAULT_MOCK
 // PayoutsPage renders its "Payouts isn't available here" access-denied
 // state instead, which is what every other test in this suite has been
 // stuck seeing since resolve_user_contexts had no dedicated mock.
-test("Payouts renders in Business Hub context with the Head Office branch switcher and merged accounts list", async ({ page }) => {
+test("Payouts renders in Business Hub context with the General branch switcher and merged accounts list", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (err) => errors.push(err.message));
 
@@ -25,8 +25,8 @@ test("Payouts renders in Business Hub context with the Head Office branch switch
   await expect(page.getByRole("heading", { name: "Payouts isn't available here" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Payouts" })).toBeVisible();
 
-  // The branch switcher: Head Office plus every DEFAULT_MOCK_LOCATIONS branch.
-  await expect(page.getByRole("button", { name: /Head Office/ })).toBeVisible();
+  // The branch switcher: General plus every DEFAULT_MOCK_LOCATIONS branch.
+  await expect(page.getByRole("button", { name: /General/ })).toBeVisible();
   for (const location of DEFAULT_MOCK_LOCATIONS) {
     await expect(page.getByRole("button", { name: location.name, exact: true })).toBeVisible();
   }
