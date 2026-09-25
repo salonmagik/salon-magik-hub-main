@@ -41,18 +41,11 @@ import {
   CalendarPlus,
   ClockAlert,
   CreditCard,
+  MessageSquare,
   PauseCircle,
   Info,
-  Megaphone,
-  Target,
-  Gift,
-  Send,
-  Mail,
-  Phone,
-  type LucideIcon,
 } from "lucide-react";
 import { useSalonsOverview } from "@/hooks/useSalonsOverview";
-import { useMarketingOverview } from "@/hooks/useMarketingOverview";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
@@ -66,7 +59,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
@@ -105,7 +97,6 @@ export default function SalonsOverviewPage() {
   );
   const [insightDialogType, setInsightDialogType] = useState<"best" | "attention" | null>(null);
   const [insightLocationId, setInsightLocationId] = useState<string | null>(null);
-  const [branchDetailLocationId, setBranchDetailLocationId] = useState<string | null>(null);
   const [quickActionPopover, setQuickActionPopover] = useState<string | null>(null);
   const [pausedBranchesPopoverOpen, setPausedBranchesPopoverOpen] = useState(false);
   const [revivingLocationId, setRevivingLocationId] = useState<string | null>(null);
@@ -136,7 +127,6 @@ export default function SalonsOverviewPage() {
 
   const { hasPermission, isLoading: permissionsLoading } = usePermissions();
   const { locations, isLoading, error, refetch } = useSalonsOverview(dateRange);
-  const { data: marketingOverview } = useMarketingOverview(dateRange);
   const activeLocationLabel =
     availableContexts.find((context) => context.type === "location" && context.locationId === activeLocationId)
       ?.label || "Selected branch";
@@ -264,82 +254,6 @@ export default function SalonsOverviewPage() {
     }
   };
 
-  const renderNeedsAttentionRow = (opts: {
-    actionKey: string;
-    label: string;
-    caption: string;
-    icon: LucideIcon;
-    destination: string;
-    count: number;
-    tooltip?: string;
-  }) => {
-    const { actionKey, label, caption, icon: Icon, destination, count, tooltip } = opts;
-    const filteredBranches = getBranchesForAction(actionKey);
-    return (
-      <Popover
-        key={actionKey}
-        open={quickActionPopover === actionKey}
-        onOpenChange={(open) => setQuickActionPopover(open ? actionKey : null)}
-      >
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            className="flex w-full items-center justify-between gap-3 p-3.5 text-left transition-colors hover:bg-accent/50"
-            onClick={() => triggerQuickAction(actionKey, destination)}
-          >
-            <span className="flex min-w-0 items-center gap-3">
-              <span className="shrink-0 rounded-lg bg-destructive/10 p-2">
-                <Icon className="h-4 w-4 text-destructive" />
-              </span>
-              <span className="min-w-0">
-                <span className="flex items-center gap-1 text-sm font-medium">
-                  {label}
-                  {tooltip && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Info className="h-3 w-3 cursor-default text-muted-foreground" />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-56 text-xs">
-                        {tooltip}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                </span>
-                <span className="block text-xs text-muted-foreground">{caption}</span>
-              </span>
-            </span>
-            <span className="flex shrink-0 items-center gap-2">
-              <span className="rounded-full bg-destructive px-2 py-0.5 text-xs font-semibold tabular-nums text-destructive-foreground">
-                {count}
-              </span>
-              {filteredBranches.length > 1 ? (
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-              )}
-            </span>
-          </button>
-        </PopoverTrigger>
-        {filteredBranches.length > 1 && (
-          <PopoverContent className="w-52 p-1" align="start">
-            <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Select branch</p>
-            {filteredBranches.map((ctx) => (
-              <button
-                key={ctx.locationId}
-                type="button"
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
-                onClick={() => handleBranchAction(ctx.locationId!, destination)}
-              >
-                <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                {ctx.label}
-              </button>
-            ))}
-          </PopoverContent>
-        )}
-      </Popover>
-    );
-  };
-
   const canViewRevenueAnalytics =
     currentRole === "owner" || (!permissionsLoading && hasPermission("reports"));
   const canShowPerformanceInsights = (aggregateStats?.totalBookings || 0) >= 6;
@@ -418,9 +332,12 @@ export default function SalonsOverviewPage() {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
               Quick actions
             </p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 lg:w-1/4" data-tour-id="tour-hub-quick-actions">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" data-tour-id="tour-hub-quick-actions">
             {[
                 { key: "new-booking", label: "New Booking", caption: "Start a booking now", icon: CalendarPlus, destination: "/salon/appointments", count: null as number | null, description: null as string | null },
+                { key: "pending-approvals", label: "Pending Approvals", caption: "Awaiting your response", icon: ClockAlert, destination: "/salon/appointments?approvalAction=review", count: aggregateStats?.totalPendingApprovals ?? null, description: "Appointments awaiting your approval or reschedule response — this count always reflects the current backlog, not the date range selected above." },
+                { key: "unpaid-balances", label: "Unpaid Balances", caption: "Not fully paid or refunded", icon: CreditCard, destination: "/salon/appointments?tab=unscheduled&payment=unpaid", count: aggregateStats?.totalUnpaidBalances ?? null, description: "Appointments not yet fully paid or refunded — this count always reflects the current backlog, not the date range selected above." },
+                { key: "messages", label: "Messages", caption: "View conversations", icon: MessageSquare, destination: "/salon/messaging", count: null as number | null, description: null as string | null },
               ].map(({ key, label, caption, icon: Icon, destination, count, description }) => {
               const urgent = count !== null && count > 0;
               const filteredBranches = getBranchesForAction(key);
@@ -529,96 +446,6 @@ export default function SalonsOverviewPage() {
           </Card>
         ) : (
           <>
-            {/* Needs attention */}
-            {activeContextType === "owner_hub" &&
-              aggregateStats &&
-              (aggregateStats.totalPendingApprovals > 0 ||
-                aggregateStats.totalUnpaidBalances > 0 ||
-                (currentRole === "owner" && pausedBranchCount > 0)) && (
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">
-                    Needs attention
-                  </p>
-                  <div className="divide-y rounded-xl border bg-card">
-                    {aggregateStats.totalPendingApprovals > 0 &&
-                      renderNeedsAttentionRow({
-                        actionKey: "pending-approvals",
-                        label: "Pending approvals",
-                        caption: "Awaiting your response",
-                        icon: ClockAlert,
-                        destination: "/salon/appointments?approvalAction=review",
-                        count: aggregateStats.totalPendingApprovals,
-                        tooltip:
-                          "Appointments awaiting your approval or reschedule response — this count always reflects the current backlog, not the date range selected above.",
-                      })}
-                    {aggregateStats.totalUnpaidBalances > 0 &&
-                      renderNeedsAttentionRow({
-                        actionKey: "unpaid-balances",
-                        label: "Unpaid balances",
-                        caption: "Not fully paid or refunded",
-                        icon: CreditCard,
-                        destination: "/salon/appointments?tab=unscheduled&payment=unpaid",
-                        count: aggregateStats.totalUnpaidBalances,
-                        tooltip:
-                          "Appointments not yet fully paid or refunded — this count always reflects the current backlog, not the date range selected above.",
-                      })}
-                    {currentRole === "owner" && pausedBranchCount > 0 && (
-                      <Popover open={pausedBranchesPopoverOpen} onOpenChange={setPausedBranchesPopoverOpen}>
-                        <PopoverTrigger asChild>
-                          <button
-                            type="button"
-                            className="flex w-full items-center justify-between gap-3 p-3.5 text-left transition-colors hover:bg-accent/50"
-                          >
-                            <span className="flex min-w-0 items-center gap-3">
-                              <span className="shrink-0 rounded-lg bg-warning/15 p-2">
-                                <PauseCircle className="h-4 w-4 text-warning-foreground" />
-                              </span>
-                              <span className="min-w-0">
-                                <span className="text-sm font-medium">Paused branches</span>
-                                <span className="block text-xs text-muted-foreground">Stopped taking new bookings</span>
-                              </span>
-                            </span>
-                            <span className="flex shrink-0 items-center gap-2">
-                              <span className="rounded-full bg-warning/20 px-2 py-0.5 text-xs font-semibold tabular-nums text-warning-foreground">
-                                {pausedBranchCount}
-                              </span>
-                              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                            </span>
-                          </button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-64 p-1" align="start">
-                          <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Paused branches</p>
-                          {pausedBranches.map((ctx) => (
-                            <div
-                              key={ctx.locationId}
-                              className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
-                            >
-                              <span className="flex min-w-0 items-center gap-2">
-                                <MapPin className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                <span className="truncate">{ctx.label}</span>
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 shrink-0 text-xs"
-                                disabled={revivingLocationId === ctx.locationId}
-                                onClick={() => ctx.locationId && handleRevive(ctx.locationId)}
-                              >
-                                {revivingLocationId === ctx.locationId ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  "Revive"
-                                )}
-                              </Button>
-                            </div>
-                          ))}
-                        </PopoverContent>
-                      </Popover>
-                    )}
-                  </div>
-                </div>
-              )}
-
             {/* At a glance */}
             {aggregateStats && (
               <div>
@@ -637,6 +464,56 @@ export default function SalonsOverviewPage() {
                     </div>
                   </CardContent>
                 </Card>
+                {currentRole === "owner" && pausedBranchCount > 0 && (
+                  <Popover open={pausedBranchesPopoverOpen} onOpenChange={setPausedBranchesPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="text-left w-full">
+                        <Card className="relative border-warning/30 bg-warning-bg/40 transition-all hover:-translate-y-0.5 hover:border-warning/60 hover:shadow-md">
+                          <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning-foreground">
+                            Tap to review
+                            <ChevronRight className="h-2.5 w-2.5" />
+                          </span>
+                          <CardContent className="p-4 flex items-start gap-3">
+                            <div className="rounded-lg bg-warning/15 p-2.5 shrink-0">
+                              <PauseCircle className="h-4 w-4 text-warning-foreground" />
+                            </div>
+                            <div>
+                              <p className="text-sm text-warning-foreground">Paused Branches</p>
+                              <div className="text-2xl font-bold text-warning-foreground mt-0.5">{pausedBranchCount}</div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-64 p-1" align="start">
+                      <p className="px-2 py-1.5 text-xs text-muted-foreground font-medium">Paused branches</p>
+                      {pausedBranches.map((ctx) => (
+                        <div
+                          key={ctx.locationId}
+                          className="flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent"
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                            <span className="truncate">{ctx.label}</span>
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 shrink-0 text-xs"
+                            disabled={revivingLocationId === ctx.locationId}
+                            onClick={() => ctx.locationId && handleRevive(ctx.locationId)}
+                          >
+                            {revivingLocationId === ctx.locationId ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              "Revive"
+                            )}
+                          </Button>
+                        </div>
+                      ))}
+                    </PopoverContent>
+                  </Popover>
+                )}
                 {canViewRevenueAnalytics && (
                   <Card>
                     <CardContent className="p-4 flex items-start gap-3">
@@ -888,11 +765,7 @@ export default function SalonsOverviewPage() {
                     </TableHeader>
                     <TableBody>
                       {filteredLocations.map((location) => (
-                        <TableRow
-                          key={location.id}
-                          className="cursor-pointer"
-                          onClick={() => setBranchDetailLocationId(location.id)}
-                        >
+                        <TableRow key={location.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <MapPin className="w-4 h-4 text-muted-foreground" />
@@ -928,8 +801,7 @@ export default function SalonsOverviewPage() {
                               size="icon"
                               className="h-8 w-8"
                               title={`View ${location.name} reports`}
-                              onClick={async (event) => {
-                                event.stopPropagation();
+                              onClick={async () => {
                                 await setActiveContext("location", location.id);
                                 navigate("/salon/reports");
                               }}
@@ -944,103 +816,6 @@ export default function SalonsOverviewPage() {
                 )}
               </CardContent>
             </Card>
-
-            {/* Marketing overview */}
-            {activeContextType === "owner_hub" && (
-              <div>
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Marketing overview
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="gap-1.5 rounded-full"
-                    onClick={() => navigate("/salon/messaging")}
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                    Send a message
-                  </Button>
-                </div>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  {[
-                    {
-                      key: "individual",
-                      label: "Individual messages",
-                      icon: Send,
-                      email: marketingOverview?.individualEmail ?? 0,
-                      sms: marketingOverview?.individualSms ?? 0,
-                      tooltip: "One-off messages sent to a single customer.",
-                    },
-                    {
-                      key: "targeted",
-                      label: "Targeted marketing",
-                      icon: Target,
-                      email: marketingOverview?.targetedEmail ?? 0,
-                      sms: marketingOverview?.targetedSms ?? 0,
-                      tooltip: "Broadcasts sent to a specific customer segment, like VIP customers.",
-                    },
-                    {
-                      key: "bulk",
-                      label: "Bulk messages",
-                      icon: Megaphone,
-                      email: marketingOverview?.bulkEmail ?? 0,
-                      sms: marketingOverview?.bulkSms ?? 0,
-                      tooltip: "Broadcasts sent to all customers at once.",
-                    },
-                  ].map(({ key, label, icon: Icon, email, sms, tooltip }) => (
-                    <Card key={key}>
-                      <CardContent className="p-4">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="rounded-lg bg-primary/10 p-2.5 shrink-0">
-                            <Icon className="h-4 w-4 text-primary" />
-                          </div>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Info className="h-3 w-3 cursor-default text-muted-foreground" />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-56 text-xs">
-                              {tooltip}
-                            </TooltipContent>
-                          </Tooltip>
-                        </div>
-                        <p className="mt-2 text-sm text-muted-foreground">{label}</p>
-                        <div className="mt-1 flex items-center gap-4">
-                          <span className="flex items-center gap-1 text-lg font-semibold tabular-nums">
-                            <Mail className="h-3.5 w-3.5 text-muted-foreground" />
-                            {email}
-                          </span>
-                          <span className="flex items-center gap-1 text-lg font-semibold tabular-nums">
-                            <Phone className="h-3.5 w-3.5 text-muted-foreground" />
-                            {sms}
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                  <Card className="border-dashed">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="rounded-lg bg-muted p-2.5 shrink-0">
-                          <Gift className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="h-3 w-3 cursor-default text-muted-foreground" />
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-56 text-xs">
-                            Automatic birthday messages — coming soon.
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <p className="mt-2 text-sm text-muted-foreground">Birthday messages</p>
-                      <Badge variant="outline" className="mt-2">Coming soon</Badge>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-            )}
           </>
         )}
 
@@ -1111,63 +886,6 @@ export default function SalonsOverviewPage() {
                 <p className="text-sm text-muted-foreground">No data available.</p>
               )}
             </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Branch Detail Dialog */}
-        <Dialog
-          open={Boolean(branchDetailLocationId)}
-          onOpenChange={(open) => !open && setBranchDetailLocationId(null)}
-        >
-          <DialogContent className="sm:max-w-md">
-            {(() => {
-              const branch = filteredLocations.find((loc) => loc.id === branchDetailLocationId);
-              if (!branch) return null;
-              return (
-                <>
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-muted-foreground" />
-                      {branch.name}
-                    </DialogTitle>
-                    <DialogDescription>{branch.city}</DialogDescription>
-                  </DialogHeader>
-                  <div className={cn(DIALOG_BODY_PADDING, "grid grid-cols-2 gap-3")}>
-                    {canViewRevenueAnalytics && (
-                      <div className="rounded-lg bg-muted/50 p-3">
-                        <p className="text-xs text-muted-foreground">Inflow</p>
-                        <p className="mt-0.5 font-serif text-lg">{formatCurrency(branch.revenue, branch.currency)}</p>
-                      </div>
-                    )}
-                    <div className="rounded-lg bg-muted/50 p-3">
-                      <p className="text-xs text-muted-foreground">Bookings</p>
-                      <p className="mt-0.5 font-serif text-lg">{branch.bookingCount}</p>
-                    </div>
-                    <div className="rounded-lg bg-muted/50 p-3">
-                      <p className="text-xs text-muted-foreground">Staff Online</p>
-                      <p className="mt-0.5 font-serif text-lg">{branch.staffOnline}</p>
-                    </div>
-                    <div className="rounded-lg bg-muted/50 p-3">
-                      <p className="text-xs text-muted-foreground">Outstanding</p>
-                      <p className="mt-0.5 font-serif text-lg">{branch.outstandingAppointments}</p>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      className="gap-2"
-                      onClick={async () => {
-                        setBranchDetailLocationId(null);
-                        await setActiveContext("location", branch.id);
-                        navigate("/salon/reports");
-                      }}
-                    >
-                      View full reports
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </DialogFooter>
-                </>
-              );
-            })()}
           </DialogContent>
         </Dialog>
 

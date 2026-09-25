@@ -24,11 +24,6 @@ interface SendBulkMessageRequest {
     senderDisplayName?: string;
     locationId?: string | null;
   };
-  // Which audience this send targeted — "single" for a 1:1 send, a preset
-  // name like "all_customers" or "vip_customers" for a broadcast. Stored on
-  // each message_logs row so the Overview page's Marketing summary can
-  // bucket sends into individual/targeted/bulk without re-deriving intent.
-  audienceScope?: string;
 }
 
 type BulkCustomerRow = {
@@ -121,7 +116,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const requestBody: SendBulkMessageRequest = await req.json();
-    const { customerIds, channel, message, subject, templateId, templateVariables, senderContext, audienceScope } = requestBody;
+    const { customerIds, channel, message, subject, templateId, templateVariables, senderContext } = requestBody;
     const normalizedCustomerIds = [...new Set((customerIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
 
     // Validate required fields
@@ -397,8 +392,7 @@ const handler = async (req: Request): Promise<Response> => {
         message,
         tenant,
         creditsPerMessage * smsSegments,
-        result,
-        audienceScope
+        result
       );
 
       const { data: creditsAfterBulk } = await supabase
@@ -422,8 +416,7 @@ const handler = async (req: Request): Promise<Response> => {
         tenant,
         senderDisplayName,
         creditsPerMessage,
-        result,
-        audienceScope
+        result
       );
     }
 
@@ -472,8 +465,7 @@ async function processBulkSMS(
   message: string,
   tenant: any,
   creditsPerMessage: number,
-  result: BulkMessageResult,
-  audienceScope?: string
+  result: BulkMessageResult
 ) {
   const tenantSenderId = tenant.sms_sender_name || null;
   const BATCH_SIZE = 25;
@@ -533,7 +525,6 @@ async function processBulkSMS(
           initiated_by: "salon",
           credits_used: creditsPerMessage,
           error_message: null,
-          broadcast_scope: audienceScope ?? null,
         });
 
         result.sent++;
@@ -566,7 +557,6 @@ async function processBulkSMS(
           initiated_by: "salon",
           credits_used: 0,
           error_message: errMsg,
-          broadcast_scope: audienceScope ?? null,
         });
       }
     });
@@ -587,8 +577,7 @@ async function processBulkEmail(
   tenant: any,
   senderDisplayName: string,
   creditsPerMessage: number,
-  result: BulkMessageResult,
-  audienceScope?: string
+  result: BulkMessageResult
 ) {
   const BATCH_SIZE = 10;
   const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com";
@@ -682,7 +671,6 @@ async function processBulkEmail(
           initiated_by: "salon",
           credits_used: creditsPerMessage,
           error_message: null,
-          broadcast_scope: audienceScope ?? null,
         });
 
         // Success - increment after accounting succeeds
@@ -718,7 +706,6 @@ async function processBulkEmail(
           initiated_by: "salon",
           credits_used: 0,
           error_message: errMsg,
-          broadcast_scope: audienceScope ?? null,
         });
       }
     });

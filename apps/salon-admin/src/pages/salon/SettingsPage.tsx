@@ -96,7 +96,7 @@ import { supabase } from "@/lib/supabase";
 import { buildPublicBookingUrl } from "@/lib/bookingUrl";
 import { PLAN_TIER_RANK, type PlanId } from "@/lib/pricing";
 import { toast } from "@ui/ui/use-toast";
-import { format, differenceInCalendarDays } from "date-fns";
+import { format } from "date-fns";
 import { SalonWalletCard } from "@/components/billing/SalonWalletCard";
 import { WalletLedger } from "@/components/billing/WalletLedger";
 import { WithdrawalHistory } from "@/components/billing/WithdrawalHistory";
@@ -107,7 +107,6 @@ import { useSalonWallet } from "@/hooks/useSalonWallet";
 import { usePayoutDestinations } from "@/hooks/usePayoutDestinations";
 import {
 	useClaimTenantSalesPromo,
-	useRemoveTenantSalesPromo,
 	useTenantSalesPromo,
 } from "@/hooks/useSalesPromo";
 import { usePlans } from "@/hooks/usePlans";
@@ -265,13 +264,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const [isApplyingPlanConfig, setIsApplyingPlanConfig] = useState(false);
 	const [isUpdatingPaymentMethod, setIsUpdatingPaymentMethod] = useState(false);
 	const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
-	const [confirmDialogMode, setConfirmDialogMode] = useState<
-		"base_upgrade" | "plan_config"
-	>("base_upgrade");
-	const [promoInputOpen, setPromoInputOpen] = useState(false);
-	const [promoInlineError, setPromoInlineError] = useState<string | null>(
-		null,
-	);
 	const [cancelSubscriptionOpen, setCancelSubscriptionOpen] = useState(false);
 	const [isResumingSubscription, setIsResumingSubscription] = useState(false);
 	const subscriptionLifecycle = useSubscriptionLifecycle();
@@ -282,7 +274,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const [branchPauseSelected, setBranchPauseSelected] = useState<Set<string>>(new Set());
 	const [isPausingBranches, setIsPausingBranches] = useState(false);
 	const claimTenantPromo = useClaimTenantSalesPromo();
-	const removeTenantPromo = useRemoveTenantSalesPromo();
 	const { data: subscriptionPromo } = useTenantSalesPromo("subscription");
 	const { data: activeTenantPromo } = useTenantSalesPromo();
 	const { data: plans } = usePlans();
@@ -3408,9 +3399,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				)
 			: 0;
 		const isTrialing = Boolean(activeTrialOverride) || currentTenant?.subscription_status === "trialing";
-		const themeExpiresInDays = entitlements?.has_ecommerce_theme && entitlements?.ecommerce_theme_expires_at
-			? differenceInCalendarDays(new Date(entitlements.ecommerce_theme_expires_at), new Date())
-			: null;
 
 		const branchesValue = Number(branchesInput);
 		const seatsValue = Number(seatsInput);
@@ -3698,47 +3686,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									: "All included in your plan"}
 							</p>
 						</div>
-						<div
-							className={cn(
-								"rounded-xl p-4",
-								themeExpiresInDays !== null && themeExpiresInDays <= 3
-									? "border border-amber-300 bg-amber-50"
-									: "bg-muted/50",
-							)}
-						>
+						<div className="rounded-xl bg-muted/50 p-4">
 							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Storefront Theme</p>
 							<p className="mt-1 font-serif text-lg">
 								{entitlements?.has_ecommerce_theme
 									? "E-commerce active"
 									: "Default theme"}
 							</p>
-							<p
-								className={cn(
-									"mt-1 text-xs",
-									themeExpiresInDays !== null && themeExpiresInDays <= 3
-										? "text-amber-700"
-										: "text-muted-foreground",
-								)}
-							>
+							<p className="mt-1 text-xs text-muted-foreground">
 								{entitlements?.ecommerce_theme_expires_at
-									? themeExpiresInDays !== null && themeExpiresInDays <= 3
-										? `Renews in ${themeExpiresInDays <= 0 ? "less than a day" : `${themeExpiresInDays} day${themeExpiresInDays === 1 ? "" : "s"}`}`
-										: `Renews until ${format(new Date(entitlements.ecommerce_theme_expires_at), "MMM d, yyyy")}`
+									? `Renews until ${format(new Date(entitlements.ecommerce_theme_expires_at), "MMM d, yyyy")}`
 									: "No paid storefront theme active"}
 							</p>
-							{themeExpiresInDays !== null && themeExpiresInDays <= 3 && (
-								<Button
-									type="button"
-									size="sm"
-									variant="outline"
-									className="mt-2 h-7 rounded-full border-amber-400 bg-white text-xs text-amber-700 hover:bg-amber-100"
-									onClick={purchaseThemeAddon}
-									disabled={isPurchasingTheme}
-								>
-									{isPurchasingTheme && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
-									Renew now{ecommerceThemePricing ? ` — ${formatCurrency(ecommerceThemePricing, currentTenant?.currency || "NGN")}` : ""}
-								</Button>
-							)}
 						</div>
 					</div>
 
@@ -3948,16 +3907,54 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 												/ month.
 											</p>
 										) : (
-											<p>
-												New monthly total:{" "}
-												<span className="font-medium">
-													{formatCurrency(
-														planConfigQuote.total_monthly_price || 0,
-														planConfigQuote.currency,
+											<>
+												<p>
+													This puts you on the{" "}
+													<span className="font-medium capitalize">
+														{planConfigQuote.required_plan_slug}
+													</span>{" "}
+													plan.
+												</p>
+												<p>
+													New monthly total:{" "}
+													<span className="font-medium">
+														{formatCurrency(
+															planConfigQuote.total_monthly_price || 0,
+															planConfigQuote.currency,
+														)}
+													</span>
+												</p>
+												<p
+													className={
+														isPlanConfigIncrease
+															? "text-amber-600"
+															: "text-success"
+													}
+												>
+													{isPlanConfigIncrease
+														? `+${formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month — payment required`
+														: `${formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month — applies immediately, no charge`}
+												</p>
+												{isPlanConfigIncrease &&
+													(planConfigQuote.discount_amount || 0) > 0 && (
+														<p className="text-success">
+															Promo discount: −
+															{formatCurrency(
+																planConfigQuote.discount_amount || 0,
+																planConfigQuote.currency,
+															)}{" "}
+															· you'll be charged{" "}
+															{formatCurrency(
+																Math.max(
+																	(planConfigQuote.price_delta || 0) -
+																		(planConfigQuote.discount_amount || 0),
+																	0,
+																),
+																planConfigQuote.currency,
+															)}
+														</p>
 													)}
-												</span>{" "}
-												— review the full breakdown before confirming.
-											</p>
+											</>
 										)}
 									</div>
 								)}
@@ -3989,10 +3986,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										)}
 									<Button
 										className="w-full sm:w-auto"
-										onClick={() => {
-											setConfirmDialogMode("plan_config");
-											setUpgradeConfirmOpen(true);
-										}}
+										onClick={applyPlanConfiguration}
 										disabled={
 											!planConfigQuote ||
 											planConfigQuote.requires_custom_locations ||
@@ -4086,50 +4080,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										<> · valid through {format(new Date(subscriptionPromo.campaign_ends_at), "MMM d, yyyy")}</>
 									)}
 								</p>
-								<Button
-									type="button"
-									variant="ghost"
-									size="sm"
-									className="mt-2 h-7 px-2 text-xs text-success hover:text-success"
-									disabled={removeTenantPromo.isPending}
-									onClick={async () => {
-										try {
-											await removeTenantPromo.mutateAsync({ surface: "subscription" });
-											toast({
-												title: "Promo removed",
-												description: "You can reapply this code again later if you change your mind.",
-											});
-										} catch (error) {
-											toast({
-												title: "Couldn't remove promo",
-												description:
-													error instanceof Error
-														? error.message
-														: "Please try again.",
-												variant: "destructive",
-											});
-										}
-									}}
-								>
-									{removeTenantPromo.isPending ? (
-										<Loader2 className="w-3.5 h-3.5 animate-spin" />
-									) : (
-										"Remove"
-									)}
-								</Button>
 							</div>
-						) : promoInputOpen ? (
+						) : (
 							<div className="space-y-2">
 								<Label>Apply Sales Promo Code</Label>
 								<div className="flex gap-2">
 									<Input
 										value={subscriptionPromoCode}
-										onChange={(event) => {
+										onChange={(event) =>
 											setSubscriptionPromoCode(
 												event.target.value.toUpperCase(),
-											);
-											setPromoInlineError(null);
-										}}
+											)
+										}
 										placeholder="Enter promo code"
 									/>
 									<Button
@@ -4141,19 +4103,20 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 													surface: "subscription",
 												});
 												setSubscriptionPromoCode("");
-												setPromoInlineError(null);
-												setPromoInputOpen(false);
 												toast({
 													title: "Promo claimed",
 													description:
 														"The promo is now attached to this tenant for subscription billing.",
 												});
 											} catch (error) {
-												setPromoInlineError(
-													error instanceof Error
-														? error.message
-														: "Failed to claim promo code.",
-												);
+												toast({
+													title: "Promo unavailable",
+													description:
+														error instanceof Error
+															? error.message
+															: "Failed to claim promo code.",
+													variant: "destructive",
+												});
 											}
 										}}
 										disabled={
@@ -4168,33 +4131,23 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										)}
 									</Button>
 								</div>
-								{promoInlineError && (
-									<p className="text-xs text-destructive">{promoInlineError}</p>
-								)}
 							</div>
-						) : (
-							<Button
-								type="button"
-								variant="link"
-								className="h-auto p-0 text-sm"
-								onClick={() => setPromoInputOpen(true)}
-							>
-								Have a promo code?
-							</Button>
 						)}
 						{isTrialing && (
 							<>
 								<Button
 									className="w-full gap-2"
 									onClick={() => {
-										// Branches/seats staged above? Confirm that
-										// configuration through the same modal the
-										// non-trialing "Update" button uses — otherwise
+										// Branches/seats staged above? Activate on that
+										// configuration directly — applyPlanConfiguration already
+										// redirects to Paystack for first-time payment when needed,
+										// same as the plain confirm-dialog path below. Otherwise
 										// fall back to the base-plan confirm dialog.
-										setConfirmDialogMode(
-											!isPlanConfigUnchanged ? "plan_config" : "base_upgrade",
-										);
-										setUpgradeConfirmOpen(true);
+										if (!isPlanConfigUnchanged) {
+											void applyPlanConfiguration();
+										} else {
+											setUpgradeConfirmOpen(true);
+										}
 									}}
 									disabled={isStartingSubscriptionCheckout || isApplyingPlanConfig || isQuotingPlanConfig}
 								>
@@ -4217,78 +4170,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					<Dialog open={upgradeConfirmOpen} onOpenChange={setUpgradeConfirmOpen}>
 						<DialogContent className="sm:max-w-md">
 							<DialogHeader>
-								<DialogTitle>
-									{confirmDialogMode === "plan_config"
-										? isPlanConfigIncrease
-											? "Confirm your upgrade"
-											: "Confirm your plan change"
-										: "Confirm your upgrade"}
-								</DialogTitle>
+								<DialogTitle>Confirm your upgrade</DialogTitle>
 								<DialogDescription>
-									{confirmDialogMode === "plan_config" && !isPlanConfigIncrease
-										? "This updates your plan immediately — no charge for this change."
-										: "Here's what you'll be billed. You'll confirm this once more with Paystack before anything is charged."}
+									Here's what you'll be billed. You'll confirm this once more with Paystack before anything is charged.
 								</DialogDescription>
 							</DialogHeader>
 							<div className={DIALOG_BODY_PADDING}>
-							{confirmDialogMode === "plan_config" && planConfigQuote ? (
-								<div className="space-y-3">
-									<div className="space-y-1 rounded-lg bg-muted/50 p-3 text-sm">
-										<div className="flex items-center justify-between text-muted-foreground">
-											<span>Branches</span>
-											<span className="font-medium text-foreground">{branchesValue}</span>
-										</div>
-										<div className="flex items-center justify-between text-muted-foreground">
-											<span>Team seats</span>
-											<span className="font-medium text-foreground">{seatsValue}</span>
-										</div>
-										{staffOperationsAddon.isEnabled && (
-											<div className="flex items-center justify-between text-muted-foreground">
-												<span>Staff Operations add-on</span>
-												<span className="font-medium text-foreground">
-													{staffOperationsAddon.priceLabel ? `${staffOperationsAddon.priceLabel}/month` : "Included"}
-												</span>
-											</div>
-										)}
-									</div>
-									<div className="space-y-1 rounded-lg bg-muted/50 p-3 text-sm">
-										{isPlanConfigIncrease ? (
-											<>
-												<div className="flex items-center justify-between text-muted-foreground">
-													<span>Subtotal</span>
-													<span>{formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)}</span>
-												</div>
-												{(planConfigQuote.discount_amount || 0) > 0 && (
-													<div className="flex items-center justify-between text-success">
-														<span>Discount{subscriptionPromo?.code ? ` (${subscriptionPromo.code})` : ""}</span>
-														<span>−{formatCurrency(planConfigQuote.discount_amount || 0, planConfigQuote.currency)}</span>
-													</div>
-												)}
-												<div className="flex items-center justify-between border-t pt-2 mt-2 font-medium text-foreground">
-													<span>Total due now</span>
-													<span>
-														{formatCurrency(
-															Math.max(
-																(planConfigQuote.price_delta || 0) - (planConfigQuote.discount_amount || 0),
-																0,
-															),
-															planConfigQuote.currency,
-														)}
-													</span>
-												</div>
-												<p className="pt-1 text-xs text-muted-foreground">
-													New monthly total: {formatCurrency(planConfigQuote.total_monthly_price || 0, planConfigQuote.currency)}
-												</p>
-											</>
-										) : (
-											<div className="flex items-center justify-between font-medium text-foreground">
-												<span>New monthly total</span>
-												<span>{formatCurrency(planConfigQuote.total_monthly_price || 0, planConfigQuote.currency)}</span>
-											</div>
-										)}
-									</div>
-								</div>
-							) : recurringTotal ? (
+							{recurringTotal ? (
 								<div className="space-y-1 rounded-lg bg-muted/50 p-3 text-sm">
 									<div className="flex items-center justify-between text-muted-foreground">
 										<span className="capitalize">{currentTenant?.plan || "Solo"} base plan</span>
@@ -4334,7 +4222,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									type="button"
 									variant="outline"
 									onClick={() => setUpgradeConfirmOpen(false)}
-									disabled={isStartingSubscriptionCheckout || isApplyingPlanConfig}
+									disabled={isStartingSubscriptionCheckout}
 								>
 									Cancel
 								</Button>
@@ -4343,22 +4231,12 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									className="gap-2"
 									onClick={() => {
 										setUpgradeConfirmOpen(false);
-										if (confirmDialogMode === "plan_config") {
-											void applyPlanConfiguration();
-										} else {
-											void startSubscriptionCheckout();
-										}
+										void startSubscriptionCheckout();
 									}}
-									disabled={isStartingSubscriptionCheckout || isApplyingPlanConfig}
+									disabled={isStartingSubscriptionCheckout}
 								>
-									{(isStartingSubscriptionCheckout || isApplyingPlanConfig) && (
-										<Loader2 className="h-4 w-4 animate-spin" />
-									)}
-									{confirmDialogMode === "plan_config"
-										? isPlanConfigIncrease
-											? "Confirm & Continue to Payment"
-											: "Confirm Update"
-										: "Confirm & Continue to Payment"}
+									{isStartingSubscriptionCheckout && <Loader2 className="h-4 w-4 animate-spin" />}
+									Confirm & Continue to Payment
 								</Button>
 							</DialogFooter>
 						</DialogContent>

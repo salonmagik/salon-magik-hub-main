@@ -92,10 +92,10 @@ export function useStaffOperationsAddon() {
       // but looks like an unexplained/hidden charge until a full reload.
       await queryClient.invalidateQueries({ queryKey: ["tenant-recurring-total", currentTenant?.id] });
       toast({
-        title: isEnabled ? "Staff Operations turned off" : "Staff Operations enabled",
+        title: isEnabled ? "Staff Operations disabled" : "Staff Operations enabled",
         description: isEnabled
-          ? "This takes effect immediately — you won't be billed for it again."
-          : `Added to your subscription now — billed on your next invoice${priceLabel ? ` at ${priceLabel}/month` : ""}.`,
+          ? "Check-ins and time-off management are no longer billed."
+          : "Check-ins and time-off management are ready to use.",
       });
       return true;
     } catch (error: any) {

@@ -79,32 +79,3 @@ export function useClaimTenantSalesPromo() {
     },
   });
 }
-
-export function useRemoveTenantSalesPromo() {
-  const { currentTenant } = useAuth();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({ surface, reason }: { surface?: "subscription" | "credits"; reason?: string }) => {
-      if (!currentTenant?.id) {
-        throw new Error("No tenant selected");
-      }
-
-      const { data, error } = await (supabase.rpc as any)("unclaim_tenant_sales_promo", {
-        p_tenant_id: currentTenant.id,
-        p_surface: surface || null,
-        p_reason: reason || null,
-      });
-
-      if (error) throw error;
-      if (!data?.success) {
-        throw new Error(data?.message || "Failed to remove promo code");
-      }
-
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tenant-sales-promo"] });
-    },
-  });
-}
