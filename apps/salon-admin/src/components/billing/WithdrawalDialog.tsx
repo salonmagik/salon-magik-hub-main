@@ -59,7 +59,13 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
   // currency-matching account instead of just being told to go add one —
   // picking here pins it to this branch going forward (see handleWithdraw).
   const needsBranchAssignment = !!locationId && pinnedDestinations.length === 0;
-  const scopedDestinations = needsBranchAssignment
+  // Same nudge for the General wallet: accounts can exist without any of
+  // them marked as the default (e.g. added before "Set as default" existed,
+  // or never checked at creation) — don't tell the salon to go add a new
+  // one when it just needs one of its existing accounts designated default.
+  const needsDefaultAssignment = !locationId && pinnedDestinations.length === 0;
+  const needsAssignment = needsBranchAssignment || needsDefaultAssignment;
+  const scopedDestinations = needsAssignment
     ? destinations.filter((item) => item.currency === currency)
     : pinnedDestinations;
 
@@ -176,6 +182,28 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
         await refetchDestinations();
       }
 
+      // Same idea for the General wallet — only one destination is ever
+      // "the" default, so clear any other before setting this one.
+      if (needsDefaultAssignment && tenantId) {
+        const { error: clearDefaultError } = await supabase
+          .from("salon_payout_destinations")
+          .update({ is_default: false })
+          .eq("tenant_id", tenantId)
+          .neq("id", selectedDestinationId);
+        const { error: setDefaultError } = clearDefaultError
+          ? { error: clearDefaultError }
+          : await supabase
+              .from("salon_payout_destinations")
+              .update({ is_default: true })
+              .eq("id", selectedDestinationId);
+        if (clearDefaultError || setDefaultError) {
+          setError("Couldn't set this as the default payout account. Please try again.");
+          setIsSubmitting(false);
+          return;
+        }
+        await refetchDestinations();
+      }
+
       const result = await createWithdrawal({
         tenantId,
         payoutDestinationId: selectedDestinationId,
@@ -283,6 +311,11 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
               {needsBranchAssignment && scopedDestinations.length > 0 && (
                 <p className="text-xs text-muted-foreground">
                   This branch doesn't have a payout account yet — pick one below and it'll be used for this branch going forward.
+                </p>
+              )}
+              {needsDefaultAssignment && scopedDestinations.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  General doesn't have a default payout account yet — pick one below and it'll become the default going forward.
                 </p>
               )}
               {scopedDestinations.length === 0 ? (

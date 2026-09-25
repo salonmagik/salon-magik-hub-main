@@ -32,7 +32,7 @@ interface PayoutDestinationsManagerProps {
 // Renders flat — no outer Card — intended to be embedded inside a settings section.
 export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsManagerProps = {}) {
   const { currentTenant } = useAuth();
-  const { destinations: allDestinations, isLoading, createDestination, deleteDestination, refetch: refetchDestinations } = usePayoutDestinations(currentTenant?.id);
+  const { destinations: allDestinations, isLoading, createDestination, deleteDestination, setDefaultDestination, refetch: refetchDestinations } = usePayoutDestinations(currentTenant?.id);
   const destinations = countryFilter ? allDestinations.filter((d) => d.country === countryFilter) : allDestinations;
   const { locations } = useSalonsOverview("today");
 
@@ -146,6 +146,16 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
   const [deleteTarget, setDeleteTarget] = useState<PayoutDestination | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const [changingDefaultId, setChangingDefaultId] = useState<string | null>(null);
+  const handleToggleDefault = async (dest: PayoutDestination) => {
+    setChangingDefaultId(dest.id);
+    try {
+      await setDefaultDestination(dest.id, !dest.is_default);
+    } finally {
+      setChangingDefaultId(null);
+    }
+  };
+
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
@@ -201,7 +211,9 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
               destination={dest}
               branchTags={getBranchTags(dest)}
               onDelete={setDeleteTarget}
-              onChangeBranch={locations.length > 1 ? openChangeBranch : undefined}
+              onChangeBranch={locations.length > 1 && destinations.length > 1 ? openChangeBranch : undefined}
+              onToggleDefault={destinations.length > 1 ? handleToggleDefault : undefined}
+              isChangingDefault={changingDefaultId === dest.id}
             />
           ))}
         </div>
@@ -382,9 +394,11 @@ interface DestinationRowProps {
   branchTags: string[];
   onDelete: (destination: PayoutDestination) => void;
   onChangeBranch?: (destination: PayoutDestination) => void;
+  onToggleDefault?: (destination: PayoutDestination) => void;
+  isChangingDefault: boolean;
 }
 
-function DestinationRow({ destination, branchTags, onDelete, onChangeBranch }: DestinationRowProps) {
+function DestinationRow({ destination, branchTags, onDelete, onChangeBranch, onToggleDefault, isChangingDefault }: DestinationRowProps) {
   const isBank = destination.destination_type === "bank";
   const isReady = !!destination.paystack_recipient_code;
 
@@ -403,6 +417,18 @@ function DestinationRow({ destination, branchTags, onDelete, onChangeBranch }: D
           <p className="text-sm text-muted-foreground">{destination.account_name}</p>
           <p className="text-sm font-mono text-muted-foreground">{isBank ? destination.account_number : destination.momo_number}</p>
           <p className="text-xs text-muted-foreground">{destination.country} · {destination.currency}</p>
+          {onToggleDefault && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => onToggleDefault(destination)}
+                disabled={isChangingDefault}
+                className="text-xs text-primary underline underline-offset-2 disabled:opacity-50"
+              >
+                {isChangingDefault ? "Saving…" : destination.is_default ? "Remove as default" : "Set as default payout account"}
+              </button>
+            </div>
+          )}
           {onChangeBranch && (
             branchTags.length > 0 ? (
               <div className="flex flex-wrap items-center gap-1.5 pt-1">
