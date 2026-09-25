@@ -80,6 +80,12 @@ export function useNotifications(enabled = true) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const notificationsRef = useRef<Notification[]>([]);
+  // This hook mounts more than once at a time (e.g. the sidebar and the
+  // All Notifications page both call it concurrently) — a hardcoded channel
+  // name meant a second instance's .on() call landed on the first instance's
+  // already-subscribed channel, throwing "cannot add postgres_changes
+  // callbacks ... after subscribe()". Each instance needs its own channel.
+  const instanceIdRef = useRef(crypto.randomUUID());
 
   useEffect(() => {
     notificationsRef.current = notifications;
@@ -155,7 +161,7 @@ export function useNotifications(enabled = true) {
     if (!enabled || !currentTenant?.id) return;
 
     const channel = supabase
-      .channel("notifications")
+      .channel(`notifications-${instanceIdRef.current}`)
       .on(
         "postgres_changes",
         {
