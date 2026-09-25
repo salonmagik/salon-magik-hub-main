@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 
 export interface SalonWalletAvailability {
@@ -64,6 +64,36 @@ export function useSalonWalletAvailability(tenantId?: string, locationId?: strin
       fetchAvailability();
     }
   }, [tenantId, locationId, fetchAvailability]);
+
+  // "Available" is computed from both the wallet balance and any pending
+  // withdrawals — a withdrawal's status changing (e.g. the transfer.success/
+  // failed webhook resolving it, with no action from whoever's looking at
+  // this page) needs to be reflected without a manual refresh. Same
+  // multi-mount-collision fix as useNotifications/useWithdrawals: this hook
+  // is used by both PayoutsPage and WithdrawalDialog at once, so each
+  // instance needs its own channel name.
+  const instanceIdRef = useRef(crypto.randomUUID());
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const channel = supabase
+      .channel(`salon-wallet-availability-${instanceIdRef.current}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "salon_withdrawals", filter: `tenant_id=eq.${tenantId}` },
+        () => fetchAvailability(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "salon_wallets", filter: `tenant_id=eq.${tenantId}` },
+        () => fetchAvailability(),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tenantId, fetchAvailability]);
 
   return {
     availability,

@@ -301,6 +301,22 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: "Payout destination currency does not match wallet" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
+    // Paystack synchronously rejecting a transfer (e.g. "Recipient is
+    // blacklisted") blocks this destination server-side — see STEP 4 below,
+    // where a rejection sets this flag. Without this hard stop, nothing
+    // prevented resubmitting the same bad recipient, which is exactly what
+    // escalated one rejection into Paystack's own automatic blacklist.
+    if (payoutDestination.is_blocked) {
+      return new Response(
+        JSON.stringify({
+          error: payoutDestination.blocked_reason
+            ? `This payout account is blocked: ${payoutDestination.blocked_reason}`
+            : "This payout account is blocked after a failed transfer.",
+          details: "Review or remove this account in Payout Accounts, or unblock it there once you've confirmed the details are correct.",
+        }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
     // A General-wallet withdrawal (locationId null) needs the tenant's
     // default destination; a branch withdrawal needs one explicitly pinned
     // to that branch — no more implicit fallback either way. The DB trigger
@@ -514,6 +530,22 @@ Deno.serve(async (req) => {
           failure_reason: paystackData.message || "Transfer initiation failed",
         })
         .eq("id", withdrawal.id).eq("status", "pending");
+
+      // Paystack refused to even create the transfer — a strong signal the
+      // recipient itself is the problem (blacklisted, invalid account, etc),
+      // not a transient issue. Block the destination so nobody can retry it
+      // blind; repeated retries to a bad recipient is what gets a recipient
+      // blacklisted by Paystack in the first place.
+      if (paystackResponse.status < 500) {
+        await serviceSupabase
+          .from("salon_payout_destinations")
+          .update({
+            is_blocked: true,
+            blocked_reason: paystackData.message || "Transfer initiation failed",
+            blocked_at: new Date().toISOString(),
+          })
+          .eq("id", payoutDestination.id);
+      }
 
       // Return user-friendly error message
       const errorMessage = paystackData.message || "Failed to initiate transfer";
