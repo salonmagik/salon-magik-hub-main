@@ -5491,11 +5491,14 @@ export type Database = {
           account_number: string | null
           bank_code: string | null
           bank_name: string | null
+          blocked_at: string | null
+          blocked_reason: string | null
           country: string
           created_at: string | null
           currency: string
           destination_type: Database["public"]["Enums"]["payout_destination_type"]
           id: string
+          is_blocked: boolean
           is_default: boolean | null
           location_ids: string[]
           momo_number: string | null
@@ -5516,11 +5519,14 @@ export type Database = {
           account_number?: string | null
           bank_code?: string | null
           bank_name?: string | null
+          blocked_at?: string | null
+          blocked_reason?: string | null
           country: string
           created_at?: string | null
           currency: string
           destination_type: Database["public"]["Enums"]["payout_destination_type"]
           id?: string
+          is_blocked?: boolean
           is_default?: boolean | null
           location_ids?: string[]
           momo_number?: string | null
@@ -5541,11 +5547,14 @@ export type Database = {
           account_number?: string | null
           bank_code?: string | null
           bank_name?: string | null
+          blocked_at?: string | null
+          blocked_reason?: string | null
           country?: string
           created_at?: string | null
           currency?: string
           destination_type?: Database["public"]["Enums"]["payout_destination_type"]
           id?: string
+          is_blocked?: boolean
           is_default?: boolean | null
           location_ids?: string[]
           momo_number?: string | null

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
 import type { Tables } from "@supabase-client";
@@ -54,6 +54,40 @@ export function useWithdrawals(tenantId?: string, locationId?: string | null) {
       fetchWithdrawals();
     }
   }, [tenantId, locationId, fetchWithdrawals]);
+
+  // A withdrawal's status changes server-side (the transfer.success/failed
+  // webhook, or an internal reconciliation) with no action from the user
+  // still looking at this page — without this, "pending" only ever updated
+  // to its real outcome after the user did something themselves (e.g.
+  // submitted another withdrawal), even though the notification for the
+  // same event arrived instantly. This hook mounts more than once at a time
+  // (PayoutsPage and WithdrawalDialog both use it) — a hardcoded channel
+  // name would collide the same way useNotifications' did, so each instance
+  // gets its own channel name.
+  const instanceIdRef = useRef(crypto.randomUUID());
+  useEffect(() => {
+    if (!tenantId) return;
+
+    const channel = supabase
+      .channel(`salon-withdrawals-${instanceIdRef.current}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "salon_withdrawals",
+          filter: `tenant_id=eq.${tenantId}`,
+        },
+        () => {
+          fetchWithdrawals();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tenantId, fetchWithdrawals]);
 
   const createWithdrawal = async (
     data: CreateWithdrawalData
