@@ -101,6 +101,53 @@ export function usePayoutDestinations(tenantId?: string) {
     }
   };
 
+  const setDefaultDestination = async (id: string, makeDefault: boolean): Promise<boolean> => {
+    if (!tenantId) {
+      toast({
+        title: "Error",
+        description: "No tenant ID provided",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    try {
+      // Only one destination is ever "the" default (General) account — clear
+      // any other before setting this one, so the two states can't diverge.
+      if (makeDefault) {
+        const { error: clearError } = await supabase
+          .from("salon_payout_destinations")
+          .update({ is_default: false })
+          .eq("tenant_id", tenantId)
+          .neq("id", id);
+        if (clearError) throw clearError;
+      }
+
+      const { error: setError } = await supabase
+        .from("salon_payout_destinations")
+        .update({ is_default: makeDefault })
+        .eq("id", id)
+        .eq("tenant_id", tenantId);
+      if (setError) throw setError;
+
+      toast({
+        title: "Success",
+        description: makeDefault ? "Set as the default payout account" : "No longer the default payout account",
+      });
+
+      await fetchDestinations();
+      return true;
+    } catch (err) {
+      console.error("Error updating default payout destination:", err);
+      toast({
+        title: "Error",
+        description: "Failed to update the default payout account",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   const deleteDestination = async (id: string): Promise<boolean> => {
     if (!tenantId) {
       toast({
@@ -146,6 +193,7 @@ export function usePayoutDestinations(tenantId?: string) {
     error,
     createDestination,
     deleteDestination,
+    setDefaultDestination,
     refetch: fetchDestinations,
   };
 }
