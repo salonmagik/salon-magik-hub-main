@@ -1,0 +1,232 @@
+.subscription-redesign {
+  font-family: "Questrial", sans-serif;
+}
+
+.subscription-redesign .font-serif {
+  font-family: "Fraunces", Georgia, serif;
+}
+
+.subscription-redesign h1 {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+}
+
+.subscription-redesign .subscription-page-card {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.subscription-redesign .subscription-page-content {
+  padding: 0;
+}
+
+.subscription-redesign .subscription-hero {
+  min-height: 132px;
+  border-radius: 14px;
+  padding: 20px 22px;
+  background: linear-gradient(135deg, #21153d 0%, #352061 100%) !important;
+}
+
+.subscription-redesign .subscription-hero > div:first-child svg {
+  display: none;
+}
+
+.subscription-redesign .subscription-hero-breakdown {
+  display: none;
+}
+
+.subscription-redesign .subscription-hero .font-serif {
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.subscription-redesign .subscription-hero .mt-1\.5 [class*="inline-flex"] {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.subscription-redesign .subscription-hero .text-3xl {
+  font-size: 34px;
+  line-height: 1;
+}
+
+.subscription-redesign .subscription-section-label,
+.subscription-redesign .subscription-addons > p,
+.subscription-redesign .subscription-promo > p {
+  margin: 0 0 8px;
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.subscription-redesign .subscription-usage > div {
+  min-height: 96px;
+  border: 1px solid hsl(var(--border) / .7);
+  border-radius: 12px;
+  background: hsl(var(--background));
+  padding: 16px;
+}
+
+.subscription-redesign .subscription-config {
+  overflow: hidden;
+  border: 1px solid hsl(var(--border) / .8);
+  border-radius: 12px;
+  background: hsl(var(--background));
+}
+
+.subscription-redesign .subscription-config-trigger {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 66px;
+  padding: 14px 18px;
+  text-align: left;
+}
+
+.subscription-redesign .subscription-config-trigger:hover {
+  background: hsl(var(--muted) / .35);
+}
+
+.subscription-redesign .subscription-config-icon {
+  display: inline-flex;
+  height: 40px;
+  width: 40px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #f0eafd;
+  color: #6d4e9a;
+}
+
+.subscription-redesign .subscription-config-body {
+  border-top: 1px solid hsl(var(--border) / .7);
+  padding: 16px;
+  grid-template-columns: 1fr !important;
+}
+
+.subscription-redesign .subscription-config-body > div:first-child > .rounded-lg.border {
+  border-radius: 16px;
+  padding: 16px;
+}
+
+.subscription-redesign .subscription-config-body > div:first-child > .rounded-lg.border > p:first-child {
+  color: hsl(var(--foreground));
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.subscription-redesign .subscription-config-body > div:first-child > .rounded-lg.border > p:nth-child(2) {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.subscription-redesign .subscription-config-body .divide-y {
+  border-radius: 16px;
+}
+
+.subscription-redesign .subscription-config-body .divide-y > div {
+  min-height: 64px;
+  padding: 12px 16px;
+}
+
+.subscription-redesign .subscription-config-body .divide-y label {
+  font-size: 14px;
+}
+
+.subscription-redesign .subscription-config-body .divide-y label + p,
+.subscription-redesign .subscription-config-body .divide-y p {
+  font-size: 12px;
+}
+
+.subscription-redesign .subscription-config-body .divide-y button {
+  height: 28px;
+  width: 28px;
+}
+
+.subscription-redesign .subscription-config-body .divide-y span.font-serif {
+  font-size: 18px;
+}
+
+.subscription-redesign .subscription-config-body .bg-muted\/50 {
+  border-radius: 16px;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.subscription-redesign .subscription-config-body > div:first-child > .rounded-lg.border > .w-full.sm\:w-auto {
+  min-width: 120px;
+  height: 40px;
+  border-radius: 10px;
+}
+
+.subscription-redesign .subscription-theme-expiring {
+  border: 1px solid #f4c84e !important;
+  background: #fff9e8 !important;
+}
+
+.subscription-redesign .subscription-cancellation-banner {
+  border-color: rgba(244, 200, 78, .45);
+  background: rgba(244, 200, 78, .14);
+  color: #f7d56e;
+}
+
+.subscription-redesign .subscription-config-body > div:first-child > .rounded-lg.border {
+  border-color: hsl(var(--border) / .8);
+  background: hsl(var(--background));
+}
+
+.subscription-redesign .subscription-addons {
+  margin-top: 16px;
+}
+
+.subscription-redesign .subscription-addon-card {
+  border-color: #e5dcf3;
+  border-radius: 12px;
+  background: #faf7ff;
+}
+
+.subscription-redesign .subscription-promo {
+  margin-top: 16px;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.subscription-redesign .subscription-promo > p {
+  display: none;
+}
+
+.subscription-redesign .subscription-promo-trigger {
+  color: #4b356e;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.subscription-redesign .subscription-promo-trigger:hover {
+  color: #30204f;
+}
+
+.subscription-redesign .subscription-promo input {
+  min-height: 40px;
+  border-radius: 8px;
+  text-transform: uppercase;
+}
+
+.subscription-redesign .subscription-promo button:not(.subscription-promo-trigger) {
+  min-height: 40px;
+  border-radius: 999px;
+}
+
+@media (max-width: 640px) {
+  .subscription-redesign [data-tour-id="tour-subscription-usage"] {
+    grid-template-columns: 1fr;
+  }
+}

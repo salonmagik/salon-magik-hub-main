@@ -27,6 +27,8 @@ interface UseAppointmentsOptions {
   approvalStatuses?: string[];
   locationId?: string;
   isUnscheduled?: boolean;
+  /** Include scheduled appointments by scheduled_start and walk-ins by created_at. */
+  includeUnscheduledInDateRange?: boolean;
   isGifted?: boolean;
   filterByBookingDate?: boolean;
 }
@@ -65,7 +67,11 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
         const startOfRange = `${options.startDate}T00:00:00`;
         const endOfRange = `${options.endDate}T23:59:59`;
 
-        if (options.approvalStatuses && options.approvalStatuses.length > 0) {
+        if (options.includeUnscheduledInDateRange) {
+          query = query.or(
+            `and(is_unscheduled.eq.false,scheduled_start.gte.${startOfRange},scheduled_start.lte.${endOfRange}),and(is_unscheduled.eq.true,created_at.gte.${startOfRange},created_at.lte.${endOfRange})`
+          );
+        } else if (options.approvalStatuses && options.approvalStatuses.length > 0) {
           query = query.or(
             `and(created_at.gte.${startOfRange},created_at.lte.${endOfRange}),and(scheduled_start.gte.${startOfRange},scheduled_start.lte.${endOfRange})`
           );
@@ -133,6 +139,7 @@ export function useAppointments(options: UseAppointmentsOptions = {}) {
     options.approvalStatuses?.join(","),
     options.locationId,
     options.isUnscheduled,
+    options.includeUnscheduledInDateRange,
     options.isGifted,
     options.filterByBookingDate,
     hasScope,

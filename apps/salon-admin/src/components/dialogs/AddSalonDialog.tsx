@@ -35,6 +35,7 @@ interface AddSalonDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => Promise<void> | void;
+  compact?: boolean;
 }
 
 interface LocationGate {
@@ -53,7 +54,7 @@ interface ChainUnlockRequest {
 
 const SELF_SERVE_CHAIN_LOCATION_LIMIT = 10;
 
-export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialogProps) {
+export function AddSalonDialog({ open, onOpenChange, onSuccess, compact = false }: AddSalonDialogProps) {
   const { currentTenant, refreshTenants } = useAuth();
   const { locations, refetch: refetchLocations } = useLocations();
   const { data: plans } = usePlans();
@@ -358,42 +359,42 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className={compact ? "max-w-[360px] rounded-2xl p-5" : "max-w-md"}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Building2 className="w-5 h-5" />
-            Add New Branch
+          <DialogTitle className={compact ? "text-lg" : "flex items-center gap-2"}>
+            {!compact && <Building2 className="w-5 h-5" />}
+            {compact ? "Add a branch" : "Add New Branch"}
           </DialogTitle>
           <DialogDescription>
-            Add a new branch ({currentLocationCount} / {allowedLocations} used)
+            {compact ? "You can invite staff and set up services right after." : `Add a new branch (${currentLocationCount} / ${allowedLocations} used)`}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
-        <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
+        <div className={cn(compact ? "px-0 py-4" : DIALOG_BODY_PADDING, "space-y-4")}>
           <div className="space-y-2">
-            <Label htmlFor="name">Branch Name *</Label>
+            <Label htmlFor="name">Branch name</Label>
             <Input
               id="name"
-              placeholder="e.g., Downtown Branch"
+              placeholder="e.g. Tema Branch"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className={compact ? "space-y-4" : "grid grid-cols-2 gap-4"}>
             <div className="space-y-2">
-              <Label htmlFor="city">City *</Label>
-              <Input
-                id="city"
-                placeholder="City"
+                <Label htmlFor="city">City</Label>
+                <Input
+                  id="city"
+                  placeholder="e.g. Tema"
                 value={formData.city}
                 onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                 required
               />
             </div>
-            <div className="space-y-2">
+            {!compact && <div className="space-y-2">
               <Label htmlFor="country">Country *</Label>
               <Select
                 value={formData.country}
@@ -410,10 +411,10 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+            </div>}
           </div>
 
-          <div className="space-y-2">
+          {!compact && <div className="space-y-2">
             <Label htmlFor="address">Address</Label>
             <Input
               id="address"
@@ -421,19 +422,17 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess }: AddSalonDialog
               value={formData.address}
               onChange={(e) => setFormData({ ...formData, address: e.target.value })}
             />
-          </div>
+          </div>}
         </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button
               type="submit"
               disabled={isSubmitting || !formData.name || !formData.city || !formData.country}
             >
               {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Add Branch
+              {compact ? "Add branch" : "Add Branch"}
             </Button>
           </DialogFooter>
         </form>

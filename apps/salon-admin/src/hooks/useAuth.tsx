@@ -65,7 +65,7 @@ const FALLBACK_ROUTE_ORDER: Array<{ module: string; path: string }> = [
   { module: "services", path: "/salon/services" },
   { module: "payments", path: "/salon/transactions" },
   { module: "reports", path: "/salon/reports" },
-  { module: "messaging", path: "/salon/messaging" },
+  { module: "messaging", path: "/salon/marketing" },
   { module: "journal", path: "/salon/cash-tracker" },
   { module: "staff", path: "/salon/staff" },
   { module: "settings", path: "/salon/settings" },
@@ -284,7 +284,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : [];
           const availableContexts = [
             ...(rpcData.can_use_owner_hub
-              ? [{ type: "owner_hub" as const, locationId: null, label: "Business Hub", isPaused: false }]
+              ? [{ type: "owner_hub" as const, locationId: null, label: "Business Settings", isPaused: false }]
               : []),
             ...availableLocations.map((location: any) => ({
               type: "location" as const,
@@ -408,7 +408,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const availableContexts = [
-        ...(canUseOwnerHub ? [{ type: "owner_hub" as const, locationId: null, label: "Business Hub" }] : []),
+        ...(canUseOwnerHub ? [{ type: "owner_hub" as const, locationId: null, label: "Business Settings" }] : []),
         ...availableLocations.map((location) => ({
           type: "location" as const,
           locationId: location.locationId,
@@ -875,7 +875,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       const routes = (Array.isArray(data) ? data : []).filter((route: unknown) => typeof route === "string");
       const firstRoute = routes[0] as string | undefined;
-      if (firstRoute && firstRoute !== "/salon/access-denied") return firstRoute;
+      if (firstRoute && firstRoute !== "/salon/access-denied") {
+        return firstRoute === "/salon/messaging" ? "/salon/marketing" : firstRoute;
+      }
     } catch (error) {
       console.error("Failed to resolve first allowed route:", error);
     }

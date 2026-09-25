@@ -4,7 +4,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@ui/dialog";
 import { Button } from "@ui/button";
@@ -83,20 +82,26 @@ export function PaymentStatusDialog({
 
   const badge = {
     processing: (
-      <div className="h-16 w-16 rounded-full flex items-center justify-center bg-warning-bg">
-        <Loader2 className="h-8 w-8 animate-spin text-warning-foreground" />
+      <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-[#f4effb] text-[#5d4385]">
+        <Loader2 className="h-[29px] w-[29px] animate-spin" />
       </div>
     ),
     success: (
-      <div className="h-16 w-16 rounded-full flex items-center justify-center bg-success-bg">
-        <CheckCircle2 className="h-8 w-8 text-success" />
+      <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-[#e8f8ee] text-[#15834b]">
+        <CheckCircle2 className="h-[31px] w-[31px]" />
       </div>
     ),
     failed: (
-      <div className="h-16 w-16 rounded-full flex items-center justify-center bg-destructive-bg">
-        <AlertTriangle className="h-8 w-8 text-destructive" />
+      <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-[#fff0f0] text-destructive">
+        <AlertTriangle className="h-[29px] w-[29px]" />
       </div>
     ),
+  }[status];
+
+  const eyebrow = {
+    processing: "Payment status",
+    success: "Booking confirmed",
+    failed: "Payment issue",
   }[status];
 
   const title = {
@@ -114,53 +119,54 @@ export function PaymentStatusDialog({
   return (
     <Dialog open={open} onOpenChange={status === "processing" ? undefined : onOpenChange}>
       <DialogContent
-        className="sm:max-w-md"
+        className="overflow-hidden sm:max-w-md"
+        closeButtonClassName="text-[#7d7483] hover:bg-[#f5f2f8] hover:text-[#30204f]"
         onPointerDownOutside={(e) => status === "processing" && e.preventDefault()}
         onEscapeKeyDown={(e) => status === "processing" && e.preventDefault()}
       >
-        <DialogHeader>
-          <DialogTitle className="sr-only">{title}</DialogTitle>
-          <DialogDescription className="sr-only">{copy}</DialogDescription>
-        </DialogHeader>
-
-        <div className="flex flex-col items-center justify-center py-2 space-y-5">
-          {badge}
-
-          <div className="text-center space-y-2">
-            <h3 className="font-serif text-lg font-semibold">{title}</h3>
-            <p className="text-sm text-muted-foreground max-w-sm">{copy}</p>
+        <div className="h-2 shrink-0 bg-[#30204f]" />
+        <div className="px-5 pb-6 pt-10 text-center sm:px-7">
+          <div className="flex flex-col items-center">
+            {badge}
+            <p className="mt-[18px] text-[11px] uppercase tracking-[0.1em] text-[#7f7588]">{eyebrow}</p>
+            <DialogTitle className="mt-2 font-sans text-[27px] font-medium leading-tight tracking-tight text-[#201d25]">
+              {title}
+            </DialogTitle>
+            <DialogDescription className="mx-auto mt-2 max-w-[320px] text-sm leading-[1.5] text-[#716879]">
+              {copy}
+            </DialogDescription>
           </div>
 
           {status === "success" && (
-            <div className="flex items-start gap-3 p-4 bg-success-bg rounded-lg border border-success/20 w-full">
-              <Mail className="h-5 w-5 text-success shrink-0 mt-0.5" />
-              <div className="space-y-1 text-left">
-                <p className="text-sm font-medium text-success-foreground">Check your email</p>
-                <p className="text-xs text-success-foreground/80">
-                  Your receipt and booking confirmation just landed in your inbox.
+            <div className="mt-6 flex items-start gap-3 rounded-[14px] border border-[#b9e8ca] bg-[#effaf3] p-4 text-left text-[#17633d]">
+              <Mail className="mt-0.5 h-[19px] w-[19px] shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Check your email</p>
+                <p className="mt-1 text-xs leading-[1.45] text-[#6e6872]">
+                  Your receipt and booking confirmation are on their way.
                 </p>
               </div>
             </div>
           )}
 
           {status === "processing" && (
-            <div className="flex items-start gap-3 p-4 bg-primary/[0.06] rounded-lg border border-primary/10 w-full">
-              <Info className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-              <div className="space-y-1 text-left">
-                <p className="text-sm font-medium">A receipt is on its way</p>
-                <p className="text-xs text-muted-foreground">
-                  Once confirmed, you'll get a confirmation email with your booking details and receipt.
+            <div className="mt-6 flex items-start gap-3 rounded-[14px] border border-[#ddd0ed] bg-[#f8f4fc] p-4 text-left text-[#4f3970]">
+              <Info className="mt-0.5 h-[19px] w-[19px] shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Checking with your payment provider</p>
+                <p className="mt-1 text-xs leading-[1.45] text-[#6e6872]">
+                  We’ll show your booking details as soon as the payment is confirmed.
                 </p>
               </div>
             </div>
           )}
 
           {status === "failed" && (
-            <div className="flex items-start gap-3 p-4 bg-warning-bg rounded-lg border border-warning/30 w-full">
-              <AlertTriangle className="h-5 w-5 text-warning-foreground shrink-0 mt-0.5" />
-              <div className="space-y-1 text-left">
-                <p className="text-sm font-medium text-warning-foreground">Still having trouble?</p>
-                <p className="text-xs text-warning-foreground/80">
+            <div className="mt-6 flex items-start gap-3 rounded-[14px] border border-[#f3c3c3] bg-[#fff5f5] p-4 text-left text-[#8e2f36]">
+              <AlertTriangle className="mt-0.5 h-[19px] w-[19px] shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Still having trouble?</p>
+                <p className="mt-1 text-xs leading-[1.45] text-[#6e6872]">
                   Reach out to the salon directly and reference the code below — they can look up exactly what happened.
                 </p>
               </div>
@@ -168,35 +174,35 @@ export function PaymentStatusDialog({
           )}
 
           {reference && status !== "processing" && (
-            <div className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-md bg-muted">
-              <span className="text-[11px] uppercase tracking-wide text-muted-foreground">Reference</span>
-              <span className="text-xs font-mono font-semibold tabular-nums break-all text-right ml-3">{reference}</span>
+            <div className="mt-3 flex w-full items-center justify-between gap-4 rounded-[11px] bg-[#f5f2f8] px-[15px] py-[13px] text-left">
+              <span className="text-[10px] uppercase tracking-[0.1em] text-[#80768b]">Reference</span>
+              <span className="break-all text-right font-mono text-[11px] font-semibold text-[#30204f]">{reference}</span>
             </div>
           )}
-        </div>
 
-        <div className="flex flex-col gap-2 pt-2">
-          {status === "processing" && (
-            <Button disabled className="w-full border-0 text-white" style={{ backgroundColor: brandColor }}>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Confirming…
-            </Button>
-          )}
-          {status === "success" && (
-            <Button onClick={() => onOpenChange(false)} className="w-full border-0 text-white" style={{ backgroundColor: brandColor }}>
-              Done
-            </Button>
-          )}
-          {status === "failed" && (
-            <>
-              <Button onClick={handleRetry} className="w-full border-0 text-white" style={{ backgroundColor: brandColor }}>
-                Try again
+          <div className="mt-[18px] flex flex-col gap-2">
+            {status === "processing" && (
+              <Button disabled className="w-full rounded-[12px] border-0 text-white opacity-100" style={{ backgroundColor: brandColor }}>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Confirming…
               </Button>
-              <Button variant="ghost" onClick={() => onOpenChange(false)} className="w-full text-muted-foreground">
-                Close
+            )}
+            {status === "success" && (
+              <Button onClick={() => onOpenChange(false)} className="w-full rounded-[12px] border-0 text-white" style={{ backgroundColor: brandColor }}>
+                Done
               </Button>
-            </>
-          )}
+            )}
+            {status === "failed" && (
+              <>
+                <Button onClick={handleRetry} className="w-full rounded-[12px] border-0 text-white" style={{ backgroundColor: brandColor }}>
+                  Try again
+                </Button>
+                <Button variant="ghost" onClick={() => onOpenChange(false)} className="w-full text-[#7d7483] hover:text-[#30204f]">
+                  Close
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

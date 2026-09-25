@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import type { CSSProperties } from "react";
 import type { TablesUpdate } from "@supabase-client";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -81,6 +82,7 @@ import {
 	Minus,
 	Plus,
 	Info,
+	ChevronDown,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -236,11 +238,15 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		saveSettings: saveNotificationSettings,
 	} = useNotificationSettings(activeContextType === "location" ? activeLocationId : null);
 	const [subscriptionPromoCode, setSubscriptionPromoCode] = useState("");
+	const [subscriptionPromoOpen, setSubscriptionPromoOpen] = useState(false);
+	const [subscriptionPromoError, setSubscriptionPromoError] = useState<string | null>(null);
 	const [isStartingSubscriptionCheckout, setIsStartingSubscriptionCheckout] =
 		useState(false);
 	const [isPurchasingTheme, setIsPurchasingTheme] = useState(false);
 	const [branchesInput, setBranchesInput] = useState("1");
 	const [seatsInput, setSeatsInput] = useState("1");
+	const [subscriptionPlanConfigOpen, setSubscriptionPlanConfigOpen] = useState(false);
+	const [planConfigConfirmOpen, setPlanConfigConfirmOpen] = useState(false);
 	const planConfigSectionRef = useRef<HTMLDivElement>(null);
 	const [planConfigQuote, setPlanConfigQuote] = useState<{
 		current_plan_slug: string;
@@ -3445,9 +3451,16 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					requiredTierRank !== undefined &&
 					requiredTierRank > currentTierRank)),
 		);
+		const themeExpiresAt = entitlements?.ecommerce_theme_expires_at
+			? new Date(entitlements.ecommerce_theme_expires_at)
+			: null;
+		const themeDaysRemaining = themeExpiresAt
+			? Math.max(0, Math.ceil((themeExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+			: null;
+		const themeIsExpiring = themeDaysRemaining !== null && themeDaysRemaining <= 7;
 
 		return (
-			<Card>
+			<Card className="subscription-page-card">
 				{!isChainScope && (
 					<CardHeader className="flex items-center gap-2">
 						<CardTitle>Subscription</CardTitle>
@@ -3460,9 +3473,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						</CardDescription>
 					</CardHeader>
 				)}
-				<CardContent className={cn(isChainScope && "pt-6", "space-y-6")}>
+				<CardContent className={cn("subscription-page-content", isChainScope && "pt-6", "space-y-6")}>
 					<div
-						className="relative overflow-hidden rounded-xl p-4 sm:p-5"
+						className="subscription-hero relative overflow-hidden rounded-xl p-4 sm:p-5"
 						style={{
 							background:
 								"linear-gradient(160deg, #1F1536 0%, #2E1F4E 60%, #3A2660 100%)",
@@ -3497,7 +3510,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						<div className="relative flex flex-wrap items-center justify-between gap-3 mb-2">
 							<div>
 								<p className="font-serif text-xl capitalize text-white">
-									{currentTenant?.plan || "Solo"}
+									{currentTenant?.plan || "Solo"} Plan
 								</p>
 								<div className="mt-1.5 flex items-center gap-2">
 									<Badge className="capitalize bg-white/15 text-white hover:bg-white/15">
@@ -3505,15 +3518,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									</Badge>
 									<Badge
 										className={cn(
-											currentTenant?.subscription_status === "active"
-												? "bg-success text-success-foreground hover:bg-success"
+											subscriptionLifecycle.state === "cancellation_pending"
+												? "bg-[#F4C84E] text-[#2E1F4E] hover:bg-[#F4C84E]"
+												: currentTenant?.subscription_status === "active"
+													? "bg-success text-success-foreground hover:bg-success"
 												: currentTenant?.subscription_status === "trialing"
 													? "bg-[#F4C84E] text-[#2E1F4E] hover:bg-[#F4C84E]"
 													: "bg-destructive text-destructive-foreground hover:bg-destructive",
 										)}
 									>
-										{currentTenant?.subscription_status?.replace("_", " ") ||
-											"Unknown"}
+										{subscriptionLifecycle.state === "cancellation_pending"
+											? `cancelling${subscriptionLifecycle.accessEndDate ? ` ${format(subscriptionLifecycle.accessEndDate, "MMM d")}` : ""}`
+											: currentTenant?.subscription_status?.replace("_", " ") || "Unknown"}
 									</Badge>
 								</div>
 								{currentTenant?.paystack_authorization_code && (
@@ -3563,26 +3579,30 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								<Button
 									type="button"
 									size="sm"
-									className="rounded-full bg-white text-[#2E1F4E] hover:bg-white/90"
+									className="rounded-full bg-[#F4C84E] text-[#2E1F4E] hover:bg-[#F7D56E]"
 									data-tour-id="tour-change-plan"
-									onClick={() =>
-										planConfigSectionRef.current?.scrollIntoView({
-											behavior: "smooth",
-											block: "center",
-										})
-									}
+					onClick={() => {
+						navigate("/salon/subscription#plan-config");
+						setSubscriptionPlanConfigOpen(true);
+						requestAnimationFrame(() =>
+							planConfigSectionRef.current?.scrollIntoView({
+								behavior: "smooth",
+								block: "center",
+							}),
+						);
+					}}
 								>
 									Change plan
 								</Button>
 							</div>
 						</div>
 						{subscriptionLifecycle.state === "cancellation_pending" && (
-							<div className="relative mt-3 rounded-lg border border-[#F4C84E]/40 bg-[#F4C84E]/10 p-3 text-sm text-white">
-								Cancellation pending — your access continues until{" "}
+							<div className="subscription-cancellation-banner relative mt-3 rounded-lg border p-3 text-sm">
+								Cancelling — your plan stays active until{" "}
 								{subscriptionLifecycle.accessEndDate
-									? format(subscriptionLifecycle.accessEndDate, "MMMM d, yyyy")
+									? format(subscriptionLifecycle.accessEndDate, "MMM d")
 									: "the end of your billing period"}
-								.
+								, then it ends. Resume any time before then.
 							</div>
 						)}
 						{isTrialing && trialEndsAt && (
@@ -3619,7 +3639,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 												: "billing not scheduled — add a payment method"}
 									</p>
 								</div>
-								<div className="mt-3 space-y-1 border-t border-dashed border-white/15 pt-3 text-sm">
+								<div className="subscription-hero-breakdown mt-3 space-y-1 border-t border-dashed border-white/15 pt-3 text-sm">
 									<div className="flex items-center justify-between text-white/60">
 										<span className="capitalize">{currentTenant?.plan || "Solo"} base plan</span>
 										<span>{formatCurrency(recurringTotal.breakdown.base_price, recurringTotal.currency)}</span>
@@ -3662,49 +3682,76 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						)}
 					</div>
 
-					<div className="grid gap-4 md:grid-cols-3" data-tour-id="tour-subscription-usage">
+					<p className="subscription-section-label">Plan at a glance</p>
+					<div className="subscription-usage grid gap-4 md:grid-cols-3" data-tour-id="tour-subscription-usage">
 						<div className="rounded-xl bg-muted/50 p-4">
 							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Locations</p>
 							<p className="mt-1 font-serif text-2xl">
-								{entitlements?.used_locations ?? 0} /{" "}
-								{entitlements?.allowed_locations ??
-									currentPlan?.limits?.max_locations ??
-									1}
+								{entitlements?.used_locations ?? 0} of{" "}
+								{entitlements?.allowed_locations ?? currentPlan?.limits?.max_locations ?? 1}
 							</p>
 						</div>
 						<div className="rounded-xl bg-muted/50 p-4">
-							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Seats</p>
+							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Team seats</p>
 							<p className="mt-1 font-serif text-2xl">
-								{entitlements?.used_staff ?? 0} /{" "}
+								{entitlements?.used_staff ?? 0} of{" "}
 								{entitlements?.allowed_staff ??
 									currentPlan?.limits?.max_staff ??
 									1}
 							</p>
 							<p className="mt-1 text-xs text-muted-foreground">
 								{Number(entitlements?.extra_staff_seats || 0) > 0
-									? `${entitlements?.base_staff_limit ?? currentPlan?.limits?.max_staff ?? 1} included in your plan + ${entitlements?.extra_staff_seats} paid add-on`
-									: "All included in your plan"}
+									? `${entitlements?.allowed_staff ?? currentPlan?.limits?.max_staff ?? 1} included · +${entitlements?.extra_staff_seats} paid add-on`
+									: `${entitlements?.allowed_staff ?? currentPlan?.limits?.max_staff ?? 1} included · +0 paid add-on`}
 							</p>
 						</div>
-						<div className="rounded-xl bg-muted/50 p-4">
+						<div className={cn("subscription-theme-usage-card rounded-xl bg-muted/50 p-4", themeIsExpiring && "subscription-theme-expiring")}>
 							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Storefront Theme</p>
 							<p className="mt-1 font-serif text-lg">
-								{entitlements?.has_ecommerce_theme
-									? "E-commerce active"
-									: "Default theme"}
+									{entitlements?.has_ecommerce_theme
+										? "Noir"
+										: "Default"}
 							</p>
-							<p className="mt-1 text-xs text-muted-foreground">
-								{entitlements?.ecommerce_theme_expires_at
-									? `Renews until ${format(new Date(entitlements.ecommerce_theme_expires_at), "MMM d, yyyy")}`
-									: "No paid storefront theme active"}
-							</p>
+							{themeIsExpiring ? (
+								<>
+									<p className="mt-1 text-xs text-amber-700">Renews in {themeDaysRemaining} day{themeDaysRemaining === 1 ? "" : "s"}</p>
+									<Button
+										type="button"
+										size="sm"
+										className="mt-3 h-8 w-full rounded-full bg-[#F4C84E] text-xs font-semibold text-[#2E1F4E] hover:bg-[#F7D56E]"
+										disabled={isPurchasingTheme}
+										onClick={() => void purchaseThemeAddon()}
+									>
+										{isPurchasingTheme ? "Renewing…" : `Renew now — ${formatCurrency(ecommerceThemePricing || 0, currentTenant?.currency || "GHS")}`}
+									</Button>
+								</>
+							) : themeDaysRemaining !== null ? (
+								<p className="mt-1 text-xs text-muted-foreground">Renews on {format(themeExpiresAt!, "MMM d, yyyy")}</p>
+							) : (
+								<p className="mt-1 text-xs text-muted-foreground">No paid theme active</p>
+							)}
 						</div>
 					</div>
 
-					<div ref={planConfigSectionRef} className="scroll-mt-6" data-tour-id="tour-subscription-seats">
-					<div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+					<div id="plan-config" ref={planConfigSectionRef} className="subscription-config scroll-mt-6" data-tour-id="tour-subscription-seats">
+						<button
+							type="button"
+							className="subscription-config-trigger"
+							onClick={() => setSubscriptionPlanConfigOpen((open) => !open)}
+							aria-expanded={subscriptionPlanConfigOpen}
+						>
+							<span className="flex min-w-0 items-center gap-3 text-left">
+								<span className="subscription-config-icon"><Building2 className="h-4 w-4" /></span>
+								<span>
+									<span className="block text-sm font-medium">Adjust branches &amp; team seats</span>
+									<span className="mt-0.5 block text-xs text-muted-foreground">Change your plan by telling us what you need — we’ll do the math</span>
+								</span>
+							</span>
+							<ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", subscriptionPlanConfigOpen && "rotate-180")} />
+						</button>
+					{subscriptionPlanConfigOpen && (
+					<div className="subscription-config-body grid gap-4 lg:grid-cols-2 lg:items-start">
 					<div className="space-y-3">
-						<p className="text-sm font-medium">Manage branches & team size</p>
 						<div className="rounded-lg border p-4 space-y-4">
 							<p className="text-sm text-muted-foreground">
 								Tell us how many branches and team seats you need. We'll
@@ -3725,7 +3772,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										<Label htmlFor="config-branches" className="text-sm font-medium">Branches</Label>
 										<p className="text-xs text-muted-foreground">
 											{planConfigQuote
-												? `${planConfigQuote.current_allowed_locations} included on ${planConfigQuote.current_plan_slug}`
+														? `${planConfigQuote.current_allowed_locations} included on ${planConfigQuote.current_plan_slug.replace(/^./, (character) => character.toUpperCase())}`
 												: "How many locations you operate"}
 										</p>
 									</div>
@@ -3759,7 +3806,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										<Label htmlFor="config-seats" className="text-sm font-medium">Team seats</Label>
 										<p className="text-xs text-muted-foreground">
 											{planConfigQuote
-												? `${planConfigQuote.current_allowed_staff} included on ${planConfigQuote.current_plan_slug}`
+														? `${planConfigQuote.current_allowed_staff} included on ${planConfigQuote.current_plan_slug.replace(/^./, (character) => character.toUpperCase())}`
 												: "How many staff accounts you need"}
 										</p>
 									</div>
@@ -3986,7 +4033,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										)}
 									<Button
 										className="w-full sm:w-auto"
-										onClick={applyPlanConfiguration}
+										onClick={() => setPlanConfigConfirmOpen(true)}
 										disabled={
 											!planConfigQuote ||
 											planConfigQuote.requires_custom_locations ||
@@ -4002,18 +4049,21 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							? "Update"
 							: planConfigQuote?.requires_custom_locations
 								? "Contact support to continue"
-								: isPlanConfigIncrease
-									? "Upgrade plan"
-									: "Downgrade plan"}
-									</Button>
-								</>
-							)}
+											: isPlanConfigIncrease
+												? "Upgrade plan"
+														: "Downgrade plan"}
+												</Button>
+											</>
+									)}
+								</div>
 						</div>
 					</div>
+					)}
+					</div>
 
-					<div className="space-y-3" data-tour-id="tour-subscription-addons">
+					<div className="subscription-addons space-y-3" data-tour-id="tour-subscription-addons">
 						<p className="text-sm font-medium">Add-ons</p>
-						<div className="space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
+						<div className="subscription-addon-card space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
 							<div className="flex items-center justify-between gap-4">
 								<div>
 									<p className="text-sm font-medium">Staff Operations</p>
@@ -4056,9 +4106,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							</div>
 						</div>
 					</div>
-					</div>
-					</div>
-					<div className="pt-4 border-t space-y-3">
+					<div className="subscription-promo pt-4 border-t space-y-3">
 						<p className="text-sm font-medium">Promo code</p>
 						{subscriptionPromo ? (
 							<div className="rounded-lg bg-success/10 p-3 text-sm">
@@ -4081,18 +4129,26 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									)}
 								</p>
 							</div>
+						) : !subscriptionPromoOpen ? (
+							<button
+								type="button"
+								className="subscription-promo-trigger"
+								onClick={() => setSubscriptionPromoOpen(true)}
+							>
+								Have a promo code?
+							</button>
 						) : (
 							<div className="space-y-2">
 								<Label>Apply Sales Promo Code</Label>
 								<div className="flex gap-2">
 									<Input
 										value={subscriptionPromoCode}
-										onChange={(event) =>
-											setSubscriptionPromoCode(
-												event.target.value.toUpperCase(),
-											)
-										}
-										placeholder="Enter promo code"
+										onChange={(event) => {
+											setSubscriptionPromoCode(event.target.value.toUpperCase());
+											setSubscriptionPromoError(null);
+										}}
+										placeholder="PROMOCODE"
+										className={cn(subscriptionPromoError && "border-destructive focus-visible:ring-destructive")}
 									/>
 									<Button
 										variant="outline"
@@ -4105,16 +4161,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 												setSubscriptionPromoCode("");
 												toast({
 													title: "Promo claimed",
-													description:
-														"The promo is now attached to this tenant for subscription billing.",
-												});
+														description:
+															"The promo is now attached to this tenant for subscription billing.",
+														});
+													setSubscriptionPromoOpen(false);
 											} catch (error) {
+												setSubscriptionPromoError("The code isn't valid or has expired.");
 												toast({
 													title: "Promo unavailable",
 													description:
 														error instanceof Error
 															? error.message
-															: "Failed to claim promo code.",
+															: "The code isn't valid or has expired.",
 													variant: "destructive",
 												});
 											}
@@ -4127,11 +4185,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										{claimTenantPromo.isPending ? (
 											<Loader2 className="w-4 h-4 animate-spin" />
 										) : (
-											"Apply"
-										)}
-									</Button>
-								</div>
-							</div>
+																		"Apply"
+																		)}
+																	</Button>
+															</div>
+														{subscriptionPromoError && <p className="text-xs text-destructive">{subscriptionPromoError}</p>}
+														<button type="button" className="text-left text-xs text-muted-foreground underline" onClick={() => { setSubscriptionPromoOpen(false); setSubscriptionPromoError(null); }}>Cancel</button>
+													</div>
 						)}
 						{isTrialing && (
 							<>
@@ -4144,7 +4204,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										// same as the plain confirm-dialog path below. Otherwise
 										// fall back to the base-plan confirm dialog.
 										if (!isPlanConfigUnchanged) {
-											void applyPlanConfiguration();
+											setPlanConfigConfirmOpen(true);
 										} else {
 											setUpgradeConfirmOpen(true);
 										}
@@ -4167,15 +4227,53 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						)}
 					</div>
 
+					<Dialog open={planConfigConfirmOpen} onOpenChange={setPlanConfigConfirmOpen}>
+						<DialogContent className="rounded-[20px] sm:max-w-[430px]" closeButtonClassName="text-foreground hover:bg-muted hover:text-foreground">
+							<DialogHeader className="!space-y-1 !px-6 !pb-3 !pt-5 sm:!px-6 sm:!pb-3 sm:!pt-6" style={{ "--background": "0 0% 100%", "--foreground": "262 20% 12%", "--muted-foreground": "258 15% 45%", backgroundColor: "#fff", color: "#21152f" } as CSSProperties}>
+								<DialogTitle>Confirm your {isPlanConfigIncrease ? "upgrade" : "downgrade"}</DialogTitle>
+								<DialogDescription>Here's what changes on your next invoice.</DialogDescription>
+							</DialogHeader>
+							<div className="space-y-3 px-6 py-3">
+								{planConfigQuote && (
+									<div className="space-y-2 rounded-lg border p-3 text-sm">
+										<div className="flex justify-between"><span className="text-muted-foreground">Branches</span><span>{branchesValue}</span></div>
+										<div className="flex justify-between"><span className="text-muted-foreground">Team seats</span><span>{seatsValue}</span></div>
+										{staffOperationsAddon.isEnabled && <div className="flex justify-between"><span className="text-muted-foreground">Staff Operations add-on</span><span>{staffOperationsAddon.priceLabel || "Included"}</span></div>}
+										{isPlanConfigIncrease && (planConfigQuote.discount_amount || 0) > 0 ? (
+											<>
+												<div className="flex justify-between border-t pt-2"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(planConfigQuote.total_monthly_price || 0, planConfigQuote.currency)}</span></div>
+												<div className="flex justify-between text-success"><span>Discount · {activeTenantPromo?.code || "promo"}</span><span>−{formatCurrency(planConfigQuote.discount_amount || 0, planConfigQuote.currency)}</span></div>
+												<div className="flex justify-between font-medium"><span>Total</span><span>{formatCurrency(Math.max((planConfigQuote.total_monthly_price || 0) - (planConfigQuote.discount_amount || 0), 0), planConfigQuote.currency)}</span></div>
+											</>
+										) : (
+											<div className="flex justify-between border-t pt-2 font-medium"><span>New monthly total</span><span>{formatCurrency(planConfigQuote.total_monthly_price || 0, planConfigQuote.currency)}</span></div>
+										)}
+										<div className={cn("flex justify-between", isPlanConfigIncrease ? "text-amber-600" : "text-success")}><span>Change</span><span>{isPlanConfigIncrease ? "+" : ""}{formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month</span></div>
+									</div>
+								)}
+								<p className="pt-2 text-xs text-muted-foreground">
+									{isPlanConfigIncrease ? "You'll be redirected to Paystack to confirm this payment." : "This applies immediately — no charge today."}
+								</p>
+							</div>
+							<DialogFooter className="gap-2 px-6 pb-5 pt-3 sm:flex-row sm:justify-end sm:gap-2 sm:px-6 sm:pb-5 sm:pt-3" style={{ "--primary": "262 46% 22%", "--primary-foreground": "0 0% 100%", "--accent": "262 45% 94%", "--accent-foreground": "262 46% 22%" } as CSSProperties}>
+								<Button type="button" variant="outline" onClick={() => setPlanConfigConfirmOpen(false)} disabled={isApplyingPlanConfig}>Back</Button>
+								<Button type="button" onClick={() => { setPlanConfigConfirmOpen(false); void applyPlanConfiguration(); }} disabled={isApplyingPlanConfig}>
+									{isApplyingPlanConfig && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+									{isPlanConfigIncrease ? "Upgrade & pay" : "Confirm downgrade"}
+								</Button>
+							</DialogFooter>
+						</DialogContent>
+					</Dialog>
+
 					<Dialog open={upgradeConfirmOpen} onOpenChange={setUpgradeConfirmOpen}>
-						<DialogContent className="sm:max-w-md">
-							<DialogHeader>
+						<DialogContent className="rounded-[20px] sm:max-w-[430px]" closeButtonClassName="text-foreground hover:bg-muted hover:text-foreground">
+							<DialogHeader className="!space-y-1 !px-6 !pb-3 !pt-5 sm:!px-6 sm:!pb-3 sm:!pt-6" style={{ "--background": "0 0% 100%", "--foreground": "262 20% 12%", "--muted-foreground": "258 15% 45%", backgroundColor: "#fff", color: "#21152f" } as CSSProperties}>
 								<DialogTitle>Confirm your upgrade</DialogTitle>
 								<DialogDescription>
-									Here's what you'll be billed. You'll confirm this once more with Paystack before anything is charged.
+									Here's what changes on your next invoice.
 								</DialogDescription>
 							</DialogHeader>
-							<div className={DIALOG_BODY_PADDING}>
+							<div className="space-y-3 px-6 py-3">
 							{recurringTotal ? (
 								<div className="space-y-1 rounded-lg bg-muted/50 p-3 text-sm">
 									<div className="flex items-center justify-between text-muted-foreground">
@@ -4217,7 +4315,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								</p>
 							)}
 							</div>
-							<DialogFooter className="gap-2 sm:gap-2">
+							<DialogFooter className="gap-2 px-6 pb-5 pt-3 sm:flex-row sm:justify-end sm:gap-2 sm:px-6 sm:pb-5 sm:pt-3" style={{ "--primary": "262 46% 22%", "--primary-foreground": "0 0% 100%", "--accent": "262 45% 94%", "--accent-foreground": "262 46% 22%" } as CSSProperties}>
 								<Button
 									type="button"
 									variant="outline"
@@ -4236,7 +4334,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									disabled={isStartingSubscriptionCheckout}
 								>
 									{isStartingSubscriptionCheckout && <Loader2 className="h-4 w-4 animate-spin" />}
-									Confirm & Continue to Payment
+									Upgrade &amp; pay
 								</Button>
 							</DialogFooter>
 						</DialogContent>
@@ -4545,7 +4643,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		branches: { title: "Manage Branches", subtitle: "Pause or configure bookings per branch location." },
 		booking: { title: "Booking Settings", subtitle: "Manage booking behaviour, payment rules, and scheduling capacity." },
 		notifications: { title: "Notifications", subtitle: "Configure email and SMS notifications for appointments and updates." },
-		subscription: { title: "Subscription", subtitle: "Manage your plan, billing, and add-ons." },
+		subscription: { title: "Subscription", subtitle: "Your plan, billing, and add-ons." },
 		"custom-domain": { title: "Custom Domain", subtitle: "Connect your own domain to your public booking page." },
 		sessions: { title: "Active Sessions", subtitle: "View and manage active login sessions across your account." },
 	};

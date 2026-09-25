@@ -15,7 +15,7 @@ export const ROUTE_DEFINITIONS: RouteDefinition[] = [
   { module: "services", path: "/salon/services", order: 60 },
   { module: "payments", path: "/salon/transactions", order: 70 },
   { module: "reports", path: "/salon/reports", order: 80 },
-  { module: "messaging", path: "/salon/messaging", order: 90 },
+  { module: "messaging", path: "/salon/marketing", order: 90 },
   { module: "journal", path: "/salon/cash-tracker", order: 100 },
   { module: "staff", path: "/salon/staff", order: 110 },
   { module: "billing", path: "/salon/subscription", order: 115 },
