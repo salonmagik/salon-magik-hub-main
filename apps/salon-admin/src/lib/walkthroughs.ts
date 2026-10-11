@@ -830,7 +830,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     requiresOwnerHub: true,
     buildStep: () => ({
       id: "hub.subscription-addons",
-      path: "/salon/subscription",
+      path: "/salon/subscription?tab=addons",
       target: '[data-tour-id="tour-subscription-addons"]',
       title: "Add-ons",
       content: "Optional extras like Staff Operations (check-ins, time-off, leave allowances) live here.",

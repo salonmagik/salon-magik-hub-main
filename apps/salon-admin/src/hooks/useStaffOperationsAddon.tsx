@@ -38,13 +38,13 @@ export function useStaffOperationsAddon() {
     queryFn: async () => {
       if (!currentTenant?.id) return null;
       const { data, error } = await (supabase.from as any)("tenant_addon_entitlements")
-        .select("id,status,started_at")
+        .select("id,status,started_at,ends_at")
         .eq("tenant_id", currentTenant.id)
         .eq("addon_type", "staff_operations")
         .eq("status", "active")
         .maybeSingle();
       if (error) throw error;
-      return data as { id: string; status: string; started_at: string } | null;
+      return data as { id: string; status: string; started_at: string; ends_at: string | null } | null;
     },
     enabled: Boolean(currentTenant?.id),
   });
@@ -64,6 +64,7 @@ export function useStaffOperationsAddon() {
   });
 
   const isEnabled = Boolean(entitlement?.id);
+  const expiresAt = entitlement?.ends_at ? new Date(entitlement.ends_at) : null;
   const isPlanEligible = ["studio", "chain"].includes(String(currentTenant?.plan || "").toLowerCase());
   const monthlyTotal = Number(pricing?.unit_price_per_location || 0) * locationCount;
   const hasValidPrice =
@@ -74,34 +75,72 @@ export function useStaffOperationsAddon() {
     ? new Intl.NumberFormat("en", { style: "currency", currency: pricing!.currency, maximumFractionDigits: 2 }).format(monthlyTotal)
     : null;
 
-  const toggle = async () => {
-    if (!currentTenant?.id) return;
+  const refreshAfterChange = async () => {
+    await queryClient.invalidateQueries({ queryKey: ["staff-operations-addon-entitlement", currentTenant?.id] });
+    await queryClient.invalidateQueries({ queryKey: ["tenant-runtime-entitlements", currentTenant?.id] });
+    await queryClient.invalidateQueries({ queryKey: ["tenant-recurring-total", currentTenant?.id] });
+  };
+
+  // Disabling is free and immediate. Enabling is a standalone, fixed-term
+  // purchase — it's billed on its own 30-day term via Paystack, not folded
+  // into the subscription's recurring total, so turning it off before that
+  // term is up doesn't refund it and turning it back on starts a fresh term.
+  const disable = async () => {
+    if (!currentTenant?.id) return false;
     setIsUpdating(true);
     try {
-      const functionName = isEnabled ? "cancel_staff_operations_addon" : "activate_staff_operations_addon";
-      const { error } = await (supabase.rpc as any)(functionName, {
+      const { error } = await (supabase.rpc as any)("cancel_staff_operations_addon", {
         p_tenant_id: currentTenant.id,
-        p_reason: isEnabled ? "Disabled by owner" : "Enabled by owner",
+        p_reason: "Disabled by owner",
       });
       if (error) throw error;
-      await queryClient.invalidateQueries({ queryKey: ["staff-operations-addon-entitlement", currentTenant?.id] });
-      await queryClient.invalidateQueries({ queryKey: ["tenant-runtime-entitlements", currentTenant?.id] });
-      // Without this, the Subscription tab's "Total this cycle" card and
-      // upgrade-confirm dialog keep showing the pre-toggle total for the
-      // rest of the session — the add-on is billed correctly either way,
-      // but looks like an unexplained/hidden charge until a full reload.
-      await queryClient.invalidateQueries({ queryKey: ["tenant-recurring-total", currentTenant?.id] });
+      await refreshAfterChange();
       toast({
-        title: isEnabled ? "Staff Operations disabled" : "Staff Operations enabled",
-        description: isEnabled
-          ? "Check-ins and time-off management are no longer billed."
-          : "Check-ins and time-off management are ready to use.",
+        title: "Staff Operations disabled",
+        description: "Check-ins and time-off management are turned off.",
       });
       return true;
     } catch (error: any) {
-      const isPlanIneligible = String(error?.message || "").includes("PLAN_NOT_ELIGIBLE");
       toast({
-        title: "Could not update add-on",
+        title: "Could not disable add-on",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const purchase = async () => {
+    if (!currentTenant?.id) return false;
+    setIsUpdating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-staff-operations-checkout-session", {
+        body: {
+          tenantId: currentTenant.id,
+          successUrl: `${window.location.origin}${window.location.pathname}?staffopsaddon=success`,
+          cancelUrl: `${window.location.origin}${window.location.pathname}?staffopsaddon=cancelled`,
+        },
+      });
+      if (error) throw error;
+
+      if (data?.url) {
+        window.location.href = data.url;
+        return true;
+      }
+
+      // Charged immediately via stored card — no redirect needed.
+      await refreshAfterChange();
+      toast({
+        title: "Staff Operations enabled",
+        description: "Check-ins and time-off management are ready to use for the next 30 days.",
+      });
+      return true;
+    } catch (error: any) {
+      const isPlanIneligible = String(error?.message || "").includes("PLAN_NOT_ELIGIBLE") || String(error?.message || "").includes("STAFF_OPERATIONS_PURCHASE_FORBIDDEN");
+      toast({
+        title: "Could not enable add-on",
         description: isPlanIneligible
           ? "Staff Operations is available on Studio and Chain plans. Upgrade your plan to enable it."
           : error?.message || "Please try again.",
@@ -113,8 +152,11 @@ export function useStaffOperationsAddon() {
     }
   };
 
+  const toggle = async () => (isEnabled ? disable() : purchase());
+
   return {
     isEnabled,
+    expiresAt,
     isPlanEligible,
     locationCount,
     monthlyTotal,
@@ -122,5 +164,7 @@ export function useStaffOperationsAddon() {
     priceLabel,
     isUpdating,
     toggle,
+    purchase,
+    disable,
   };
 }

@@ -8,6 +8,7 @@ const flows = {
   planconfig: { endpoint: "verify-plan-configuration-payment", result: "applied", title: "Your plan is updated!", description: "Your new branches and team seats are ready to use." },
   billing: { endpoint: "verify-recurring-billing-retry-session", result: "applied", title: "You’re all set!", description: "Your payment method is updated and your subscription is active again." },
   themepurchase: { endpoint: "verify-theme-purchase-payment", result: "applied", title: "Your new look is ready!", description: "Your storefront theme is now active on your booking site." },
+  staffopsaddon: { endpoint: "verify-staff-operations-purchase-payment", result: "applied", title: "Staff Operations is active!", description: "Check-ins and time-off management are ready to use for the next 30 days." },
 } as const;
 
 export function PaymentReturnFeedback({ tenantId, refresh }: { tenantId?: string; refresh: () => Promise<unknown> }) {
