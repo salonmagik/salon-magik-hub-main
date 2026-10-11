@@ -52,7 +52,7 @@ export function ReportsDashboard({ stats, isLoading, segments, segmentsLoading, 
 
   return <div className="reports-dashboard" aria-busy={isLoading}>
     <div className="report-heading">
-      <div><h1>Reports</h1><p>How the business is doing, at a glance and in depth.</p></div>
+      <div><h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Reports</h1><p>How the business is doing, at a glance and in depth.</p></div>
       <div className="report-actions" data-tour-id="tour-reports-filters">
         <div className="report-periods" aria-label="Reporting period">
           {([['today', 'Today'], ['week', 'This week'], ['month', 'This month']] as const).map(([value, label]) => <button type="button" key={value} aria-pressed={period === value} onClick={() => onPeriodChange(value)}>{label}</button>)}

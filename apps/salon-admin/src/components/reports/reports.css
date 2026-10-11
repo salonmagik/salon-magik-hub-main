@@ -1,7 +1,6 @@
 .reports-dashboard { --report-muted: hsl(var(--muted-foreground)); --report-border: hsl(var(--border)); --report-primary: hsl(var(--primary)); color: hsl(var(--foreground)); background: hsl(var(--surface)); font-family: 'Questrial', sans-serif; margin: -16px -12px 0; padding: 28px 16px 40px; display: flex; flex-direction: column; gap: 26px; }
 .reports-dashboard h1, .reports-dashboard h2, .reports-dashboard p { margin: 0; }
 .report-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: -6px; }
-.report-heading h1 { font: 500 32px/1.2 'Questrial', sans-serif; letter-spacing: -.6px; }
 .report-heading p { color: var(--report-muted); font: 400 13.5px/20px 'Questrial', sans-serif; margin-top: 5px; }
 .report-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
 .report-periods { display: flex; padding: 3px; border-radius: 24px; background: hsl(var(--muted)); }
@@ -16,7 +15,7 @@
 .report-metric { background: hsl(var(--card)); border: 1px solid var(--report-border); border-radius: 15px; padding: 14px 18px 13px; min-width: 0; min-height: 83px; }
 .report-metric-large { padding: 14px 20px; min-height: 112px; }
 .report-metric-label { color: var(--report-muted); font-size: 14px; line-height: 20px; }
-.report-metric-value { font: 500 25px/1.2 'Fraunces', Georgia, serif; margin-top: 4px; overflow-wrap: anywhere; }
+.report-metric-value { font: 500 25px/1.2 'Questrial', sans-serif; margin-top: 4px; overflow-wrap: anywhere; }
 .report-metric-large .report-metric-value { font-size: 30px; margin-top: 5px; }
 .report-metric-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; color: #8d98ac; font-size: 12px; line-height: 16px; margin-top: 5px; }
 .report-change { display: inline-flex; align-items: center; gap: 4px; }
@@ -35,7 +34,7 @@
 .report-breakdowns .report-panel { min-height: 214px; }
 .report-services { list-style: none; padding: 0 6px; margin: 10px 0 0; }
 .report-services li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 0; font-size: 14px; line-height: 21px; }
-.report-services strong, .report-staff strong { font: 500 15px/22px 'Fraunces', Georgia, serif; white-space: nowrap; }
+.report-services strong, .report-staff strong { font: 500 15px/22px 'Questrial', sans-serif; white-space: nowrap; }
 .report-payments { list-style: none; margin: 8px 0 0; padding: 0; }
 .report-payments li { margin-top: 10px; }
 .report-payments li:first-child { margin-top: 0; }
@@ -58,11 +57,11 @@
 .report-segment { position: relative; min-width: 0; }
 .report-segment-open { background: white; border: 1px solid var(--report-border); border-radius: 15px; display: flex; flex-direction: column; width: 100%; padding: 18px 14px 12px; text-align: left; min-height: 98px; }
 .report-segment-open i { width: 9px; height: 9px; border-radius: 50%; margin-bottom: 13px; }
-.report-segment-open strong { font: 500 21px/24px 'Fraunces', Georgia, serif; }.report-segment-open > span { color: var(--report-muted); font-size: 13px; line-height: 18px; }
+.report-segment-open strong { font: 500 21px/24px 'Questrial', sans-serif; }.report-segment-open > span { color: var(--report-muted); font-size: 13px; line-height: 18px; }
 .report-segment-info { position: absolute; right: 8px; top: 9px; padding: 7px; color: #8d98ac; border-radius: 50%; }
 .report-insights { display: flex; flex-wrap: wrap; gap: 18px 32px; background: #f1edfb; border: 1px solid #e1d5ff; border-radius: 17px; padding: 17px 22px; }
 .report-insights h2 { font: 400 11px/16px 'Questrial', sans-serif; color: hsl(var(--primary-light)); text-transform: uppercase; margin-bottom: 2px; }
-.report-insights strong { font: 500 17px/22px 'Fraunces', Georgia, serif; }
+.report-insights strong { font: 500 17px/22px 'Questrial', sans-serif; }
 .report-empty { display: grid; place-items: center; min-height: 130px; color: var(--report-muted); font-size: 14px; text-align: center; padding: 20px; }
 .report-staff-details { padding: 24px; }.report-staff-details > div { display: flex; justify-content: space-between; gap: 20px; padding: 10px 0; }.report-staff-details dt { color: #667087; }.report-staff-details dd { font-weight: 600; }
 @media (min-width: 640px) { .reports-dashboard { margin-left: -16px; margin-right: -16px; padding: 36px 24px 42px; } }

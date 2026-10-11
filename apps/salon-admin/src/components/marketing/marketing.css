@@ -1,7 +1,6 @@
 .marketing-page { --mk-border: hsl(var(--border)); --mk-muted: hsl(var(--muted-foreground)); --mk-purple: hsl(var(--primary)); color: hsl(var(--foreground)); background: hsl(var(--surface)); margin: -16px -12px 0; padding: 28px 16px 48px; min-height: calc(100dvh - 64px); font: 14px/1.4 'Questrial', sans-serif; }
 .marketing-page h1, .marketing-page h2, .marketing-page p { margin: 0; }
 .marketing-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
-.marketing-heading h1 { font: 500 32px/1.2 'Questrial', sans-serif; letter-spacing: -.5px; }
 .marketing-heading p { color: #667087; font: 400 13.5px/20px 'Questrial', sans-serif; margin-top: 5px; }
 .marketing-actions { display: flex; align-items: center; flex-shrink: 0; gap: 10px; }
 .marketing-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid var(--mk-border); border-radius: 24px; padding: 8px 16px; min-height: 34px; font-size: 12px; font-weight: 600; background: white; white-space: nowrap; }
@@ -15,7 +14,7 @@
 .marketing-metric { display: flex; align-items: center; gap: 14px; background: hsl(var(--card)); border: 1px solid var(--mk-border); border-radius: 14px; padding: 18px; min-height: 75px; }
 .marketing-metric-icon { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; background: #eee8fa; color: #68538d; border-radius: 11px; }
 .marketing-metric-icon.email { color: #4e78ff; background: #eaf2ff; }
-.marketing-metric strong { font: 500 25px/26px 'Fraunces', Georgia, serif; display: block; }
+.marketing-metric strong { font: 500 25px/26px 'Questrial', sans-serif; display: block; }
 .marketing-metric p { font-size: 12px; line-height: 16px; color: #667087; }
 .marketing-metric.unavailable { background: transparent; color: #a5adba; }
 .marketing-metric.unavailable p { color: #a5adba; }
@@ -81,7 +80,7 @@
 .marketing-send { width: 100%; margin-top: 13px; padding: 10px 12px; }.marketing-buy-more { margin-top: 8px; width: 100%; }
 .marketing-send-notices:empty { display: none; }.marketing-send-notices p { font-size: 11px; color: #958266; margin-top: 8px; }.marketing-negative, .marketing-send-notices .marketing-negative { color: #c14b40; }
 .marketing-notice { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; border: 1px solid #efddad; background: #fffaf0; padding: 14px 18px; border-radius: 14px; font-size: 13px; margin-bottom: 18px; }
-.marketing-confirmation { display: flex; align-items: center; gap: 14px; border: 1px solid #b8efca; background: #effbf3; border-radius: 15px; padding: 20px 24px; margin-bottom: 20px; color: #22733c; }.marketing-confirmation h2 { font: 500 17px/23px 'Fraunces', Georgia, serif; color: #171715; }.marketing-confirmation p { font-size: 12px; }.marketing-confirmation-icon { border-radius: 50%; background: #dcfce8; display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; }.marketing-confirmation-actions { display: flex; gap: 10px; margin-left: auto; }.marketing-confirmation.partial { border-color: #efddad; background: #fffaf0; color: #997329; }
+.marketing-confirmation { display: flex; align-items: center; gap: 14px; border: 1px solid #b8efca; background: #effbf3; border-radius: 15px; padding: 20px 24px; margin-bottom: 20px; color: #22733c; }.marketing-confirmation h2 { font: 500 17px/23px 'Questrial', sans-serif; color: #171715; }.marketing-confirmation p { font-size: 12px; }.marketing-confirmation-icon { border-radius: 50%; background: #dcfce8; display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; }.marketing-confirmation-actions { display: flex; gap: 10px; margin-left: auto; }.marketing-confirmation.partial { border-color: #efddad; background: #fffaf0; color: #997329; }
 .marketing-template-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 9px; }.marketing-template-heading h2 { font: 400 14px/20px 'Questrial', sans-serif; }.marketing-template-heading p { color: var(--mk-muted); font-size: 12px; }
 .marketing-list { border: 1px solid var(--mk-border); border-radius: 14px; background: white; overflow: hidden; }
 .marketing-template-row { display: flex; align-items: center; gap: 12px; width: 100%; border-bottom: 1px solid #f0eeea; padding: 14px 18px; text-align: left; }.marketing-template-row:last-child { border-bottom: 0; }.marketing-template-row > span:first-child { flex: 1; }.marketing-template-row strong { display: block; font-size: 13px; font-weight: 400; }.marketing-template-row small { display: block; color: var(--mk-muted); font-size: 12px; }.marketing-template-row > svg { color: #aab3c2; }.marketing-template-row:hover { background: #faf9fc; }

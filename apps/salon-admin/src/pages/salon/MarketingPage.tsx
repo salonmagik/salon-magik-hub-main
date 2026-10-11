@@ -1051,7 +1051,7 @@ export default function MarketingPage() {
       <div className="marketing-page">
         <div className="marketing-heading">
           <div>
-            <h1>Marketing</h1>
+            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Marketing</h1>
             <p>Send announcements and reminders by email and SMS. This is broadcast messaging — not a live chat with customers.</p>
           </div>
           <div className="marketing-actions">

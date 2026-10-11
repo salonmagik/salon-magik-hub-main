@@ -145,7 +145,7 @@ export default function SalonsOverviewPage() {
       <MobileQuickActionEffect action={mobileQuickAction} />
       <div className="business-overview">
         <header className="business-overview__header">
-          <div><h1>Business Overview</h1><p>{activeContextType === "owner_hub" ? "Track how your branches are performing across bookings, revenue, and staffing." : `Branch-scoped overview for ${availableContexts.find((context) => context.locationId === activeLocationId)?.label || "Selected branch"}`}</p></div>
+          <div><h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Business Overview</h1><p>{activeContextType === "owner_hub" ? "Track how your branches are performing across bookings, revenue, and staffing." : `Branch-scoped overview for ${availableContexts.find((context) => context.locationId === activeLocationId)?.label || "Selected branch"}`}</p></div>
           <div className="business-overview__actions">
             {availableCountries.length > 1 && <Select value={effectiveCountry} onValueChange={setSelectedCountry}><SelectTrigger className="business-overview__country"><SelectValue /></SelectTrigger><SelectContent>{availableCountries.map((country) => <SelectItem key={country} value={country}>{countryName(country)}</SelectItem>)}</SelectContent></Select>}
             <Select value={dateRange} onValueChange={(value) => setDateRange(value as DateRange)}><SelectTrigger className="business-overview__period"><Calendar /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="today">Today</SelectItem><SelectItem value="week">This Week</SelectItem><SelectItem value="month">This Month</SelectItem></SelectContent></Select>
