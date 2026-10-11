@@ -18,8 +18,19 @@ interface GeoResult {
   country?: string;
 }
 
+function isPrivateOrLoopbackIp(ip: string): boolean {
+  if (!ip || ip === "127.0.0.1" || ip === "::1") return true;
+  if (ip.startsWith("192.168.") || ip.startsWith("10.")) return true;
+  // 172.16.0.0/12 — the third RFC1918 private range, previously missing
+  // here, so an internal 172.x address was being sent to a third-party geo
+  // API unnecessarily instead of short-circuiting like the other two.
+  const secondOctet = Number(ip.split(".")[1]);
+  if (ip.startsWith("172.") && Number.isInteger(secondOctet) && secondOctet >= 16 && secondOctet <= 31) return true;
+  return false;
+}
+
 async function lookupGeo(ip: string): Promise<GeoResult> {
-  if (!ip || ip === "127.0.0.1" || ip.startsWith("192.168.") || ip.startsWith("10.") || ip === "::1") {
+  if (isPrivateOrLoopbackIp(ip)) {
     return {};
   }
   try {
