@@ -288,10 +288,6 @@ serve(async (req) => {
               <td style="color:#6b7280;font-size:13px;padding:4px 0;">Time</td>
               <td style="color:#111827;font-size:13px;font-weight:500;padding:4px 0;">${signInTime}</td>
             </tr>
-            <tr>
-              <td style="color:#6b7280;font-size:13px;padding:4px 0;">IP address</td>
-              <td style="color:#111827;font-size:13px;font-weight:500;padding:4px 0;">${ip || "Unknown"}</td>
-            </tr>
           </table>
         </div>
         <p style="color:#4b5563;font-size:15px;line-height:1.6;margin:0 0 24px;">
