@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency } from "../_shared/paystack-helpers.ts";
+import { getPaystackKeyForCurrency, ensureSubscriptionScheduled } from "../_shared/paystack-helpers.ts";
 import { sendReceiptEmail } from "../_shared/receipts.ts";
 
 const corsHeaders = {
@@ -149,6 +149,7 @@ serve(async (req) => {
       tenantUpdate.paystack_authorization_email = txData?.customer?.email || null;
     }
     await supabase.from("tenants").update(tenantUpdate).eq("id", tenantId);
+    await ensureSubscriptionScheduled(supabase, tenantId);
 
     const { error: activateError } = await userClient.rpc("purchase_tenant_theme_addon_and_log_billing", {
       p_tenant_id: tenantId,

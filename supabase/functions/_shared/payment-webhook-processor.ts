@@ -6,7 +6,7 @@ import {
   sendResendEmail,
 } from "./salon-notifications.ts";
 import { buildFromAddress, wrapEmailTemplate } from "./email-template.ts";
-import { mapPaystackChannelToPaymentMethod, getNextBillingAt } from "./paystack-helpers.ts";
+import { mapPaystackChannelToPaymentMethod, getNextBillingAt, ensureSubscriptionScheduled } from "./paystack-helpers.ts";
 import { notifyWithdrawalOutcome } from "./withdrawal-notifications.ts";
 
 function currencyForCountry(country: string | null | undefined, fallback: string): string {
@@ -442,6 +442,35 @@ export async function processWebhook(
           console.error("Failed to activate tenant subscription:", activationError);
         } else {
           console.log(`Tenant ${tenantId} subscription activated via webhook.`);
+        }
+        return;
+      }
+
+      // Same "browser might not come back" gap as subscription_activation
+      // above, for the three one-off purchases that also flip a tenant to
+      // active as a side effect (theme, staff operations, plan-config
+      // change) -- each already does this in its own verify-*-payment
+      // function when the browser *does* redirect, but that's not
+      // guaranteed. This webhook path is the reliable backstop for all of
+      // them, same reasoning as subscription_activation's.
+      if (
+        (intent === "theme_purchase" || intent === "staff_operations_purchase" || intent === "plan_configuration") &&
+        tenantId && isValidUUID(tenantId)
+      ) {
+        const tenantUpdate: Record<string, unknown> = { subscription_status: "active" };
+        if (authorizationReusable && authorizationCode) {
+          tenantUpdate.paystack_authorization_code = authorizationCode;
+          tenantUpdate.paystack_customer_code = customerCode || null;
+          tenantUpdate.paystack_authorization_email = customerEmail || null;
+        }
+        const { error: activationError } = await supabase
+          .from("tenants")
+          .update(tenantUpdate)
+          .eq("id", tenantId);
+        if (activationError) {
+          console.error(`Failed to activate tenant ${tenantId} after ${intent} via webhook:`, activationError);
+        } else {
+          await ensureSubscriptionScheduled(supabase, tenantId);
         }
         return;
       }
