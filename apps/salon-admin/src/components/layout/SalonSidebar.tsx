@@ -1274,7 +1274,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							<BillingStateBanner />
 
 							{/* Page Content */}
-							<div ref={mobileContentRef} className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-3 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-4 lg:px-6 lg:pt-6 lg:pb-6">
+							<div ref={mobileContentRef} className="flex-1 min-w-0 overflow-x-hidden overflow-y-auto px-4 pt-7 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 sm:pt-9 lg:px-10 lg:pb-[42px]">
 								<div className="w-full min-w-0 max-w-full [&>*]:min-w-0">
 									<PromoTrialBonusBanner />
 									{children}
