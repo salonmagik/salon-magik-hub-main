@@ -20,6 +20,7 @@ import {
   Info,
   CreditCard,
   Calendar,
+  Users,
 } from "lucide-react";
 import { useDashboardStats } from "@/hooks/useDashboardStats";
 import type { LapsedClient, UpcomingAppointment } from "@/hooks/useDashboardStats";
@@ -327,139 +328,159 @@ export default function SalonDashboard() {
 				{/* ── 4 Stat cards ───────────────────────────────────────────── */}
 				<div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
 					{/* TODAY'S BOOKINGS */}
-					<div className="bg-white rounded-[14px] border border-black/[0.06] shadow-[0_2px_8px_rgba(20,16,20,0.05)] p-5">
+					<div className="flex items-start justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
 						{isLoading ? (
-							<>
+							<div className="w-full">
 								<Skeleton className="h-3 w-24 mb-4" />
 								<Skeleton className="h-9 w-12 mb-2" />
 								<Skeleton className="h-3 w-32" />
-							</>
+							</div>
 						) : (
 							<>
-								<p className="text-[12px] tracking-[0.05em] text-muted-foreground uppercase mb-2.5">
-									Today's Bookings
-								</p>
-								<p className="font-serif text-[26px] leading-none">
-									{stats.todayAppointments}
-								</p>
-								<div className="mt-2">
-									<TrendText
-										value={stats.todayBookingsTrend}
-										suffix={stats.todayBookingsTrend !== null && stats.todayBookingsTrend < 0 ? "fewer than usual" : "more than usual"}
-										nullLabel={`${stats.confirmedCount} confirmed`}
-									/>
+								<div>
+									<p className="text-xs text-muted-foreground sm:text-sm">
+										Today's Bookings
+									</p>
+									<p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">
+										{stats.todayAppointments}
+									</p>
+									<div className="mt-2">
+										<TrendText
+											value={stats.todayBookingsTrend}
+											suffix={stats.todayBookingsTrend !== null && stats.todayBookingsTrend < 0 ? "fewer than usual" : "more than usual"}
+											nullLabel={`${stats.confirmedCount} confirmed`}
+										/>
+									</div>
+								</div>
+								<div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+									<Calendar className="h-5 w-5 text-primary" />
 								</div>
 							</>
 						)}
 					</div>
 
 					{/* TOTAL REVENUE */}
-					<div className="bg-white rounded-[14px] border border-black/[0.06] shadow-[0_2px_8px_rgba(20,16,20,0.05)] p-5">
+					<div className="flex items-start justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
 						{isLoading ? (
-							<>
+							<div className="w-full">
 								<Skeleton className="h-3 w-24 mb-4" />
 								<Skeleton className="h-9 w-28 mb-2" />
 								<Skeleton className="h-3 w-32" />
-							</>
+							</div>
 						) : (
 							<>
-								<p className="text-[12px] tracking-[0.05em] text-muted-foreground uppercase mb-2.5">
-									Total Revenue
-								</p>
-								<p className="font-serif text-[26px] leading-none">
-									{canViewPayments
-										? `${currency} ${stats.revenueToday.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-										: "—"}
-								</p>
-								<div className="mt-2">
-									{canViewPayments && stats.revenueTrendPct !== null ? (
-										<TrendText
-											value={stats.revenueTrendPct}
-											suffix={`% vs last ${stats.trendDayName}`}
-										/>
-									) : (
-										<span className="text-xs text-muted-foreground">
-											Collected today
-										</span>
-									)}
+								<div>
+									<p className="text-xs text-muted-foreground sm:text-sm">
+										Total Revenue
+									</p>
+									<p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">
+										{canViewPayments
+											? `${currency} ${stats.revenueToday.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+											: "—"}
+									</p>
+									<div className="mt-2">
+										{canViewPayments && stats.revenueTrendPct !== null ? (
+											<TrendText
+												value={stats.revenueTrendPct}
+												suffix={`% vs last ${stats.trendDayName}`}
+											/>
+										) : (
+											<span className="text-xs text-muted-foreground">
+												Collected today
+											</span>
+										)}
+									</div>
+								</div>
+								<div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-purple-500/10">
+									<Wallet className="h-5 w-5 text-purple-600" />
 								</div>
 							</>
 						)}
 					</div>
 
 					{/* SHOW-UP RATE */}
-					<div className="bg-white rounded-[14px] border border-black/[0.06] shadow-[0_2px_8px_rgba(20,16,20,0.05)] p-5">
+					<div className="flex items-start justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
 						{isLoading ? (
-							<>
+							<div className="w-full">
 								<Skeleton className="h-3 w-24 mb-4" />
 								<Skeleton className="h-9 w-16 mb-2" />
 								<Skeleton className="h-3 w-28" />
-							</>
+							</div>
 						) : (
 							<>
-								<div className="flex items-center gap-1 mb-2.5">
-									<p className="text-[12px] tracking-[0.05em] text-muted-foreground uppercase">
-										Show-up Rate
+								<div>
+									<div className="flex items-center gap-1">
+										<p className="text-xs text-muted-foreground sm:text-sm">
+											Show-up Rate
+										</p>
+										<Tooltip>
+											<TooltipTrigger asChild>
+												<Info className="h-3 w-3 text-muted-foreground cursor-default" />
+											</TooltipTrigger>
+											<TooltipContent side="top" className="max-w-56 text-xs">
+												Share of booked appointments the customer actually showed up to, over the last 7 days.
+											</TooltipContent>
+										</Tooltip>
+									</div>
+									<p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">
+										{canViewReports && stats.showUpRate !== null
+											? `${stats.showUpRate}%`
+											: "—"}
 									</p>
-									<Tooltip>
-										<TooltipTrigger asChild>
-											<Info className="h-3 w-3 text-muted-foreground cursor-default" />
-										</TooltipTrigger>
-										<TooltipContent side="top" className="max-w-56 text-xs">
-											Share of booked appointments the customer actually showed up to, over the last 7 days.
-										</TooltipContent>
-									</Tooltip>
+									<div className="mt-2">
+										{canViewReports && stats.showUpRateTrend !== null ? (
+											<TrendText
+												value={stats.showUpRateTrend}
+												suffix="pts this week"
+												nullLabel="Last 7 days"
+											/>
+										) : (
+											<span className="text-xs text-muted-foreground">
+												Last 7 days
+											</span>
+										)}
+									</div>
 								</div>
-								<p className="font-serif text-[26px] leading-none">
-									{canViewReports && stats.showUpRate !== null
-										? `${stats.showUpRate}%`
-										: "—"}
-								</p>
-								<div className="mt-2">
-									{canViewReports && stats.showUpRateTrend !== null ? (
-										<TrendText
-											value={stats.showUpRateTrend}
-											suffix="pts this week"
-											nullLabel="Last 7 days"
-										/>
-									) : (
-										<span className="text-xs text-muted-foreground">
-											Last 7 days
-										</span>
-									)}
+								<div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-green-500/10">
+									<CheckCircle2 className="h-5 w-5 text-green-600" />
 								</div>
 							</>
 						)}
 					</div>
 
 					{/* NEW CLIENTS */}
-					<div className="bg-white rounded-[14px] border border-black/[0.06] shadow-[0_2px_8px_rgba(20,16,20,0.05)] p-5">
+					<div className="flex items-start justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
 						{isLoading ? (
-							<>
+							<div className="w-full">
 								<Skeleton className="h-3 w-20 mb-4" />
 								<Skeleton className="h-9 w-8 mb-2" />
 								<Skeleton className="h-3 w-28" />
-							</>
+							</div>
 						) : (
 							<>
-								<p className="text-[12px] tracking-[0.05em] text-muted-foreground uppercase mb-2.5">
-									New Clients
-								</p>
-								<p className="font-serif text-[26px] leading-none">
-									{canViewCustomers ? stats.newClientsThisWeek : "—"}
-								</p>
-								<div className="mt-2">
-									{canViewCustomers && stats.newClientsTrend !== null ? (
-										<TrendText
-											value={stats.newClientsTrend}
-											suffix="vs last week"
-											nullLabel="This week"
-										/>
-									) : (
-										<span className="text-xs text-muted-foreground">
-											This week
-										</span>
-									)}
+								<div>
+									<p className="text-xs text-muted-foreground sm:text-sm">
+										New Clients
+									</p>
+									<p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">
+										{canViewCustomers ? stats.newClientsThisWeek : "—"}
+									</p>
+									<div className="mt-2">
+										{canViewCustomers && stats.newClientsTrend !== null ? (
+											<TrendText
+												value={stats.newClientsTrend}
+												suffix="vs last week"
+												nullLabel="This week"
+											/>
+										) : (
+											<span className="text-xs text-muted-foreground">
+												This week
+											</span>
+										)}
+									</div>
+								</div>
+								<div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+									<Users className="h-5 w-5 text-primary" />
 								</div>
 							</>
 						)}

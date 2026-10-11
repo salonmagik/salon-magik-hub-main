@@ -323,6 +323,36 @@ export function getNextBillingAt(billingCycle: string | null | undefined): strin
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+/**
+ * Any flow that flips a tenant's subscription_status to "active" as a side
+ * effect of a one-off purchase (theme, staff operations, plan-config
+ * change) needs to guarantee the tenant is actually scheduled for
+ * recurring billing too -- otherwise "active" silently means "never
+ * billed, invisible to the recurring-billing cron, uses the product free
+ * forever" (confirmed in production: a tenant on an active Solo plan with
+ * no card on file and no next_billing_at). Call this right after setting
+ * subscription_status: "active" anywhere that isn't the real subscription-
+ * activation flow itself (which already sets next_billing_at directly).
+ * Guarded on next_billing_at already being set so it's a no-op once the
+ * tenant is genuinely on the recurring billing cron.
+ */
+// deno-lint-ignore no-explicit-any
+export async function ensureSubscriptionScheduled(supabase: any, tenantId: string): Promise<void> {
+  const { data: tenantRow } = await supabase
+    .from("tenants")
+    .select("next_billing_at, billing_cycle")
+    .eq("id", tenantId)
+    .maybeSingle();
+  if (tenantRow?.next_billing_at) return;
+  await supabase
+    .from("tenants")
+    .update({
+      next_billing_at: getNextBillingAt(tenantRow?.billing_cycle),
+      billing_retry_count: 0,
+    })
+    .eq("id", tenantId);
+}
+
 export interface PaystackSubscriptionResult {
   subscription: {
     subscription_code: string;

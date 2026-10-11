@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { getPaystackKeyForCurrency, chargeAuthorization } from "../_shared/paystack-helpers.ts";
+import { getPaystackKeyForCurrency, chargeAuthorization, ensureSubscriptionScheduled } from "../_shared/paystack-helpers.ts";
 import { sendReceiptEmail } from "../_shared/receipts.ts";
 
 const corsHeaders = {
@@ -176,6 +176,7 @@ serve(async (req) => {
       // trialing — without this, paying customers kept seeing trial-ending
       // banners forever.
       await supabase.from("tenants").update({ subscription_status: "active" }).eq("id", tenantId);
+      await ensureSubscriptionScheduled(supabase, tenantId);
 
       if (discountAmount > 0) {
         await supabase.rpc("consume_tenant_sales_promo_use", {
@@ -236,6 +237,7 @@ serve(async (req) => {
       }
 
       await supabase.from("tenants").update({ subscription_status: "active" }).eq("id", tenantId);
+      await ensureSubscriptionScheduled(supabase, tenantId);
 
       const promoReference = `plan-config:promo-covered:${crypto.randomUUID()}`;
       if (discountAmount > 0) {

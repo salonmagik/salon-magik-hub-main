@@ -8,12 +8,15 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
 import { Button } from "@ui/button";
+import { Badge } from "@ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { AddSalonDialog } from "@/components/dialogs/AddSalonDialog";
 import { LoadingState } from "@ui/loading-state";
 import { formatCurrency } from "@shared/currency";
 import { countryName } from "@/lib/countryCurrency";
+import { cn } from "@shared/utils";
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle, ArrowUpRight, Building2, Calendar, Check, ChevronRight, Coins, CreditCard, Gift,
@@ -149,24 +152,197 @@ export default function SalonsOverviewPage() {
           <div className="business-overview__actions">
             {availableCountries.length > 1 && <Select value={effectiveCountry} onValueChange={setSelectedCountry}><SelectTrigger className="business-overview__country"><SelectValue /></SelectTrigger><SelectContent>{availableCountries.map((country) => <SelectItem key={country} value={country}>{countryName(country)}</SelectItem>)}</SelectContent></Select>}
             <Select value={dateRange} onValueChange={(value) => setDateRange(value as DateRange)}><SelectTrigger className="business-overview__period"><Calendar /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="today">Today</SelectItem><SelectItem value="week">This Week</SelectItem><SelectItem value="month">This Month</SelectItem></SelectContent></Select>
-            <Button className="business-overview__add" onClick={() => setAddSalonOpen(true)}><Plus /> Add Branch</Button>
+            <Button className="rounded-full" onClick={() => setAddSalonOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add Branch</Button>
           </div>
         </header>
         {isLoading ? <div className="business-overview__loading">Loading your overview…</div> : error ? <div className="business-overview__error"><AlertCircle /><span>Failed to load branch data.</span><Button variant="outline" onClick={() => refetch()}>Try again</Button></div> : <>
-          {attentionCount === 0 ? <div className="business-overview__caught-up"><Check /> All caught up — nothing needs your attention right now.</div> : <section className="business-overview__attention"><div className="business-overview__section-title"><h2>Needs attention <span>{attentionCount}</span></h2></div>{aggregate && aggregate.pending > 0 && <AttentionRow tone="amber" title={`${aggregate.pending} pending approvals`} description="Awaiting your response — VI Branch, Main Location" action="Review" loading={reviewLoading && reviewBucket === "pending"} onClick={() => void loadReviewAppointments("pending")} />}{aggregate && aggregate.unpaid > 0 && <AttentionRow tone="red" title={`${aggregate.unpaid} unpaid balance${aggregate.unpaid === 1 ? "" : "s"}`} description="Not fully paid or refunded — Main Location" action="Review" loading={reviewLoading && reviewBucket === "unpaid"} onClick={() => void loadReviewAppointments("unpaid")} />}{pausedBranches.length > 0 && <AttentionRow tone="gray" title={`${pausedBranches.length} paused branch${pausedBranches.length === 1 ? "" : "es"}`} description={`${pausedBranches[0]?.label || "Branch"} — not taking new bookings`} action="Revive" onClick={() => pausedBranches[0]?.locationId && handleRevive(pausedBranches[0].locationId)} />}{pausedBranches.length > 0 && currentRole === "owner" && <div className="business-overview__revive-confirm"><span>Revive {pausedBranches[0]?.label || "this branch"} so it can take bookings again?</span><div><Button variant="outline">Not yet</Button><Button className="business-overview__revive" disabled={Boolean(revivingLocationId)} onClick={() => pausedBranches[0]?.locationId && handleRevive(pausedBranches[0].locationId)}>{revivingLocationId ? "Reviving…" : "Revive branch"}</Button></div></div>}</section>}
+          {attentionCount === 0 ? (
+            <div className="flex items-center gap-2 rounded-[14px] border border-border/60 shadow-sm bg-white px-4 py-4 mb-5 text-sm text-foreground">
+              <Check className="h-4 w-4 text-green-600" /> All caught up — nothing needs your attention right now.
+            </div>
+          ) : (
+            <section className="rounded-[14px] border border-border/60 shadow-sm bg-white px-4 py-3 mb-5">
+              <h2 className="flex items-center gap-2 text-sm font-semibold mb-1">
+                Needs attention
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive/10 px-1.5 text-xs font-semibold text-destructive">{attentionCount}</span>
+              </h2>
+              {aggregate && aggregate.pending > 0 && <AttentionRow tone="amber" title={`${aggregate.pending} pending approvals`} description="Awaiting your response — VI Branch, Main Location" action="Review" loading={reviewLoading && reviewBucket === "pending"} onClick={() => void loadReviewAppointments("pending")} />}
+              {aggregate && aggregate.unpaid > 0 && <AttentionRow tone="red" title={`${aggregate.unpaid} unpaid balance${aggregate.unpaid === 1 ? "" : "s"}`} description="Not fully paid or refunded — Main Location" action="Review" loading={reviewLoading && reviewBucket === "unpaid"} onClick={() => void loadReviewAppointments("unpaid")} />}
+              {pausedBranches.length > 0 && <AttentionRow tone="gray" title={`${pausedBranches.length} paused branch${pausedBranches.length === 1 ? "" : "es"}`} description={`${pausedBranches[0]?.label || "Branch"} — not taking new bookings`} action="Revive" onClick={() => pausedBranches[0]?.locationId && handleRevive(pausedBranches[0].locationId)} />}
+              {pausedBranches.length > 0 && currentRole === "owner" && (
+                <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-3 mt-1 text-sm">
+                  <span>Revive {pausedBranches[0]?.label || "this branch"} so it can take bookings again?</span>
+                  <div className="flex gap-2 flex-shrink-0">
+                    <Button variant="outline" size="sm" className="rounded-full">Not yet</Button>
+                    <Button size="sm" className="rounded-full" disabled={Boolean(revivingLocationId)} onClick={() => pausedBranches[0]?.locationId && handleRevive(pausedBranches[0].locationId)}>{revivingLocationId ? "Reviving…" : "Revive branch"}</Button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
           {aggregate && <><OverviewSectionLabel>At a glance · {dateRange === "week" ? "this week" : dateRange}</OverviewSectionLabel><div className="business-overview__metrics" data-tour-id="tour-hub-overview"><MetricCard icon={Building2} label="Branches" value={filteredLocations.length} />{canViewRevenue && <MetricCard icon={Coins} label="Inflow" value={formatCurrency(aggregate.revenue, aggregate.currency)} tone="purple" />}<MetricCard icon={Calendar} label="Bookings" value={aggregate.bookings} /><MetricCard icon={Users} label="Staff Online" value={aggregate.staff} tone="green" /></div></>}
-          <div className="business-overview__section-heading"><OverviewSectionLabel>Branches</OverviewSectionLabel><span>Click a branch for its full report</span></div><div className="business-overview__branches" data-tour-id="tour-branch-performance">{filteredLocations.map((location, index) => <BranchCard key={location.id} location={location} canViewRevenue={canViewRevenue} top={index === 0} needsAttention={location.unpaidBalances > 0 || location.staffOnline === 0} onClick={() => setSelectedLocation(location)} />)}{filteredLocations.length === 0 && <div className="business-overview__empty">Add a branch to see its performance here.</div>}</div>
-          <div className="business-overview__section-heading"><OverviewSectionLabel>Marketing overview · {dateRange === "week" ? "this week" : dateRange}</OverviewSectionLabel><Button variant="outline" className="business-overview__message" onClick={() => navigate("/salon/marketing")}><Plus /> Send a message</Button></div><div className="business-overview__marketing">{marketingCards.map(({ title, icon: Icon, tone, email, sms }) => <div className="business-overview__marketing-card" key={title}><div className={`business-overview__marketing-icon ${tone}`}><Icon /></div><strong>{title}</strong><div className="business-overview__channel-values"><span><Mail /> Email <b>{email}</b></span><span><MessageSquare /> SMS <b>{sms}</b></span></div></div>)}</div>
+          <div className="business-overview__section-heading"><OverviewSectionLabel>Branches</OverviewSectionLabel><span>Click a branch for its full report</span></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5" data-tour-id="tour-branch-performance">
+            {filteredLocations.map((location, index) => <BranchCard key={location.id} location={location} canViewRevenue={canViewRevenue} top={index === 0} needsAttention={location.unpaidBalances > 0 || location.staffOnline === 0} onClick={() => setSelectedLocation(location)} />)}
+            {filteredLocations.length === 0 && <div className="business-overview__empty">Add a branch to see its performance here.</div>}
+          </div>
+          <div className="business-overview__section-heading"><OverviewSectionLabel>Marketing overview · {dateRange === "week" ? "this week" : dateRange}</OverviewSectionLabel><Button variant="outline" className="rounded-full" onClick={() => navigate("/salon/marketing")}><Plus className="w-4 h-4 mr-2" /> Send a message</Button></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {marketingCards.map(({ title, icon: Icon, tone, email, sms }) => (
+              <div className="rounded-[14px] border border-border/60 shadow-sm bg-white p-4" key={title}>
+                <div className={cn(
+                  "flex h-10 w-10 items-center justify-center rounded-[10px] mb-3",
+                  tone === "purple" ? "bg-purple-500/10 text-purple-600" : tone === "pink" ? "bg-pink-500/10 text-pink-600" : "bg-muted text-muted-foreground",
+                )}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <p className="text-sm font-semibold">{title}</p>
+                <div className="flex gap-4 mt-2.5">
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Mail className="h-3.5 w-3.5" /> Email <b className="text-foreground font-semibold">{email}</b></span>
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground"><MessageSquare className="h-3.5 w-3.5" /> SMS <b className="text-foreground font-semibold">{sms}</b></span>
+                </div>
+              </div>
+            ))}
+          </div>
         </>}
       </div>
-      <Dialog open={Boolean(selectedLocation)} onOpenChange={(open) => !open && setSelectedLocation(null)}><DialogContent className="business-overview__detail-dialog"><DialogHeader><DialogTitle>{selectedLocation?.name}</DialogTitle><DialogDescription>{selectedLocation?.city}</DialogDescription></DialogHeader>{selectedLocation && <><div className="business-overview__detail-stats"><MetricCard label="Inflow" value={canViewRevenue ? formatCurrency(selectedLocation.revenue, selectedLocation.currency) : "—"} /><MetricCard label="Bookings" value={selectedLocation.bookingCount} /><MetricCard label="Staff" value={selectedLocation.staffOnline} tone="green" /></div><Button className="business-overview__full-report" onClick={async () => { await setActiveContext("location", selectedLocation.id); navigate("/salon/reports"); }}>Open full report <ArrowUpRight /></Button></>}</DialogContent></Dialog>
-      <Dialog open={Boolean(reviewBucket)} onOpenChange={(open) => !open && setReviewBucket(null)}><DialogContent className="business-overview__review-dialog"><DialogHeader><DialogTitle>{reviewBucket === "pending" ? "Pending approvals" : "Unpaid balances"}</DialogTitle><DialogDescription>Select an appointment to open its review screen.</DialogDescription></DialogHeader><div className="business-overview__review-list">{reviewAppointments.map((appointment) => { const location = locationById.get(appointment.location_id); const name = [appointment.customer?.first_name, appointment.customer?.last_name].filter(Boolean).join(" ") || "Unnamed customer"; return <button type="button" key={appointment.id} className="business-overview__review-item" onClick={() => void navigateToReviewAppointment(appointment, reviewBucket!)}><span><strong>{name}</strong><small>{location ? `${location.name} · ${location.city}` : "Branch"}{appointment.scheduled_start ? ` · ${new Date(appointment.scheduled_start).toLocaleDateString()}` : ""}</small></span><ChevronRight /></button>; })}{!reviewAppointments.length && <p className="business-overview__empty">No appointments need review.</p>}</div></DialogContent></Dialog>
+      <Dialog open={Boolean(selectedLocation)} onOpenChange={(open) => !open && setSelectedLocation(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{selectedLocation?.name}</DialogTitle>
+            <DialogDescription>{selectedLocation?.city}</DialogDescription>
+          </DialogHeader>
+          {selectedLocation && (
+            <>
+              <div className={cn(DIALOG_BODY_PADDING, "grid grid-cols-3 gap-4")}>
+                <div>
+                  <p className="text-xs text-muted-foreground">Inflow</p>
+                  <p className="mt-1 text-sm font-semibold">{canViewRevenue ? formatCurrency(selectedLocation.revenue, selectedLocation.currency) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Bookings</p>
+                  <p className="mt-1 text-sm font-semibold">{selectedLocation.bookingCount}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Staff</p>
+                  <p className={cn("mt-1 text-sm font-semibold", selectedLocation.staffOnline > 0 ? "text-green-600" : "text-destructive")}>{selectedLocation.staffOnline}</p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button className="rounded-full" onClick={async () => { await setActiveContext("location", selectedLocation.id); navigate("/salon/reports"); }}>
+                  Open full report <ArrowUpRight className="h-4 w-4 ml-2" />
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(reviewBucket)} onOpenChange={(open) => !open && setReviewBucket(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{reviewBucket === "pending" ? "Pending approvals" : "Unpaid balances"}</DialogTitle>
+            <DialogDescription>Select an appointment to open its review screen.</DialogDescription>
+          </DialogHeader>
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-2 max-h-[360px] overflow-y-auto")}>
+            {reviewAppointments.map((appointment) => {
+              const location = locationById.get(appointment.location_id);
+              const name = [appointment.customer?.first_name, appointment.customer?.last_name].filter(Boolean).join(" ") || "Unnamed customer";
+              return (
+                <button
+                  type="button"
+                  key={appointment.id}
+                  className="flex w-full items-center justify-between gap-3 rounded-[10px] border border-border/60 bg-white px-3 py-2.5 text-left hover:border-primary/40 hover:bg-muted/30"
+                  onClick={() => void navigateToReviewAppointment(appointment, reviewBucket!)}
+                >
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold truncate">{name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {location ? `${location.name} · ${location.city}` : "Branch"}
+                      {appointment.scheduled_start ? ` · ${new Date(appointment.scheduled_start).toLocaleDateString()}` : ""}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                </button>
+              );
+            })}
+            {!reviewAppointments.length && <p className="text-center text-sm text-muted-foreground py-6">No appointments need review.</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
       <AddSalonDialog open={addSalonOpen} onOpenChange={setAddSalonOpen} onSuccess={async () => { await Promise.all([refetch(), refreshTenants()]); }} compact />
     </SalonSidebar>
   );
 }
 
 function OverviewSectionLabel({ children }: { children: React.ReactNode }) { return <p className="business-overview__eyebrow">{children}</p>; }
-function MetricCard({ icon: Icon, label, value, tone = "default" }: { icon?: React.ComponentType<{ className?: string }>; label: string; value: React.ReactNode; tone?: string }) { return <div className={`business-overview__metric ${tone}`}>{Icon && <div className="business-overview__metric-icon"><Icon /></div>}<div><span>{label}</span><strong>{value}</strong></div></div>; }
-function AttentionRow({ tone, title, description, action, onClick, loading }: { tone: string; title: string; description: string; action: string; onClick: () => void; loading?: boolean }) { return <button type="button" className="business-overview__attention-row" onClick={onClick} disabled={loading}><span className={`business-overview__attention-icon ${tone}`}>{tone === "amber" ? <Clock3 /> : tone === "red" ? <CreditCard /> : <PauseCircle />}</span><span className="business-overview__attention-copy"><strong>{title}</strong><small>{description}</small></span><span className="business-overview__attention-action">{loading ? "Loading…" : action} <ChevronRight /></span></button>; }
-function BranchCard({ location, canViewRevenue, top, needsAttention, onClick }: { location: LocationPerformance; canViewRevenue: boolean; top: boolean; needsAttention: boolean; onClick: () => void }) { return <button type="button" className={`business-overview__branch-card ${needsAttention ? "attention" : ""}`} onClick={onClick}><div className="business-overview__branch-name"><span><strong>{location.name}</strong><small>{location.city}</small></span>{top && <em className="top">Top</em>}{needsAttention && <em className="needs">Needs attention</em>}</div><div className="business-overview__branch-stats"><span>Inflow <b>{canViewRevenue ? formatCurrency(location.revenue, location.currency) : "—"}</b></span><span>Bookings <b>{location.bookingCount}</b></span><span>Staff <b className={location.staffOnline > 0 ? "green-text" : "red-text"}>{location.staffOnline}</b></span></div></button>; }
+function MetricCard({ icon: Icon, label, value, tone = "default" }: { icon?: React.ComponentType<{ className?: string }>; label: string; value: React.ReactNode; tone?: string }) {
+	const iconBg = tone === "purple" ? "bg-purple-500/10" : tone === "green" ? "bg-green-500/10" : "bg-primary/[0.08]";
+	const iconColor = tone === "purple" ? "text-purple-600" : tone === "green" ? "text-green-600" : "text-primary";
+	return (
+		<div className={`business-overview__metric ${tone} flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm`}>
+			<div>
+				<span className="text-xs text-muted-foreground sm:text-sm">{label}</span>
+				<strong className="mt-1 block font-serif text-xl font-semibold sm:text-2xl">{value}</strong>
+			</div>
+			{Icon && (
+				<div className={`flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 ${iconBg}`}>
+					<Icon className={`h-5 w-5 ${iconColor}`} />
+				</div>
+			)}
+		</div>
+	);
+}
+function AttentionRow({ tone, title, description, action, onClick, loading }: { tone: string; title: string; description: string; action: string; onClick: () => void; loading?: boolean }) {
+	const iconBg = tone === "amber" ? "bg-amber-500/10 text-amber-600" : tone === "red" ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground";
+	return (
+		<button type="button" className="flex w-full items-center gap-3 border-t border-border/60 py-3 text-left first:border-t-0 disabled:opacity-60" onClick={onClick} disabled={loading}>
+			<span className={cn("flex h-9 w-9 items-center justify-center rounded-[8px] flex-shrink-0", iconBg)}>
+				{tone === "amber" ? <Clock3 className="h-4 w-4" /> : tone === "red" ? <CreditCard className="h-4 w-4" /> : <PauseCircle className="h-4 w-4" />}
+			</span>
+			<span className="min-w-0 flex-1">
+				<span className="block text-sm font-semibold">{title}</span>
+				<span className="block text-xs text-muted-foreground">{description}</span>
+			</span>
+			<span className="flex items-center gap-1 flex-shrink-0 text-xs font-semibold text-primary">
+				{loading ? "Loading…" : action} <ChevronRight className="h-3.5 w-3.5" />
+			</span>
+		</button>
+	);
+}
+function BranchCard({ location, canViewRevenue, top, needsAttention, onClick }: { location: LocationPerformance; canViewRevenue: boolean; top: boolean; needsAttention: boolean; onClick: () => void }) {
+	return (
+		<button
+			type="button"
+			onClick={onClick}
+			className={cn(
+				"text-left rounded-[14px] border shadow-sm bg-white p-4 transition-colors hover:border-primary/40",
+				needsAttention ? "border-amber-300 bg-amber-50/40" : "border-border/60",
+			)}
+		>
+			<div className="flex items-start justify-between gap-2">
+				<div className="min-w-0">
+					<p className="text-sm font-semibold truncate">{location.name}</p>
+					<p className="text-xs text-muted-foreground">{location.city}</p>
+				</div>
+				<div className="flex gap-1 flex-shrink-0">
+					{top && <Badge variant="success">Top</Badge>}
+					{needsAttention && <Badge variant="warning">Needs attention</Badge>}
+				</div>
+			</div>
+			<div className="flex gap-5 mt-3">
+				<div className="flex flex-col gap-0.5">
+					<span className="text-xs text-muted-foreground">Inflow</span>
+					<span className="text-sm font-semibold">{canViewRevenue ? formatCurrency(location.revenue, location.currency) : "—"}</span>
+				</div>
+				<div className="flex flex-col gap-0.5">
+					<span className="text-xs text-muted-foreground">Bookings</span>
+					<span className="text-sm font-semibold">{location.bookingCount}</span>
+				</div>
+				<div className="flex flex-col gap-0.5">
+					<span className="text-xs text-muted-foreground">Staff</span>
+					<span className={cn("text-sm font-semibold", location.staffOnline > 0 ? "text-green-600" : "text-destructive")}>{location.staffOnline}</span>
+				</div>
+			</div>
+		</button>
+	);
+}
