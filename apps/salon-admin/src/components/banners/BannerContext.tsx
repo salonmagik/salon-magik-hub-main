@@ -272,17 +272,28 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
         });
       }
 
+      // Only worth surfacing while SMS actually can't send right now — this
+      // used to show unconditionally for every NG branch all day, which
+      // read as "SMS is broken" even at 3pm when sending works fine.
       if (activeBranchCountry === "NG") {
-        result.push({
-          id: `nigeria-sms-window-${activeLocation?.id || "active"}`,
-          priority: 7,
-          variant: "warning",
-          title: "Nigeria SMS delivery window",
-          message: "SMS delivery is available from 8:00 a.m. to 8:00 p.m. Nigeria time.",
-          cta: { label: "Learn more", path: "/salon/marketing" },
-          dismissible: true,
-          blocking: false,
-        });
+        const nigeriaHour = Number(new Intl.DateTimeFormat("en-NG", {
+          timeZone: "Africa/Lagos",
+          hour: "2-digit",
+          hour12: false,
+        }).format(new Date()));
+        const outsideNigeriaSmsWindow = nigeriaHour < 8 || nigeriaHour >= 20;
+        if (outsideNigeriaSmsWindow) {
+          result.push({
+            id: `nigeria-sms-window-${activeLocation?.id || "active"}`,
+            priority: 7,
+            variant: "warning",
+            title: "Nigeria SMS delivery window",
+            message: "SMS delivery is available from 8:00 a.m. to 8:00 p.m. Nigeria time.",
+            cta: { label: "Learn more", path: "/salon/marketing" },
+            dismissible: true,
+            blocking: false,
+          });
+        }
       }
     }
 
