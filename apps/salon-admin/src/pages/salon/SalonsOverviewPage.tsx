@@ -10,7 +10,8 @@ import { toast } from "@ui/ui/use-toast";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@ui/dialog";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { AddSalonDialog } from "@/components/dialogs/AddSalonDialog";
 import { LoadingState } from "@ui/loading-state";
 import { formatCurrency } from "@shared/currency";
@@ -205,8 +206,69 @@ export default function SalonsOverviewPage() {
           </div>
         </>}
       </div>
-      <Dialog open={Boolean(selectedLocation)} onOpenChange={(open) => !open && setSelectedLocation(null)}><DialogContent className="business-overview__detail-dialog"><DialogHeader><DialogTitle>{selectedLocation?.name}</DialogTitle><DialogDescription>{selectedLocation?.city}</DialogDescription></DialogHeader>{selectedLocation && <><div className="business-overview__detail-stats"><MetricCard label="Inflow" value={canViewRevenue ? formatCurrency(selectedLocation.revenue, selectedLocation.currency) : "—"} /><MetricCard label="Bookings" value={selectedLocation.bookingCount} /><MetricCard label="Staff" value={selectedLocation.staffOnline} tone="green" /></div><Button className="business-overview__full-report" onClick={async () => { await setActiveContext("location", selectedLocation.id); navigate("/salon/reports"); }}>Open full report <ArrowUpRight /></Button></>}</DialogContent></Dialog>
-      <Dialog open={Boolean(reviewBucket)} onOpenChange={(open) => !open && setReviewBucket(null)}><DialogContent className="business-overview__review-dialog"><DialogHeader><DialogTitle>{reviewBucket === "pending" ? "Pending approvals" : "Unpaid balances"}</DialogTitle><DialogDescription>Select an appointment to open its review screen.</DialogDescription></DialogHeader><div className="business-overview__review-list">{reviewAppointments.map((appointment) => { const location = locationById.get(appointment.location_id); const name = [appointment.customer?.first_name, appointment.customer?.last_name].filter(Boolean).join(" ") || "Unnamed customer"; return <button type="button" key={appointment.id} className="business-overview__review-item" onClick={() => void navigateToReviewAppointment(appointment, reviewBucket!)}><span><strong>{name}</strong><small>{location ? `${location.name} · ${location.city}` : "Branch"}{appointment.scheduled_start ? ` · ${new Date(appointment.scheduled_start).toLocaleDateString()}` : ""}</small></span><ChevronRight /></button>; })}{!reviewAppointments.length && <p className="business-overview__empty">No appointments need review.</p>}</div></DialogContent></Dialog>
+      <Dialog open={Boolean(selectedLocation)} onOpenChange={(open) => !open && setSelectedLocation(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{selectedLocation?.name}</DialogTitle>
+            <DialogDescription>{selectedLocation?.city}</DialogDescription>
+          </DialogHeader>
+          {selectedLocation && (
+            <>
+              <div className={cn(DIALOG_BODY_PADDING, "grid grid-cols-3 gap-4")}>
+                <div>
+                  <p className="text-xs text-muted-foreground">Inflow</p>
+                  <p className="mt-1 text-sm font-semibold">{canViewRevenue ? formatCurrency(selectedLocation.revenue, selectedLocation.currency) : "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Bookings</p>
+                  <p className="mt-1 text-sm font-semibold">{selectedLocation.bookingCount}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Staff</p>
+                  <p className={cn("mt-1 text-sm font-semibold", selectedLocation.staffOnline > 0 ? "text-green-600" : "text-destructive")}>{selectedLocation.staffOnline}</p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button className="rounded-full" onClick={async () => { await setActiveContext("location", selectedLocation.id); navigate("/salon/reports"); }}>
+                  Open full report <ArrowUpRight className="h-4 w-4 ml-2" />
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(reviewBucket)} onOpenChange={(open) => !open && setReviewBucket(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{reviewBucket === "pending" ? "Pending approvals" : "Unpaid balances"}</DialogTitle>
+            <DialogDescription>Select an appointment to open its review screen.</DialogDescription>
+          </DialogHeader>
+          <div className={cn(DIALOG_BODY_PADDING, "space-y-2 max-h-[360px] overflow-y-auto")}>
+            {reviewAppointments.map((appointment) => {
+              const location = locationById.get(appointment.location_id);
+              const name = [appointment.customer?.first_name, appointment.customer?.last_name].filter(Boolean).join(" ") || "Unnamed customer";
+              return (
+                <button
+                  type="button"
+                  key={appointment.id}
+                  className="flex w-full items-center justify-between gap-3 rounded-[10px] border border-border/60 bg-white px-3 py-2.5 text-left hover:border-primary/40 hover:bg-muted/30"
+                  onClick={() => void navigateToReviewAppointment(appointment, reviewBucket!)}
+                >
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold truncate">{name}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {location ? `${location.name} · ${location.city}` : "Branch"}
+                      {appointment.scheduled_start ? ` · ${new Date(appointment.scheduled_start).toLocaleDateString()}` : ""}
+                    </span>
+                  </span>
+                  <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                </button>
+              );
+            })}
+            {!reviewAppointments.length && <p className="text-center text-sm text-muted-foreground py-6">No appointments need review.</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
       <AddSalonDialog open={addSalonOpen} onOpenChange={setAddSalonOpen} onSuccess={async () => { await Promise.all([refetch(), refreshTenants()]); }} compact />
     </SalonSidebar>
   );
