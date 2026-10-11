@@ -1,8 +1,4 @@
 @import '@fontsource/questrial';
-@import '@fontsource/fraunces/300.css';
-@import '@fontsource/fraunces/400.css';
-@import '@fontsource/fraunces/500.css';
-@import '@fontsource/fraunces/600.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

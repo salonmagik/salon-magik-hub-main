@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import type { CSSProperties } from "react";
 import type { TablesUpdate } from "@supabase-client";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -81,6 +82,7 @@ import {
 	Minus,
 	Plus,
 	Info,
+	ChevronDown,
 } from "lucide-react";
 import { cn } from "@shared/utils";
 import { useAuth } from "@/hooks/useAuth";
@@ -144,6 +146,7 @@ const BASE_SETTINGS_TABS = [
 	{ id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
 	{ id: "notifications", label: "Notifications", icon: Bell },
 	{ id: "subscription", label: "Subscription", icon: Zap },
+	{ id: "addons", label: "Add-ons", icon: Sparkles },
 	{ id: "custom-domain", label: "Custom Domain", icon: Globe },
 ] as const;
 
@@ -231,16 +234,22 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		refetch: refetchLocations,
 	} = useLocations();
 	const {
+		settingsRows: notificationSettingsRows,
 		getSettingsForLocation,
 		isSaving: notificationsSaving,
 		saveSettings: saveNotificationSettings,
+		removeLocationOverride: removeNotificationOverride,
 	} = useNotificationSettings(activeContextType === "location" ? activeLocationId : null);
 	const [subscriptionPromoCode, setSubscriptionPromoCode] = useState("");
+	const [subscriptionPromoOpen, setSubscriptionPromoOpen] = useState(false);
+	const [subscriptionPromoError, setSubscriptionPromoError] = useState<string | null>(null);
 	const [isStartingSubscriptionCheckout, setIsStartingSubscriptionCheckout] =
 		useState(false);
 	const [isPurchasingTheme, setIsPurchasingTheme] = useState(false);
 	const [branchesInput, setBranchesInput] = useState("1");
 	const [seatsInput, setSeatsInput] = useState("1");
+	const [subscriptionPlanConfigOpen, setSubscriptionPlanConfigOpen] = useState(false);
+	const [planConfigConfirmOpen, setPlanConfigConfirmOpen] = useState(false);
 	const planConfigSectionRef = useRef<HTMLDivElement>(null);
 	const [planConfigQuote, setPlanConfigQuote] = useState<{
 		current_plan_slug: string;
@@ -336,7 +345,10 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{ id: "sessions", label: "Active Sessions", icon: Shield },
 			];
 		} else if (resolvedScope === "subscription") {
-			tabs = [{ id: "subscription", label: "Subscription", icon: Zap }];
+			tabs = [
+				{ id: "subscription", label: "Subscription", icon: Zap },
+				{ id: "addons", label: "Add-ons", icon: Sparkles },
+			];
 		} else {
 			tabs = [...BASE_SETTINGS_TABS];
 		}
@@ -346,7 +358,10 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	}, [resolvedScope]);
 
 	const [activeTab, setActiveTab] = useState(() => {
-		if (resolvedScope === "subscription") return "subscription";
+		if (resolvedScope === "subscription") {
+			const tab = searchParams.get("tab");
+			return tab === "addons" ? "addons" : "subscription";
+		}
 		const tab = searchParams.get("tab");
 		return tab && settingsTabs.some((t) => t.id === tab) ? tab : "profile";
 	});
@@ -765,6 +780,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		emailBirthdayMessages: true,
 	});
 	const [notificationTargetId, setNotificationTargetId] = useState("all");
+	const [expandedBranchId, setExpandedBranchId] = useState<string | null>(null);
 
 	const [bookingSettings, setBookingSettings] = useState({
 		onlineBookingEnabled: false,
@@ -2326,268 +2342,464 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		}
 	};
 
-	const renderNotificationsTab = () => (
-		<Card>
-			{!isChainScope && (
-				<CardHeader>
-					<CardTitle>Notifications</CardTitle>
-					<CardDescription>
-						Configure how you and your customers receive notifications.
-					</CardDescription>
-				</CardHeader>
+	const renderChannelChip = (
+		label: string,
+		checked: boolean,
+		onToggle: () => void,
+		disabled: boolean,
+	) => (
+		<button
+			type="button"
+			disabled={disabled}
+			onClick={onToggle}
+			className={cn(
+				"inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+				checked
+					? "border-primary bg-primary/10 text-primary"
+					: "border-input bg-background text-muted-foreground hover:border-muted-foreground/40",
 			)}
-			<CardContent className={cn(isChainScope && "pt-6", "space-y-4")}>
-				{resolvedScope === "business" && (
-					<div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+		>
+			{label}
+		</button>
+	);
+
+	const renderNotificationsTab = () => {
+		const showBranchScope = resolvedScope === "business" && locations.length > 1;
+		const editingDefaults = notificationTargetId === "all";
+		const editingLocationName = !editingDefaults
+			? locations.find((location) => location.id === notificationTargetId)?.name
+			: null;
+
+		const defaultsRow = notificationSettingsRows?.find((row) => row.location_id === null);
+		const overriddenLocations = showBranchScope
+			? locations.filter((location) =>
+					notificationSettingsRows?.some((row) => row.location_id === location.id),
+				)
+			: [];
+
+		const fieldMeta: Array<{
+			key: keyof typeof notificationSettings;
+			column:
+				| "email_appointment_reminders"
+				| "sms_appointment_reminders"
+				| "email_new_bookings"
+				| "email_cancellations"
+				| "email_transaction_alerts"
+				| "in_app_transaction_alerts"
+				| "email_birthday_messages"
+				| "digest_frequency";
+			label: string;
+		}> = [
+			{ key: "emailAppointmentReminders", column: "email_appointment_reminders", label: "Email reminders" },
+			{ key: "smsAppointmentReminders", column: "sms_appointment_reminders", label: "SMS reminders" },
+			{ key: "emailNewBookings", column: "email_new_bookings", label: "New booking alerts" },
+			{ key: "emailCancellations", column: "email_cancellations", label: "Cancellation alerts" },
+			{ key: "emailTransactionAlerts", column: "email_transaction_alerts", label: "Email transaction alerts" },
+			{ key: "inAppTransactionAlerts", column: "in_app_transaction_alerts", label: "In-app transaction alerts" },
+			{ key: "emailBirthdayMessages", column: "email_birthday_messages", label: "Birthday messages" },
+			{ key: "digestFrequency", column: "digest_frequency", label: "Business digest" },
+		];
+
+		const nigerianSmsWindowApplies =
+			(notificationTargetId !== "all" &&
+				locations.find((location) => location.id === notificationTargetId)?.country === "NG") ||
+			(notificationTargetId === "all" && locations.some((location) => location.country === "NG")) ||
+			(resolvedScope !== "business" && activeLocation?.country === "NG");
+
+		return (
+			<div className="space-y-4">
+				{!editingDefaults && (
+					<div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
 						<div>
-							<p className="font-medium">Appointment reminder coverage</p>
+							<p className="font-medium">Editing {editingLocationName || "this branch"}</p>
 							<p className="text-sm text-muted-foreground">
-								Choose whether these settings apply to every branch or one branch only. Branch settings inherit the all-branches defaults until you change them.
+								These settings apply only to this branch. Anything you don't change here still follows your defaults.
 							</p>
 						</div>
-						<Select value={notificationTargetId} onValueChange={setNotificationTargetId}>
-							<SelectTrigger className="w-full sm:w-72">
-								<SelectValue placeholder="Choose branches" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">All branches</SelectItem>
-								{locations.map((location) => (
-									<SelectItem key={location.id} value={location.id}>
-										{location.name}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+						<Button variant="outline" size="sm" onClick={() => setNotificationTargetId("all")}>
+							Back to defaults
+						</Button>
 					</div>
 				)}
 
-				<div className="rounded-xl border p-4 space-y-1">
-					<div>
-						<p className="font-medium">Appointment reminders</p>
+				{showBranchScope && editingDefaults && (
+					<div className="flex items-start gap-2 rounded-xl border bg-muted/20 px-4 py-3">
+						<Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
 						<p className="text-sm text-muted-foreground">
-							Send automatic reminders at the times below. The 24-hour and 30-minute reminders are included by default; you can add one more reminder.
-						</p>
-					</div>
-					<div className="divide-y">
-				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p className="font-medium">Email appointment reminders</p>
-						<p className="text-sm text-muted-foreground">
-							Send customers email reminders before appointments
-						</p>
-					</div>
-					<Switch
-						checked={notificationSettings.emailAppointmentReminders}
-						disabled={notificationsSaving}
-						onCheckedChange={(checked) =>
-							handleNotificationToggle("emailAppointmentReminders", checked)
-						}
-					/>
-				</div>
-
-				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p className="font-medium">SMS appointment reminders</p>
-						<p className="text-sm text-muted-foreground">
-							Send customers SMS reminders (uses credits; country delivery rules apply)
-						</p>
-					</div>
-					<Switch
-						checked={notificationSettings.smsAppointmentReminders}
-						disabled={notificationsSaving}
-						onCheckedChange={(checked) =>
-							handleNotificationToggle("smsAppointmentReminders", checked)
-						}
-					/>
-				</div>
-
-				{((notificationTargetId !== "all" && locations.find((location) => location.id === notificationTargetId)?.country === "NG") ||
-					(notificationTargetId === "all" && locations.some((location) => location.country === "NG")) ||
-					(resolvedScope !== "business" && activeLocation?.country === "NG")) && (
-					<div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-						<Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-						<p>
-							Nigerian telecom operators enforce an 8:00 a.m.–8:00 p.m. Nigeria-time SMS window. This legal and telco requirement cannot be bypassed; sends outside the window are disabled.
+							These are your defaults, applied across all {locations.length} branches
+							{overriddenLocations.length > 0
+								? ` — ${overriddenLocations.length} ${overriddenLocations.length === 1 ? "branch customizes" : "branches customize"} them below.`
+								: "."}
 						</p>
 					</div>
 				)}
 
-				{(notificationSettings.emailAppointmentReminders || notificationSettings.smsAppointmentReminders) && (
-					<div className="mt-3 space-y-3 border-t pt-3">
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+				{/* For your clients */}
+				<Card>
+					{!isChainScope && (
+						<CardHeader className="flex-row items-center gap-3 space-y-0">
+							<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+								<User className="h-[18px] w-[18px]" aria-hidden="true" />
+							</div>
 							<div>
-								<p className="font-medium text-sm">First reminder</p>
-								<p className="text-sm text-muted-foreground">The earlier reminder before the appointment</p>
+								<CardTitle className="text-base">For your clients</CardTitle>
+								<CardDescription>What customers receive from you, automatically.</CardDescription>
+							</div>
+						</CardHeader>
+					)}
+					<CardContent className={cn(isChainScope && "pt-6", "space-y-1")}>
+						<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+							<div className="flex items-center gap-1.5">
+								<p className="font-medium">Appointment reminders</p>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Info className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
+									</TooltipTrigger>
+									<TooltipContent>
+										SMS uses credits; email is included with your plan.
+									</TooltipContent>
+								</Tooltip>
+							</div>
+							<div className="flex gap-2">
+								{renderChannelChip(
+									"Email",
+									notificationSettings.emailAppointmentReminders,
+									() =>
+										handleNotificationToggle(
+											"emailAppointmentReminders",
+											!notificationSettings.emailAppointmentReminders,
+										),
+									notificationsSaving,
+								)}
+								{renderChannelChip(
+									"SMS",
+									notificationSettings.smsAppointmentReminders,
+									() =>
+										handleNotificationToggle(
+											"smsAppointmentReminders",
+											!notificationSettings.smsAppointmentReminders,
+										),
+									notificationsSaving,
+								)}
+							</div>
+						</div>
+
+						{(notificationSettings.emailAppointmentReminders || notificationSettings.smsAppointmentReminders) && (
+							<div className="flex flex-wrap items-center gap-x-6 gap-y-3 border-b py-3">
+								<div className="flex items-center gap-2">
+									<span className="text-sm text-muted-foreground">First reminder</span>
+									<Select
+										value={String(notificationSettings.reminderHoursBefore)}
+										onValueChange={(val) => {
+											const hours = Number(val);
+											setNotificationSettings((prev) => ({ ...prev, reminderHoursBefore: hours }));
+											saveNotificationSettingsForTarget({ reminder_hours_before: hours });
+										}}
+										disabled={notificationsSaving}
+									>
+										<SelectTrigger className="h-8 w-44 rounded-full text-xs"><SelectValue /></SelectTrigger>
+										<SelectContent>
+											<SelectItem value="1">1 hour before</SelectItem>
+											<SelectItem value="2">2 hours before</SelectItem>
+											<SelectItem value="4">4 hours before</SelectItem>
+											<SelectItem value="12">12 hours before</SelectItem>
+											<SelectItem value="24">24 hours before</SelectItem>
+											<SelectItem value="48">2 days before</SelectItem>
+											<SelectItem value="72">3 days before</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+								<div className="flex items-center gap-2">
+									<span className="text-sm text-muted-foreground">Extra reminder</span>
+									<Select
+										value={notificationSettings.reminderExtraMinutesBefore ? String(notificationSettings.reminderExtraMinutesBefore) : "none"}
+										onValueChange={(val) => {
+											const minutes = val === "none" ? null : Number(val);
+											setNotificationSettings((prev) => ({ ...prev, reminderExtraMinutesBefore: minutes }));
+											saveNotificationSettingsForTarget({ reminder_extra_minutes_before: minutes });
+										}}
+										disabled={notificationsSaving}
+									>
+										<SelectTrigger className="h-8 w-44 rounded-full text-xs"><SelectValue /></SelectTrigger>
+										<SelectContent>
+											<SelectItem value="none">None</SelectItem>
+											<SelectItem value="60">1 hour before</SelectItem>
+											<SelectItem value="120">2 hours before</SelectItem>
+											<SelectItem value="240">4 hours before</SelectItem>
+											<SelectItem value="720">12 hours before</SelectItem>
+											<SelectItem value="2880">2 days before</SelectItem>
+											<SelectItem value="4320">3 days before</SelectItem>
+											<SelectItem value="10080">1 week before</SelectItem>
+										</SelectContent>
+									</Select>
+								</div>
+								<Badge variant="secondary" className="rounded-full font-normal">30 min before · always on</Badge>
+							</div>
+						)}
+
+						{nigerianSmsWindowApplies && notificationSettings.smsAppointmentReminders && (
+							<div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+								<Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+								<p>
+									SMS reminders only send 8am–8pm Nigeria time — a telecom rule we can't override.
+								</p>
+							</div>
+						)}
+
+						<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="font-medium">Birthday messages</p>
+								<p className="text-sm text-muted-foreground">Wish customers well, automatically.</p>
+							</div>
+							{renderChannelChip(
+								"Email",
+								notificationSettings.emailBirthdayMessages,
+								() =>
+									handleNotificationToggle(
+										"emailBirthdayMessages",
+										!notificationSettings.emailBirthdayMessages,
+									),
+								notificationsSaving,
+							)}
+						</div>
+					</CardContent>
+				</Card>
+
+				{/* For your team */}
+				<Card>
+					{!isChainScope && (
+						<CardHeader className="flex-row items-center gap-3 space-y-0">
+							<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+								<Bell className="h-[18px] w-[18px]" aria-hidden="true" />
+							</div>
+							<div>
+								<CardTitle className="text-base">For your team</CardTitle>
+								<CardDescription>What keeps you and your staff in the loop.</CardDescription>
+							</div>
+						</CardHeader>
+					)}
+					<CardContent className={cn(isChainScope && "pt-6", "space-y-1")}>
+						<div className="flex flex-col items-start gap-3 border-b py-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="font-medium">New booking alerts</p>
+								<p className="text-sm text-muted-foreground">The moment someone books.</p>
+							</div>
+							{renderChannelChip(
+								"Email",
+								notificationSettings.emailNewBookings,
+								() => handleNotificationToggle("emailNewBookings", !notificationSettings.emailNewBookings),
+								notificationsSaving,
+							)}
+						</div>
+
+						<div className="flex flex-col items-start gap-3 border-b py-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="font-medium">Cancellations</p>
+								<p className="text-sm text-muted-foreground">When a booking falls through.</p>
+							</div>
+							{renderChannelChip(
+								"Email",
+								notificationSettings.emailCancellations,
+								() => handleNotificationToggle("emailCancellations", !notificationSettings.emailCancellations),
+								notificationsSaving,
+							)}
+						</div>
+
+						<div className="flex flex-col items-start gap-3 border-b py-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="font-medium">Transaction alerts</p>
+								<p className="text-sm text-muted-foreground">Payments and wallet top-ups, as they happen.</p>
+							</div>
+							<div className="flex gap-2">
+								{renderChannelChip(
+									"Email",
+									notificationSettings.emailTransactionAlerts,
+									() =>
+										handleNotificationToggle(
+											"emailTransactionAlerts",
+											!notificationSettings.emailTransactionAlerts,
+										),
+									notificationsSaving,
+								)}
+								{renderChannelChip(
+									"In-app",
+									notificationSettings.inAppTransactionAlerts,
+									() =>
+										handleNotificationToggle(
+											"inAppTransactionAlerts",
+											!notificationSettings.inAppTransactionAlerts,
+										),
+									notificationsSaving,
+								)}
+							</div>
+						</div>
+
+						<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+							<div>
+								<p className="font-medium">Business digest</p>
+								<p className="text-sm text-muted-foreground">A recap of bookings, revenue, and new customers.</p>
 							</div>
 							<Select
-								value={String(notificationSettings.reminderHoursBefore)}
-								onValueChange={(val) => {
-									const hours = Number(val);
-									setNotificationSettings((prev) => ({ ...prev, reminderHoursBefore: hours }));
-									saveNotificationSettingsForTarget({ reminder_hours_before: hours });
-								}}
+								value={notificationSettings.digestFrequency}
 								disabled={notificationsSaving}
+								onValueChange={(value) =>
+									handleDigestFrequencyChange(value as "off" | "daily" | "weekly" | "monthly")
+								}
 							>
-								<SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+								<SelectTrigger className="h-8 w-32 rounded-full text-xs">
+									<SelectValue />
+								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="1">1 hour before</SelectItem>
-									<SelectItem value="2">2 hours before</SelectItem>
-									<SelectItem value="4">4 hours before</SelectItem>
-									<SelectItem value="12">12 hours before</SelectItem>
-									<SelectItem value="24">24 hours before</SelectItem>
-									<SelectItem value="48">2 days before</SelectItem>
-									<SelectItem value="72">3 days before</SelectItem>
+									<SelectItem value="off">Off</SelectItem>
+									<SelectItem value="daily">Daily</SelectItem>
+									<SelectItem value="weekly">Weekly</SelectItem>
+									<SelectItem value="monthly">Monthly</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-							<div>
-								<p className="font-medium text-sm">Final reminder</p>
-								<p className="text-sm text-muted-foreground">Always sent 30 minutes before the appointment</p>
-							</div>
-							<Badge variant="secondary">30 minutes before</Badge>
-						</div>
-						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-							<div>
-								<p className="font-medium text-sm">Additional reminder <span className="font-normal text-muted-foreground">(optional)</span></p>
-								<p className="text-sm text-muted-foreground">Add one more reminder for this branch</p>
-							</div>
+					</CardContent>
+				</Card>
+
+				{/* Branch overrides — only the defaults view of a multi-branch business needs this */}
+				{showBranchScope && editingDefaults && (
+					<Card>
+						{!isChainScope && (
+							<CardHeader className="flex-row items-center gap-3 space-y-0">
+								<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+									<MapPin className="h-[18px] w-[18px]" aria-hidden="true" />
+								</div>
+								<div>
+									<CardTitle className="text-base">Branch overrides</CardTitle>
+									<CardDescription>Only branches that differ from the defaults above are worth a look.</CardDescription>
+								</div>
+							</CardHeader>
+						)}
+						<div className={cn("flex justify-end px-6", isChainScope ? "pt-6" : "pb-2")}>
 							<Select
-								value={notificationSettings.reminderExtraMinutesBefore ? String(notificationSettings.reminderExtraMinutesBefore) : "none"}
-								onValueChange={(val) => {
-									const minutes = val === "none" ? null : Number(val);
-									setNotificationSettings((prev) => ({ ...prev, reminderExtraMinutesBefore: minutes }));
-									saveNotificationSettingsForTarget({ reminder_extra_minutes_before: minutes });
-								}}
-								disabled={notificationsSaving}
+								value=""
+								onValueChange={(locationId) => setNotificationTargetId(locationId)}
 							>
-								<SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+								<SelectTrigger className="w-56 rounded-full text-xs">
+									<SelectValue placeholder="+ Customize a branch" />
+								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="none">No additional reminder</SelectItem>
-									<SelectItem value="60">1 hour before</SelectItem>
-									<SelectItem value="120">2 hours before</SelectItem>
-									<SelectItem value="240">4 hours before</SelectItem>
-									<SelectItem value="720">12 hours before</SelectItem>
-									<SelectItem value="2880">2 days before</SelectItem>
-									<SelectItem value="4320">3 days before</SelectItem>
-									<SelectItem value="10080">1 week before</SelectItem>
+									{locations
+										.filter((location) => !overriddenLocations.some((o) => o.id === location.id))
+										.map((location) => (
+											<SelectItem key={location.id} value={location.id}>
+												{location.name}
+											</SelectItem>
+										))}
 								</SelectContent>
 							</Select>
 						</div>
-					</div>
+						<CardContent className="space-y-1">
+							{locations.map((location) => {
+								const hasOverride = overriddenLocations.some((o) => o.id === location.id);
+								const isExpanded = expandedBranchId === location.id;
+								const overrideRow = hasOverride ? getSettingsForLocation(location.id) : null;
+								const diffs = overrideRow
+									? fieldMeta.filter(
+											(field) => defaultsRow && overrideRow[field.column] !== defaultsRow[field.column],
+										)
+									: [];
+
+								return (
+									<div key={location.id}>
+										<button
+											type="button"
+											onClick={() => setExpandedBranchId(isExpanded ? null : location.id)}
+											className="flex w-full items-center justify-between gap-3 rounded-lg py-2.5 text-left hover:bg-muted/40"
+										>
+											<div className="flex items-center gap-2">
+												<ChevronDown
+													className={cn(
+														"h-3.5 w-3.5 text-muted-foreground transition-transform",
+														isExpanded ? "rotate-0" : "-rotate-90",
+													)}
+													aria-hidden="true"
+												/>
+												<span className="text-sm font-medium">{location.name}</span>
+											</div>
+											<Badge
+												variant={hasOverride ? "default" : "secondary"}
+												className={cn("rounded-full font-normal", hasOverride && "bg-primary/10 text-primary hover:bg-primary/10")}
+											>
+												{hasOverride ? `${diffs.length} customized` : "Using defaults"}
+											</Badge>
+										</button>
+										{isExpanded && (
+											<div className="ml-6 mb-2 space-y-2 rounded-lg border bg-muted/20 p-3">
+												{hasOverride ? (
+													<>
+														{diffs.length > 0 ? (
+															diffs.map((field) => (
+																<div key={field.column} className="flex items-center justify-between gap-3 text-sm">
+																	<span>
+																		{field.label}:{" "}
+																		<strong>
+																			{field.column === "digest_frequency"
+																				? String(overrideRow![field.column])
+																				: overrideRow![field.column]
+																					? "On"
+																					: "Off"}
+																		</strong>{" "}
+																		<span className="text-muted-foreground">
+																			(default:{" "}
+																			{defaultsRow
+																				? field.column === "digest_frequency"
+																					? String(defaultsRow[field.column])
+																					: defaultsRow[field.column]
+																						? "On"
+																						: "Off"
+																				: "—"}
+																			)
+																		</span>
+																	</span>
+																</div>
+															))
+														) : (
+															<p className="text-sm text-muted-foreground">
+																This branch has its own settings, but they currently match your defaults.
+															</p>
+														)}
+														<div className="flex items-center justify-between gap-3 pt-1">
+															<p className="text-xs text-muted-foreground">
+																Removing this override makes the branch follow your defaults again.
+															</p>
+															<Button
+																variant="ghost"
+																size="sm"
+																disabled={notificationsSaving}
+																onClick={() => removeNotificationOverride(location.id)}
+															>
+																Reset to default
+															</Button>
+														</div>
+													</>
+												) : (
+													<div className="flex items-center justify-between gap-3">
+														<p className="text-sm text-muted-foreground">Following your defaults.</p>
+														<Button
+															variant="ghost"
+															size="sm"
+															onClick={() => setNotificationTargetId(location.id)}
+														>
+															Customize
+														</Button>
+													</div>
+												)}
+											</div>
+										)}
+									</div>
+								);
+							})}
+						</CardContent>
+					</Card>
 				)}
-				</div>
-				</div>
-
-				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p className="font-medium">New booking notifications</p>
-						<p className="text-sm text-muted-foreground">
-							Get notified when a new booking is made
-						</p>
-					</div>
-					<Switch
-						checked={notificationSettings.emailNewBookings}
-						disabled={notificationsSaving}
-						onCheckedChange={(checked) =>
-							handleNotificationToggle("emailNewBookings", checked)
-						}
-					/>
-				</div>
-
-				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p className="font-medium">Cancellation alerts</p>
-						<p className="text-sm text-muted-foreground">
-							Get notified when an appointment is cancelled
-						</p>
-					</div>
-					<Switch
-						checked={notificationSettings.emailCancellations}
-						disabled={notificationsSaving}
-						onCheckedChange={(checked) =>
-							handleNotificationToggle("emailCancellations", checked)
-						}
-					/>
-				</div>
-
-				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p className="font-medium">Email transaction alerts</p>
-						<p className="text-sm text-muted-foreground">
-							Email owners and managers when a payment or wallet top-up
-							completes
-						</p>
-					</div>
-					<Switch
-						checked={notificationSettings.emailTransactionAlerts}
-						disabled={notificationsSaving}
-						onCheckedChange={(checked) =>
-							handleNotificationToggle("emailTransactionAlerts", checked)
-						}
-					/>
-				</div>
-
-				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p className="font-medium">In-app transaction alerts</p>
-						<p className="text-sm text-muted-foreground">
-							Create dashboard notifications for payment and purse activity
-						</p>
-					</div>
-					<Switch
-						checked={notificationSettings.inAppTransactionAlerts}
-						disabled={notificationsSaving}
-						onCheckedChange={(checked) =>
-							handleNotificationToggle("inAppTransactionAlerts", checked)
-						}
-					/>
-				</div>
-
-				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p className="font-medium">Digest email</p>
-						<p className="text-sm text-muted-foreground">
-							A summary of bookings, revenue, and new customers, sent to owners and managers
-						</p>
-					</div>
-					<Select
-						value={notificationSettings.digestFrequency}
-						disabled={notificationsSaving}
-						onValueChange={(value) =>
-							handleDigestFrequencyChange(value as "off" | "daily" | "weekly" | "monthly")
-						}
-					>
-						<SelectTrigger className="w-32">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="off">Off</SelectItem>
-							<SelectItem value="daily">Daily</SelectItem>
-							<SelectItem value="weekly">Weekly</SelectItem>
-							<SelectItem value="monthly">Monthly</SelectItem>
-						</SelectContent>
-					</Select>
-				</div>
-
-				<div className="flex flex-col items-start gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-					<div>
-						<p className="font-medium">Birthday messages</p>
-						<p className="text-sm text-muted-foreground">
-							Automatically email clients on their birthday (requires birthday on their profile)
-						</p>
-					</div>
-					<Switch
-						checked={notificationSettings.emailBirthdayMessages}
-						disabled={notificationsSaving}
-						onCheckedChange={(checked) =>
-							handleNotificationToggle("emailBirthdayMessages", checked)
-						}
-					/>
-				</div>
-			</CardContent>
-		</Card>
-	);
+			</div>
+		);
+	};
 
 	const renderBranchesTab = () => {
 		const activeWindowsByLocation = new Map<
@@ -3445,9 +3657,16 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					requiredTierRank !== undefined &&
 					requiredTierRank > currentTierRank)),
 		);
+		const themeExpiresAt = entitlements?.ecommerce_theme_expires_at
+			? new Date(entitlements.ecommerce_theme_expires_at)
+			: null;
+		const themeDaysRemaining = themeExpiresAt
+			? Math.max(0, Math.ceil((themeExpiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+			: null;
+		const themeIsExpiring = themeDaysRemaining !== null && themeDaysRemaining <= 7;
 
 		return (
-			<Card>
+			<Card className="subscription-page-card">
 				{!isChainScope && (
 					<CardHeader className="flex items-center gap-2">
 						<CardTitle>Subscription</CardTitle>
@@ -3460,9 +3679,9 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						</CardDescription>
 					</CardHeader>
 				)}
-				<CardContent className={cn(isChainScope && "pt-6", "space-y-6")}>
+				<CardContent className={cn("subscription-page-content", isChainScope && "pt-6", "space-y-6")}>
 					<div
-						className="relative overflow-hidden rounded-xl p-4 sm:p-5"
+						className="subscription-hero relative overflow-hidden rounded-xl p-4 sm:p-5"
 						style={{
 							background:
 								"linear-gradient(160deg, #1F1536 0%, #2E1F4E 60%, #3A2660 100%)",
@@ -3497,7 +3716,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						<div className="relative flex flex-wrap items-center justify-between gap-3 mb-2">
 							<div>
 								<p className="font-serif text-xl capitalize text-white">
-									{currentTenant?.plan || "Solo"}
+									{currentTenant?.plan || "Solo"} Plan
 								</p>
 								<div className="mt-1.5 flex items-center gap-2">
 									<Badge className="capitalize bg-white/15 text-white hover:bg-white/15">
@@ -3505,15 +3724,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									</Badge>
 									<Badge
 										className={cn(
-											currentTenant?.subscription_status === "active"
-												? "bg-success text-success-foreground hover:bg-success"
+											subscriptionLifecycle.state === "cancellation_pending"
+												? "bg-[#F4C84E] text-[#2E1F4E] hover:bg-[#F4C84E]"
+												: currentTenant?.subscription_status === "active"
+													? "bg-success text-success-foreground hover:bg-success"
 												: currentTenant?.subscription_status === "trialing"
 													? "bg-[#F4C84E] text-[#2E1F4E] hover:bg-[#F4C84E]"
 													: "bg-destructive text-destructive-foreground hover:bg-destructive",
 										)}
 									>
-										{currentTenant?.subscription_status?.replace("_", " ") ||
-											"Unknown"}
+										{subscriptionLifecycle.state === "cancellation_pending"
+											? `cancelling${subscriptionLifecycle.accessEndDate ? ` ${format(subscriptionLifecycle.accessEndDate, "MMM d")}` : ""}`
+											: currentTenant?.subscription_status?.replace("_", " ") || "Unknown"}
 									</Badge>
 								</div>
 								{currentTenant?.paystack_authorization_code && (
@@ -3563,26 +3785,30 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								<Button
 									type="button"
 									size="sm"
-									className="rounded-full bg-white text-[#2E1F4E] hover:bg-white/90"
+									className="rounded-full bg-[#F4C84E] text-[#2E1F4E] hover:bg-[#F7D56E]"
 									data-tour-id="tour-change-plan"
-									onClick={() =>
-										planConfigSectionRef.current?.scrollIntoView({
-											behavior: "smooth",
-											block: "center",
-										})
-									}
+					onClick={() => {
+						navigate("/salon/subscription#plan-config");
+						setSubscriptionPlanConfigOpen(true);
+						requestAnimationFrame(() =>
+							planConfigSectionRef.current?.scrollIntoView({
+								behavior: "smooth",
+								block: "center",
+							}),
+						);
+					}}
 								>
 									Change plan
 								</Button>
 							</div>
 						</div>
 						{subscriptionLifecycle.state === "cancellation_pending" && (
-							<div className="relative mt-3 rounded-lg border border-[#F4C84E]/40 bg-[#F4C84E]/10 p-3 text-sm text-white">
-								Cancellation pending — your access continues until{" "}
+							<div className="subscription-cancellation-banner relative mt-3 rounded-lg border p-3 text-sm">
+								Cancelling — your plan stays active until{" "}
 								{subscriptionLifecycle.accessEndDate
-									? format(subscriptionLifecycle.accessEndDate, "MMMM d, yyyy")
+									? format(subscriptionLifecycle.accessEndDate, "MMM d")
 									: "the end of your billing period"}
-								.
+								, then it ends. Resume any time before then.
 							</div>
 						)}
 						{isTrialing && trialEndsAt && (
@@ -3619,7 +3845,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 												: "billing not scheduled — add a payment method"}
 									</p>
 								</div>
-								<div className="mt-3 space-y-1 border-t border-dashed border-white/15 pt-3 text-sm">
+								<div className="subscription-hero-breakdown mt-3 space-y-1 border-t border-dashed border-white/15 pt-3 text-sm">
 									<div className="flex items-center justify-between text-white/60">
 										<span className="capitalize">{currentTenant?.plan || "Solo"} base plan</span>
 										<span>{formatCurrency(recurringTotal.breakdown.base_price, recurringTotal.currency)}</span>
@@ -3662,49 +3888,76 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						)}
 					</div>
 
-					<div className="grid gap-4 md:grid-cols-3" data-tour-id="tour-subscription-usage">
+					<p className="subscription-section-label">Plan at a glance</p>
+					<div className="subscription-usage grid gap-4 md:grid-cols-3" data-tour-id="tour-subscription-usage">
 						<div className="rounded-xl bg-muted/50 p-4">
 							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Locations</p>
 							<p className="mt-1 font-serif text-2xl">
-								{entitlements?.used_locations ?? 0} /{" "}
-								{entitlements?.allowed_locations ??
-									currentPlan?.limits?.max_locations ??
-									1}
+								{entitlements?.used_locations ?? 0} of{" "}
+								{entitlements?.allowed_locations ?? currentPlan?.limits?.max_locations ?? 1}
 							</p>
 						</div>
 						<div className="rounded-xl bg-muted/50 p-4">
-							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Seats</p>
+							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Team seats</p>
 							<p className="mt-1 font-serif text-2xl">
-								{entitlements?.used_staff ?? 0} /{" "}
+								{entitlements?.used_staff ?? 0} of{" "}
 								{entitlements?.allowed_staff ??
 									currentPlan?.limits?.max_staff ??
 									1}
 							</p>
 							<p className="mt-1 text-xs text-muted-foreground">
 								{Number(entitlements?.extra_staff_seats || 0) > 0
-									? `${entitlements?.base_staff_limit ?? currentPlan?.limits?.max_staff ?? 1} included in your plan + ${entitlements?.extra_staff_seats} paid add-on`
-									: "All included in your plan"}
+									? `${entitlements?.allowed_staff ?? currentPlan?.limits?.max_staff ?? 1} included · +${entitlements?.extra_staff_seats} paid add-on`
+									: `${entitlements?.allowed_staff ?? currentPlan?.limits?.max_staff ?? 1} included · +0 paid add-on`}
 							</p>
 						</div>
-						<div className="rounded-xl bg-muted/50 p-4">
+						<div className={cn("subscription-theme-usage-card rounded-xl bg-muted/50 p-4", themeIsExpiring && "subscription-theme-expiring")}>
 							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Storefront Theme</p>
 							<p className="mt-1 font-serif text-lg">
-								{entitlements?.has_ecommerce_theme
-									? "E-commerce active"
-									: "Default theme"}
+									{entitlements?.has_ecommerce_theme
+										? "Noir"
+										: "Default"}
 							</p>
-							<p className="mt-1 text-xs text-muted-foreground">
-								{entitlements?.ecommerce_theme_expires_at
-									? `Renews until ${format(new Date(entitlements.ecommerce_theme_expires_at), "MMM d, yyyy")}`
-									: "No paid storefront theme active"}
-							</p>
+							{themeIsExpiring ? (
+								<>
+									<p className="mt-1 text-xs text-amber-700">Renews in {themeDaysRemaining} day{themeDaysRemaining === 1 ? "" : "s"}</p>
+									<Button
+										type="button"
+										size="sm"
+										className="mt-3 h-8 w-full rounded-full bg-[#F4C84E] text-xs font-semibold text-[#2E1F4E] hover:bg-[#F7D56E]"
+										disabled={isPurchasingTheme}
+										onClick={() => void purchaseThemeAddon()}
+									>
+										{isPurchasingTheme ? "Renewing…" : `Renew now — ${formatCurrency(ecommerceThemePricing || 0, currentTenant?.currency || "GHS")}`}
+									</Button>
+								</>
+							) : themeDaysRemaining !== null ? (
+								<p className="mt-1 text-xs text-muted-foreground">Renews on {format(themeExpiresAt!, "MMM d, yyyy")}</p>
+							) : (
+								<p className="mt-1 text-xs text-muted-foreground">No paid theme active</p>
+							)}
 						</div>
 					</div>
 
-					<div ref={planConfigSectionRef} className="scroll-mt-6" data-tour-id="tour-subscription-seats">
-					<div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+					<div id="plan-config" ref={planConfigSectionRef} className="subscription-config scroll-mt-6" data-tour-id="tour-subscription-seats">
+						<button
+							type="button"
+							className="subscription-config-trigger"
+							onClick={() => setSubscriptionPlanConfigOpen((open) => !open)}
+							aria-expanded={subscriptionPlanConfigOpen}
+						>
+							<span className="flex min-w-0 items-center gap-3 text-left">
+								<span className="subscription-config-icon"><Building2 className="h-4 w-4" /></span>
+								<span>
+									<span className="block text-sm font-medium">Adjust branches &amp; team seats</span>
+									<span className="mt-0.5 block text-xs text-muted-foreground">Change your plan by telling us what you need — we’ll do the math</span>
+								</span>
+							</span>
+							<ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", subscriptionPlanConfigOpen && "rotate-180")} />
+						</button>
+					{subscriptionPlanConfigOpen && (
+					<div className="subscription-config-body grid gap-4 lg:grid-cols-2 lg:items-start">
 					<div className="space-y-3">
-						<p className="text-sm font-medium">Manage branches & team size</p>
 						<div className="rounded-lg border p-4 space-y-4">
 							<p className="text-sm text-muted-foreground">
 								Tell us how many branches and team seats you need. We'll
@@ -3725,7 +3978,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										<Label htmlFor="config-branches" className="text-sm font-medium">Branches</Label>
 										<p className="text-xs text-muted-foreground">
 											{planConfigQuote
-												? `${planConfigQuote.current_allowed_locations} included on ${planConfigQuote.current_plan_slug}`
+														? `${planConfigQuote.current_allowed_locations} included on ${planConfigQuote.current_plan_slug.replace(/^./, (character) => character.toUpperCase())}`
 												: "How many locations you operate"}
 										</p>
 									</div>
@@ -3759,7 +4012,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										<Label htmlFor="config-seats" className="text-sm font-medium">Team seats</Label>
 										<p className="text-xs text-muted-foreground">
 											{planConfigQuote
-												? `${planConfigQuote.current_allowed_staff} included on ${planConfigQuote.current_plan_slug}`
+														? `${planConfigQuote.current_allowed_staff} included on ${planConfigQuote.current_plan_slug.replace(/^./, (character) => character.toUpperCase())}`
 												: "How many staff accounts you need"}
 										</p>
 									</div>
@@ -3986,7 +4239,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										)}
 									<Button
 										className="w-full sm:w-auto"
-										onClick={applyPlanConfiguration}
+										onClick={() => setPlanConfigConfirmOpen(true)}
 										disabled={
 											!planConfigQuote ||
 											planConfigQuote.requires_custom_locations ||
@@ -4002,63 +4255,19 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							? "Update"
 							: planConfigQuote?.requires_custom_locations
 								? "Contact support to continue"
-								: isPlanConfigIncrease
-									? "Upgrade plan"
-									: "Downgrade plan"}
-									</Button>
-								</>
-							)}
+											: isPlanConfigIncrease
+												? "Upgrade plan"
+														: "Downgrade plan"}
+												</Button>
+											</>
+									)}
+								</div>
 						</div>
 					</div>
+					)}
+					</div>
 
-					<div className="space-y-3" data-tour-id="tour-subscription-addons">
-						<p className="text-sm font-medium">Add-ons</p>
-						<div className="space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
-							<div className="flex items-center justify-between gap-4">
-								<div>
-									<p className="text-sm font-medium">Staff Operations</p>
-									<p className="mt-0.5 text-xs text-muted-foreground">
-										Check-ins, time-off requests, and leave allowances.
-										{!staffOperationsAddon.isEnabled && staffOperationsAddon.isPlanEligible && staffOperationsAddon.priceLabel
-											? ` ${staffOperationsAddon.priceLabel}/month.`
-											: ""}
-										{!staffOperationsAddon.isPlanEligible ? " Available on Studio and Chain plans." : ""}
-									</p>
-								</div>
-								{staffOperationsAddon.isPlanEligible ? (
-									<Switch
-										checked={staffOperationsAddon.isEnabled}
-										disabled={staffOperationsAddon.isUpdating || (!staffOperationsAddon.isEnabled && !staffOperationsAddon.hasValidPrice)}
-										onCheckedChange={() => staffOperationsAddon.toggle()}
-									/>
-								) : (
-									<Badge variant="outline" className="shrink-0">Studio+ only</Badge>
-								)}
-							</div>
-
-							<div className="flex items-center justify-between gap-4 border-t border-primary/10 pt-3">
-								<div>
-									<p className="text-sm font-medium">Booking page themes</p>
-									<p className="mt-0.5 text-xs text-muted-foreground">
-										Preview, purchase, and apply themes for your booking page.
-									</p>
-								</div>
-								<Button
-									type="button"
-									variant="outline"
-									size="sm"
-									className="shrink-0 gap-1.5 rounded-full"
-									onClick={() => navigate("/salon/themes-settings")}
-								>
-									<Palette className="h-3.5 w-3.5" />
-									Browse themes
-								</Button>
-							</div>
-						</div>
-					</div>
-					</div>
-					</div>
-					<div className="pt-4 border-t space-y-3">
+					<div className="subscription-promo pt-4 border-t space-y-3">
 						<p className="text-sm font-medium">Promo code</p>
 						{subscriptionPromo ? (
 							<div className="rounded-lg bg-success/10 p-3 text-sm">
@@ -4081,18 +4290,26 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									)}
 								</p>
 							</div>
+						) : !subscriptionPromoOpen ? (
+							<button
+								type="button"
+								className="subscription-promo-trigger"
+								onClick={() => setSubscriptionPromoOpen(true)}
+							>
+								Have a promo code?
+							</button>
 						) : (
 							<div className="space-y-2">
 								<Label>Apply Sales Promo Code</Label>
 								<div className="flex gap-2">
 									<Input
 										value={subscriptionPromoCode}
-										onChange={(event) =>
-											setSubscriptionPromoCode(
-												event.target.value.toUpperCase(),
-											)
-										}
-										placeholder="Enter promo code"
+										onChange={(event) => {
+											setSubscriptionPromoCode(event.target.value.toUpperCase());
+											setSubscriptionPromoError(null);
+										}}
+										placeholder="PROMOCODE"
+										className={cn(subscriptionPromoError && "border-destructive focus-visible:ring-destructive")}
 									/>
 									<Button
 										variant="outline"
@@ -4105,16 +4322,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 												setSubscriptionPromoCode("");
 												toast({
 													title: "Promo claimed",
-													description:
-														"The promo is now attached to this tenant for subscription billing.",
-												});
+														description:
+															"The promo is now attached to this tenant for subscription billing.",
+														});
+													setSubscriptionPromoOpen(false);
 											} catch (error) {
+												setSubscriptionPromoError("The code isn't valid or has expired.");
 												toast({
 													title: "Promo unavailable",
 													description:
 														error instanceof Error
 															? error.message
-															: "Failed to claim promo code.",
+															: "The code isn't valid or has expired.",
 													variant: "destructive",
 												});
 											}
@@ -4127,11 +4346,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										{claimTenantPromo.isPending ? (
 											<Loader2 className="w-4 h-4 animate-spin" />
 										) : (
-											"Apply"
-										)}
-									</Button>
-								</div>
-							</div>
+																		"Apply"
+																		)}
+																	</Button>
+															</div>
+														{subscriptionPromoError && <p className="text-xs text-destructive">{subscriptionPromoError}</p>}
+														<button type="button" className="text-left text-xs text-muted-foreground underline" onClick={() => { setSubscriptionPromoOpen(false); setSubscriptionPromoError(null); }}>Cancel</button>
+													</div>
 						)}
 						{isTrialing && (
 							<>
@@ -4144,7 +4365,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										// same as the plain confirm-dialog path below. Otherwise
 										// fall back to the base-plan confirm dialog.
 										if (!isPlanConfigUnchanged) {
-											void applyPlanConfiguration();
+											setPlanConfigConfirmOpen(true);
 										} else {
 											setUpgradeConfirmOpen(true);
 										}
@@ -4167,15 +4388,52 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						)}
 					</div>
 
+					<Dialog open={planConfigConfirmOpen} onOpenChange={setPlanConfigConfirmOpen}>
+						<DialogContent className="rounded-[20px] sm:max-w-[430px]" closeButtonClassName="text-foreground hover:bg-muted hover:text-foreground">
+							<DialogHeader className="!space-y-1 !px-6 !pb-3 !pt-5 sm:!px-6 sm:!pb-3 sm:!pt-6" style={{ "--background": "0 0% 100%", "--foreground": "262 20% 12%", "--muted-foreground": "258 15% 45%", backgroundColor: "#fff", color: "#21152f" } as CSSProperties}>
+								<DialogTitle>Confirm your {isPlanConfigIncrease ? "upgrade" : "downgrade"}</DialogTitle>
+								<DialogDescription>Here's what changes on your next invoice.</DialogDescription>
+							</DialogHeader>
+							<div className="space-y-3 px-6 py-3">
+								{planConfigQuote && (
+									<div className="space-y-2 rounded-lg border p-3 text-sm">
+										<div className="flex justify-between"><span className="text-muted-foreground">Branches</span><span>{branchesValue}</span></div>
+										<div className="flex justify-between"><span className="text-muted-foreground">Team seats</span><span>{seatsValue}</span></div>
+										{isPlanConfigIncrease && (planConfigQuote.discount_amount || 0) > 0 ? (
+											<>
+												<div className="flex justify-between border-t pt-2"><span className="text-muted-foreground">Subtotal</span><span>{formatCurrency(planConfigQuote.total_monthly_price || 0, planConfigQuote.currency)}</span></div>
+												<div className="flex justify-between text-success"><span>Discount · {activeTenantPromo?.code || "promo"}</span><span>−{formatCurrency(planConfigQuote.discount_amount || 0, planConfigQuote.currency)}</span></div>
+												<div className="flex justify-between font-medium"><span>Total</span><span>{formatCurrency(Math.max((planConfigQuote.total_monthly_price || 0) - (planConfigQuote.discount_amount || 0), 0), planConfigQuote.currency)}</span></div>
+											</>
+										) : (
+											<div className="flex justify-between border-t pt-2 font-medium"><span>New monthly total</span><span>{formatCurrency(planConfigQuote.total_monthly_price || 0, planConfigQuote.currency)}</span></div>
+										)}
+										<div className={cn("flex justify-between", isPlanConfigIncrease ? "text-amber-600" : "text-success")}><span>Change</span><span>{isPlanConfigIncrease ? "+" : ""}{formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month</span></div>
+									</div>
+								)}
+								<p className="pt-2 text-xs text-muted-foreground">
+									{isPlanConfigIncrease ? "You'll be redirected to Paystack to confirm this payment." : "This applies immediately — no charge today."}
+								</p>
+							</div>
+							<DialogFooter className="gap-2 px-6 pb-5 pt-3 sm:flex-row sm:justify-end sm:gap-2 sm:px-6 sm:pb-5 sm:pt-3" style={{ "--primary": "262 46% 22%", "--primary-foreground": "0 0% 100%", "--accent": "262 45% 94%", "--accent-foreground": "262 46% 22%" } as CSSProperties}>
+								<Button type="button" variant="outline" onClick={() => setPlanConfigConfirmOpen(false)} disabled={isApplyingPlanConfig}>Back</Button>
+								<Button type="button" onClick={() => { setPlanConfigConfirmOpen(false); void applyPlanConfiguration(); }} disabled={isApplyingPlanConfig}>
+									{isApplyingPlanConfig && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+									{isPlanConfigIncrease ? "Upgrade & pay" : "Confirm downgrade"}
+								</Button>
+							</DialogFooter>
+						</DialogContent>
+					</Dialog>
+
 					<Dialog open={upgradeConfirmOpen} onOpenChange={setUpgradeConfirmOpen}>
-						<DialogContent className="sm:max-w-md">
-							<DialogHeader>
+						<DialogContent className="rounded-[20px] sm:max-w-[430px]" closeButtonClassName="text-foreground hover:bg-muted hover:text-foreground">
+							<DialogHeader className="!space-y-1 !px-6 !pb-3 !pt-5 sm:!px-6 sm:!pb-3 sm:!pt-6" style={{ "--background": "0 0% 100%", "--foreground": "262 20% 12%", "--muted-foreground": "258 15% 45%", backgroundColor: "#fff", color: "#21152f" } as CSSProperties}>
 								<DialogTitle>Confirm your upgrade</DialogTitle>
 								<DialogDescription>
-									Here's what you'll be billed. You'll confirm this once more with Paystack before anything is charged.
+									Here's what changes on your next invoice.
 								</DialogDescription>
 							</DialogHeader>
-							<div className={DIALOG_BODY_PADDING}>
+							<div className="space-y-3 px-6 py-3">
 							{recurringTotal ? (
 								<div className="space-y-1 rounded-lg bg-muted/50 p-3 text-sm">
 									<div className="flex items-center justify-between text-muted-foreground">
@@ -4217,7 +4475,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								</p>
 							)}
 							</div>
-							<DialogFooter className="gap-2 sm:gap-2">
+							<DialogFooter className="gap-2 px-6 pb-5 pt-3 sm:flex-row sm:justify-end sm:gap-2 sm:px-6 sm:pb-5 sm:pt-3" style={{ "--primary": "262 46% 22%", "--primary-foreground": "0 0% 100%", "--accent": "262 45% 94%", "--accent-foreground": "262 46% 22%" } as CSSProperties}>
 								<Button
 									type="button"
 									variant="outline"
@@ -4236,7 +4494,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									disabled={isStartingSubscriptionCheckout}
 								>
 									{isStartingSubscriptionCheckout && <Loader2 className="h-4 w-4 animate-spin" />}
-									Confirm & Continue to Payment
+									Upgrade &amp; pay
 								</Button>
 							</DialogFooter>
 						</DialogContent>
@@ -4247,6 +4505,106 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						accessEndDate={currentTenant?.next_billing_at ? new Date(currentTenant.next_billing_at) : null}
 						onCancelled={() => setCancelSubscriptionOpen(false)}
 					/>
+				</CardContent>
+			</Card>
+		);
+	};
+
+	const renderAddonsTab = () => {
+		const expiresInDays = staffOperationsAddon.expiresAt
+			? Math.ceil((staffOperationsAddon.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+			: null;
+
+		return (
+			<Card data-tour-id="tour-subscription-addons">
+				<CardHeader>
+					<CardTitle>Add-ons</CardTitle>
+					<CardDescription>
+						Extra, optional features billed on their own — separate from your subscription, so they never ride on next month's invoice or get cancelled along with it.
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="space-y-4">
+					<div className="subscription-addon-card space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
+						<div className="flex items-center justify-between gap-4">
+							<div>
+								<p className="text-sm font-medium">Staff Operations</p>
+								<p className="mt-0.5 text-xs text-muted-foreground">
+									Check-ins, time-off requests, and leave allowances.
+									{staffOperationsAddon.isEnabled
+										? ""
+										: staffOperationsAddon.isPlanEligible && staffOperationsAddon.priceLabel
+											? ` ${staffOperationsAddon.priceLabel} for 30 days.`
+											: ""}
+									{!staffOperationsAddon.isPlanEligible ? " Available on Studio and Chain plans." : ""}
+								</p>
+								{staffOperationsAddon.isEnabled && expiresInDays !== null && (
+									<p className={cn("mt-1 text-xs font-medium", expiresInDays <= 3 ? "text-amber-600" : "text-muted-foreground")}>
+										{expiresInDays > 0 ? `Renews in ${expiresInDays} day${expiresInDays === 1 ? "" : "s"}` : "Expired — renew to keep using it"}
+									</p>
+								)}
+							</div>
+							{staffOperationsAddon.isPlanEligible ? (
+								staffOperationsAddon.isEnabled ? (
+									<div className="flex shrink-0 items-center gap-2">
+										{expiresInDays !== null && expiresInDays <= 3 && (
+											<Button
+												type="button"
+												size="sm"
+												className="rounded-full"
+												disabled={staffOperationsAddon.isUpdating}
+												onClick={() => staffOperationsAddon.purchase()}
+											>
+												Renew now
+											</Button>
+										)}
+										<Button
+											type="button"
+											variant="outline"
+											size="sm"
+											className="rounded-full"
+											disabled={staffOperationsAddon.isUpdating}
+											onClick={() => staffOperationsAddon.disable()}
+										>
+											Disable
+										</Button>
+									</div>
+								) : (
+									<Button
+										type="button"
+										size="sm"
+										className="shrink-0 rounded-full"
+										disabled={staffOperationsAddon.isUpdating || !staffOperationsAddon.hasValidPrice}
+										onClick={() => staffOperationsAddon.purchase()}
+									>
+										{staffOperationsAddon.isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : `Enable${staffOperationsAddon.priceLabel ? ` — ${staffOperationsAddon.priceLabel}` : ""}`}
+									</Button>
+								)
+							) : (
+								<Badge variant="outline" className="shrink-0">Studio+ only</Badge>
+							)}
+						</div>
+					</div>
+
+					<div className="subscription-addon-card space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
+						<div className="flex items-center justify-between gap-4">
+							<div>
+								<p className="text-sm font-medium">Booking page themes</p>
+								<p className="mt-0.5 text-xs text-muted-foreground">
+									Preview, purchase, and apply themes for your booking page.
+								</p>
+							</div>
+							<Button
+								type="button"
+								variant="outline"
+								size="sm"
+								className="shrink-0 gap-1.5 rounded-full"
+								onClick={() => navigate("/salon/themes-settings")}
+							>
+								<Palette className="h-3.5 w-3.5" />
+								Browse themes
+							</Button>
+						</div>
+					</div>
 				</CardContent>
 			</Card>
 		);
@@ -4545,7 +4903,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		branches: { title: "Manage Branches", subtitle: "Pause or configure bookings per branch location." },
 		booking: { title: "Booking Settings", subtitle: "Manage booking behaviour, payment rules, and scheduling capacity." },
 		notifications: { title: "Notifications", subtitle: "Configure email and SMS notifications for appointments and updates." },
-		subscription: { title: "Subscription", subtitle: "Manage your plan, billing, and add-ons." },
+		subscription: { title: "Subscription", subtitle: "Your plan, billing, and add-ons." },
 		"custom-domain": { title: "Custom Domain", subtitle: "Connect your own domain to your public booking page." },
 		sessions: { title: "Active Sessions", subtitle: "View and manage active login sessions across your account." },
 	};
@@ -4563,6 +4921,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "notifications" && renderNotificationsTab()}
 			{activeTab === "roles" && renderRolesTab()}
 			{activeTab === "subscription" && renderSubscriptionTab()}
+		{activeTab === "addons" && renderAddonsTab()}
 			{CUSTOM_DOMAINS_ENABLED && activeTab === "custom-domain" && (
 				<div data-tour-id="tour-custom-domain">
 					<CustomDomainManager />

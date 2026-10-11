@@ -77,8 +77,8 @@ export function useCreditPurchase() {
           customerName: currentTenant.name || "Salon Owner",
           description: `Purchase ${tier?.credits ?? ""} messaging credits`,
           intentType: "messaging_credit_purchase",
-          successUrl: `${window.location.origin}/salon/messaging?purchase=success`,
-          cancelUrl: `${window.location.origin}/salon/messaging?purchase=cancelled`,
+          successUrl: `${window.location.origin}/salon/marketing?purchase=success`,
+          cancelUrl: `${window.location.origin}/salon/marketing?purchase=cancelled`,
         },
       });
 

@@ -32,7 +32,7 @@ interface PayoutDestinationsManagerProps {
 // Renders flat — no outer Card — intended to be embedded inside a settings section.
 export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsManagerProps = {}) {
   const { currentTenant } = useAuth();
-  const { destinations: allDestinations, isLoading, createDestination, deleteDestination, setDefaultDestination, refetch: refetchDestinations } = usePayoutDestinations(currentTenant?.id);
+  const { destinations: allDestinations, isLoading, createDestination, deleteDestination, setDefaultDestination, unblockDestination, refetch: refetchDestinations } = usePayoutDestinations(currentTenant?.id);
   const destinations = countryFilter ? allDestinations.filter((d) => d.country === countryFilter) : allDestinations;
   const { locations } = useSalonsOverview("today");
 
@@ -156,6 +156,16 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
     }
   };
 
+  const [unblockingId, setUnblockingId] = useState<string | null>(null);
+  const handleUnblock = async (dest: PayoutDestination) => {
+    setUnblockingId(dest.id);
+    try {
+      await unblockDestination(dest.id);
+    } finally {
+      setUnblockingId(null);
+    }
+  };
+
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     setIsDeleting(true);
@@ -214,6 +224,8 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
               onChangeBranch={locations.length > 1 && destinations.length > 1 ? openChangeBranch : undefined}
               onToggleDefault={destinations.length > 1 ? handleToggleDefault : undefined}
               isChangingDefault={changingDefaultId === dest.id}
+              onUnblock={handleUnblock}
+              isUnblocking={unblockingId === dest.id}
             />
           ))}
         </div>
@@ -396,9 +408,11 @@ interface DestinationRowProps {
   onChangeBranch?: (destination: PayoutDestination) => void;
   onToggleDefault?: (destination: PayoutDestination) => void;
   isChangingDefault: boolean;
+  onUnblock: (destination: PayoutDestination) => void;
+  isUnblocking: boolean;
 }
 
-function DestinationRow({ destination, branchTags, onDelete, onChangeBranch, onToggleDefault, isChangingDefault }: DestinationRowProps) {
+function DestinationRow({ destination, branchTags, onDelete, onChangeBranch, onToggleDefault, isChangingDefault, onUnblock, isUnblocking }: DestinationRowProps) {
   const isBank = destination.destination_type === "bank";
   const isReady = !!destination.paystack_recipient_code;
 
@@ -413,10 +427,26 @@ function DestinationRow({ destination, branchTags, onDelete, onChangeBranch, onT
             <p className="font-medium text-sm">{isBank ? destination.bank_name : destination.momo_provider}</p>
             {destination.is_default && <Badge variant="secondary" className="text-xs">Default</Badge>}
             {isReady && <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">Active</Badge>}
+            {destination.is_blocked && <Badge variant="destructive" className="text-xs">Blocked</Badge>}
           </div>
           <p className="text-sm text-muted-foreground">{destination.account_name}</p>
           <p className="text-sm font-mono text-muted-foreground">{isBank ? destination.account_number : destination.momo_number}</p>
           <p className="text-xs text-muted-foreground">{destination.country} · {destination.currency}</p>
+          {destination.is_blocked && (
+            <div className="pt-1 space-y-1">
+              <p className="text-xs text-destructive">
+                {destination.blocked_reason || "Blocked after a failed transfer."} Withdrawals to this account are paused.
+              </p>
+              <button
+                type="button"
+                onClick={() => onUnblock(destination)}
+                disabled={isUnblocking}
+                className="text-xs text-primary underline underline-offset-2 disabled:opacity-50"
+              >
+                {isUnblocking ? "Unblocking…" : "I've fixed this — unblock"}
+              </button>
+            </div>
+          )}
           {onToggleDefault && (
             <div className="pt-1">
               <button

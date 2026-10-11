@@ -154,6 +154,48 @@ export function useNotificationSettings(locationId: string | null = null) {
     }
   };
 
+  // A branch "override" is simply a row with that location_id — removing it
+  // deletes the row outright so the branch falls back to inheriting the
+  // tenant-wide default again. Goes through a SECURITY DEFINER RPC (not a
+  // direct table delete) so it gets a real role/module permission check —
+  // the table's own RLS only checks tenant membership, which isn't enough
+  // to safely gate a delete.
+  const removeLocationOverride = async (locationId: string): Promise<boolean> => {
+    if (!currentTenant?.id) {
+      toast({ title: "Error", description: "No active tenant", variant: "destructive" });
+      return false;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const { data, error: rpcError } = await supabase.rpc("remove_notification_settings_override" as never, {
+        p_tenant_id: currentTenant.id,
+        p_location_id: locationId,
+      } as never);
+      if (rpcError) throw rpcError;
+
+      const result = data as { success?: boolean; message?: string } | null;
+      if (!result?.success) {
+        throw new Error(result?.message || "Failed to remove branch override");
+      }
+
+      toast({ title: "Success", description: "This branch now follows your defaults" });
+      await fetchSettings();
+      return true;
+    } catch (err) {
+      console.error("Error removing notification settings override:", err);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to remove branch override",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return {
     settings,
     settingsRows: rows,
@@ -163,5 +205,6 @@ export function useNotificationSettings(locationId: string | null = null) {
     error,
     refetch: fetchSettings,
     saveSettings,
+    removeLocationOverride,
   };
 }

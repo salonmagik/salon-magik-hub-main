@@ -215,8 +215,8 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
         priority: 4,
         variant: "error",
         title: "Branch Paused",
-        message: "This branch is currently paused. All actions are disabled. Switch to an active branch or revive this one from Business Hub.",
-        cta: { label: "Business Hub", path: "/salon/overview" },
+        message: "This branch is currently paused. All actions are disabled. Switch to an active branch or revive this one from Business Settings.",
+        cta: { label: "Business Settings", path: "/salon/overview" },
         dismissible: false,
         blocking: true,
       });
@@ -279,7 +279,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
           variant: "warning",
           title: "Nigeria SMS delivery window",
           message: "SMS delivery is available from 8:00 a.m. to 8:00 p.m. Nigeria time.",
-          cta: { label: "Learn more", path: "/salon/messaging" },
+          cta: { label: "Learn more", path: "/salon/marketing" },
           dismissible: true,
           blocking: false,
         });

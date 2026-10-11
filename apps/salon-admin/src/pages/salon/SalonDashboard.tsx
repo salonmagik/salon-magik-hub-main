@@ -655,7 +655,7 @@ export default function SalonDashboard() {
 									<button
 										type="button"
 										onClick={() =>
-											navigate("/salon/messaging", {
+											navigate("/salon/marketing", {
 												state: {
 													lapsedClientIds: lapsedClients.map((c) => c.id),
 													templateType: "reactivation",
@@ -746,7 +746,7 @@ export default function SalonDashboard() {
 														variant="outline"
 														className="rounded-full text-xs h-8 px-4 w-full"
 														onClick={() =>
-															navigate("/salon/messaging", {
+															navigate("/salon/marketing", {
 																state: {
 																	lapsedClientIds: [client.id],
 																	templateType: "reactivation",

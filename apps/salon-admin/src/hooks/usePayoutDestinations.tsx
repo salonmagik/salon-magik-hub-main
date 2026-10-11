@@ -148,6 +148,42 @@ export function usePayoutDestinations(tenantId?: string) {
     }
   };
 
+  const unblockDestination = async (id: string): Promise<boolean> => {
+    if (!tenantId) {
+      toast({
+        title: "Error",
+        description: "No tenant ID provided",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    try {
+      const { error: unblockError } = await supabase
+        .from("salon_payout_destinations")
+        .update({ is_blocked: false, blocked_reason: null, blocked_at: null })
+        .eq("id", id)
+        .eq("tenant_id", tenantId);
+      if (unblockError) throw unblockError;
+
+      toast({
+        title: "Success",
+        description: "Payout account unblocked — it can be used for withdrawals again.",
+      });
+
+      await fetchDestinations();
+      return true;
+    } catch (err) {
+      console.error("Error unblocking payout destination:", err);
+      toast({
+        title: "Error",
+        description: "Failed to unblock the payout account",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   const deleteDestination = async (id: string): Promise<boolean> => {
     if (!tenantId) {
       toast({
@@ -194,6 +230,7 @@ export function usePayoutDestinations(tenantId?: string) {
     createDestination,
     deleteDestination,
     setDefaultDestination,
+    unblockDestination,
     refetch: fetchDestinations,
   };
 }

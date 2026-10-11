@@ -195,7 +195,7 @@ export default function AppointmentsPage() {
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<"scheduled" | "unscheduled" | "unconfirmed">("scheduled");
+  const [activeTab, setActiveTab] = useState<"all" | "scheduled" | "unscheduled" | "unconfirmed">("scheduled");
   const [approvalDialogOpen, setApprovalDialogOpen] = useState(false);
   const [approvalDialogAction, setApprovalDialogAction] = useState<"approve" | "decline" | "reschedule" | "review" | null>(null);
   const [approvalGroupAppointments, setApprovalGroupAppointments] = useState<AppointmentWithDetails[]>([]);
@@ -354,9 +354,10 @@ export default function AppointmentsPage() {
     bookingStatuses: bookingStatusArray,
     paymentStatuses: paymentStatusArray,
     approvalStatuses: activeTab === "unconfirmed" ? ["pending", "reschedule_proposed"] : undefined,
-    isUnscheduled: activeTab === "unscheduled",
+    isUnscheduled: activeTab === "scheduled" ? false : activeTab === "unscheduled" ? true : undefined,
     isGifted: giftedFilter === "gifted" ? true : giftedFilter === "not_gifted" ? false : undefined,
     filterByBookingDate: activeTab === "unscheduled" || activeTab === "unconfirmed",
+    includeUnscheduledInDateRange: activeTab === "all",
   });
 
   const {
@@ -518,6 +519,13 @@ export default function AppointmentsPage() {
           if (!target || isCancelled) return;
 
           setActiveTab("unconfirmed");
+          const reviewDate = target.is_unscheduled ? target.created_at : target.scheduled_start;
+          if (reviewDate) {
+            const day = format(new Date(reviewDate), "yyyy-MM-dd");
+            setDateRangePreset("today");
+            setStartDate(day);
+            setEndDate(day);
+          }
           await openApprovalDialog(approvalAction as "approve" | "decline" | "reschedule" | "review", target);
 
           const next = new URLSearchParams(searchParams);
@@ -586,6 +594,13 @@ export default function AppointmentsPage() {
 
         setSelectedAppointment(appointment);
         setDetailsDialogOpen(true);
+        const reviewDate = appointment.is_unscheduled ? appointment.created_at : appointment.scheduled_start;
+        if (reviewDate) {
+          const day = format(new Date(reviewDate), "yyyy-MM-dd");
+          setDateRangePreset("today");
+          setStartDate(day);
+          setEndDate(day);
+        }
         setActiveTab(appointment.approval_status === "pending" || appointment.approval_status === "reschedule_proposed"
           ? "unconfirmed"
           : appointment.is_unscheduled
@@ -1059,19 +1074,19 @@ export default function AppointmentsPage() {
         </div>
 
         {/* Pill Tab Bar */}
-        <div className="flex gap-1 p-1 rounded-full bg-muted w-fit">
-          {(["scheduled", "unscheduled", "unconfirmed"] as const).map((tab) => (
+        <div className="appointments-tabs scrollbar-hide flex max-w-full gap-1 overflow-x-auto rounded-full bg-muted p-1 md:w-fit">
+          {(["all", "scheduled", "unscheduled", "unconfirmed"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={cn(
-                "px-4 py-1.5 rounded-full text-sm font-medium transition-all",
+                "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-medium transition-all",
                 activeTab === tab
                   ? "bg-white shadow-sm text-foreground"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {tab === "scheduled" ? "Scheduled" : tab === "unscheduled" ? "Unscheduled" : "Unconfirmed"}
+              {tab === "all" ? "All" : tab === "scheduled" ? "Scheduled" : tab === "unscheduled" ? "Walk-ins / unscheduled" : "Unconfirmed"}
             </button>
           ))}
         </div>
@@ -1213,7 +1228,7 @@ export default function AppointmentsPage() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : activeTab === "unconfirmed" ? (
           <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
             <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
@@ -1238,14 +1253,50 @@ export default function AppointmentsPage() {
               </div>
             </div>
           </div>
+        ) : (
+          <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div>
+                <p className="text-xs text-muted-foreground sm:text-sm">All appointments</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.rangeCount + appointments.filter((appointment) => appointment.is_unscheduled).length}</p>
+                )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+                <Calendar className="h-5 w-5 text-primary" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div>
+                <p className="text-xs text-muted-foreground sm:text-sm">Awaiting review</p>
+                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.unconfirmedCount}</p>
+                )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
+                <ShieldCheck className="h-5 w-5 text-amber-600" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
+              <div>
+                <p className="text-xs text-muted-foreground sm:text-sm">Amount due</p>
+                {statsLoading ? <Skeleton className="h-6 w-16 mt-1" /> : (
+                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{formatCurrency(scheduledStats.amountDue, currency)}</p>
+                )}
+              </div>
+              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
+                <Coins className="h-5 w-5 text-amber-600" />
+              </div>
+            </div>
+          </div>
         )}
 
-        {/* Date nav bar + view toggle (scheduled tab only) */}
-        {activeTab === "scheduled" && (
+        {/* Date range is available on every appointments state, including walk-ins and unconfirmed reviews. */}
+        <>
           <div className="flex flex-col gap-3">
             {/* Row 1: date control + list/cal toggle */}
             <div className="flex items-center justify-between">
-              {scheduledView === "list" ? (
+              {activeTab !== "scheduled" || scheduledView === "list" ? (
                 /* List view: date-range picker (replaces prev/today/next) */
                 <div className="width-full sm:w-auto">
                   <DateRangePicker
@@ -1280,7 +1331,7 @@ export default function AppointmentsPage() {
                   <span className="min-w-0 text-sm font-medium px-2 text-foreground truncate">{getNavTitle()}</span>
                 </div>
               )}
-              <div className="flex gap-0.5 bg-muted p-0.5 rounded-[12px] flex-shrink-0">
+              {activeTab === "scheduled" && <div className="flex gap-0.5 bg-muted p-0.5 rounded-[12px] flex-shrink-0">
                 <button
                   onClick={() => setScheduledView("list")}
                   data-tour-id="tour-list-view"
@@ -1307,10 +1358,10 @@ export default function AppointmentsPage() {
                 >
                   <Calendar className="w-4 h-4" />
                 </button>
-              </div>
+              </div>}
             </div>
             {/* Row 2: day/week/month segmented control (calendar view only) */}
-            {scheduledView === "calendar" && (
+            {activeTab === "scheduled" && scheduledView === "calendar" && (
               <div className="flex gap-0.5 bg-muted p-0.5 rounded-[12px] self-start">
                 {(["day", "week", "month"] as const).map((v) => (
                   <button
@@ -1329,7 +1380,7 @@ export default function AppointmentsPage() {
               </div>
             )}
           </div>
-        )}
+        </>
 
         {/* Filters */}
         {!(activeTab === "scheduled" && scheduledView === "calendar") && (
@@ -1480,7 +1531,7 @@ export default function AppointmentsPage() {
                   <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Time</TableHead>
                   <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Customer</TableHead>
                   <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Service</TableHead>
-                  <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Status</TableHead>
+                  <TableHead className="text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">State</TableHead>
                   <TableHead className="min-w-[110px] whitespace-nowrap text-[11px] font-normal uppercase tracking-wider text-muted-foreground/70">Amount Due</TableHead>
                   <TableHead />
                   <TableHead className="text-right" />
@@ -1505,17 +1556,17 @@ export default function AppointmentsPage() {
                       <Calendar className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
                       <p className="font-medium text-muted-foreground">
                         {activeTab === "unscheduled"
-                          ? "No unscheduled bookings"
+                          ? "No walk-ins or unscheduled bookings"
                           : activeTab === "unconfirmed"
                             ? "No bookings awaiting review"
                             : "No appointments found"}
                       </p>
                       <p className="text-sm text-muted-foreground/70 mt-1">
                         {activeTab === "unscheduled"
-                          ? "Unscheduled bookings will appear here when customers book online"
+                          ? "Walk-ins and unscheduled bookings will appear here"
                           : activeTab === "unconfirmed"
                             ? "Bookings waiting for approval will appear here"
-                            : "Create a new appointment to get started"}
+                          : "Create a new appointment to get started"}
                       </p>
                     </TableCell>
                   </TableRow>
@@ -1538,6 +1589,8 @@ export default function AppointmentsPage() {
                       (transaction) => transaction.provider === "offline" && transaction.method === "cash" && transaction.status === "completed",
                     );
                     const confirmationBadge = getConfirmationBadge(apt);
+                    const approvalPending = apt.approval_status === "pending" || apt.approval_status === "reschedule_proposed";
+                    const stateLabel = apt.is_unscheduled ? "Walk-in" : apt.status.replace(/_/g, " ");
                     return (
                       <TableRow
                         key={apt.id}
@@ -1609,7 +1662,7 @@ export default function AppointmentsPage() {
                             <Badge
                               className={`text-xs w-fit ${statusBadgeStyles[apt.status]?.bg || "bg-muted"} ${statusBadgeStyles[apt.status]?.text || "text-muted-foreground"} capitalize`}
                             >
-                              {apt.status}
+                              {stateLabel}
                             </Badge>
                             {confirmationBadge.label !== "Confirmed" && (
                               <Badge variant="secondary" className={`text-xs w-fit ${confirmationBadge.className}`}>
@@ -1652,7 +1705,7 @@ export default function AppointmentsPage() {
                           </button>
                         </TableCell>
                         <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                          {(actions.length > 0 || canViewCustomerProfile || activeTab === "unconfirmed") && (
+                          {(actions.length > 0 || canViewCustomerProfile || approvalPending) && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-8" disabled={isSubmitting}>
@@ -1660,7 +1713,7 @@ export default function AppointmentsPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                {activeTab === "unconfirmed" ? (
+                                {approvalPending ? (
                                   <>
                                     {canViewCustomerProfile && (
                                       <DropdownMenuItem

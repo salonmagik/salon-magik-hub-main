@@ -65,9 +65,15 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
   // one when it just needs one of its existing accounts designated default.
   const needsDefaultAssignment = !locationId && pinnedDestinations.length === 0;
   const needsAssignment = needsBranchAssignment || needsDefaultAssignment;
-  const scopedDestinations = needsAssignment
+  const scopedDestinations = (needsAssignment
     ? destinations.filter((item) => item.currency === currency)
-    : pinnedDestinations;
+    : pinnedDestinations
+  ).filter((item) => !item.is_blocked);
+  const hasOnlyBlockedDestinations =
+    destinations.length > 0 && (needsAssignment
+      ? destinations.filter((item) => item.currency === currency)
+      : pinnedDestinations
+    ).every((item) => item.is_blocked);
 
   const [selectedDestinationId, setSelectedDestinationId] = useState<string>("");
   const [amount, setAmount] = useState<string>("");
@@ -235,7 +241,7 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
 
   const isLoading = walletLoading || destinationsLoading;
   const currentError = quoteError || (amount ? validateAmount(amount) : "");
-  const canSubmit = !isSubmitting && !currentError && !!quote && !!availability && !availabilityLoading && !isLoading;
+  const canSubmit = !isSubmitting && !currentError && !error && !!quote && !!availability && !availabilityLoading && !isLoading;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -319,10 +325,14 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
                 </p>
               )}
               {scopedDestinations.length === 0 ? (
-                <Alert>
+                <Alert variant={hasOnlyBlockedDestinations ? "destructive" : "default"}>
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription className="space-y-2">
-                    <p>No payout destinations configured. Please add a bank account or mobile money account first.</p>
+                    <p>
+                      {hasOnlyBlockedDestinations
+                        ? "This account was blocked after a failed transfer. Review or remove it in Payout Accounts before trying again."
+                        : "No payout destinations configured. Please add a bank account or mobile money account first."}
+                    </p>
                     {onAddPayoutDestination && (
                       <Button
                         type="button"
@@ -330,7 +340,7 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
                         variant="outline"
                         onClick={() => { onOpenChange(false); onAddPayoutDestination(); }}
                       >
-                        Add payout account
+                        {hasOnlyBlockedDestinations ? "Manage payout accounts" : "Add payout account"}
                       </Button>
                     )}
                   </AlertDescription>

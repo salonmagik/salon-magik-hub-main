@@ -8,7 +8,9 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { ProtectedRoute, PublicOnlyRoute, OnboardingRoute } from "@/components/auth/ProtectedRoute";
 import { ModuleProtectedRoute } from "@/components/auth/ModuleProtectedRoute";
 import { ProductTourProvider } from "@/components/onboarding/ProductTourProvider";
+import { LegacyMarketingRedirect } from "@/components/marketing/LegacyMarketingRedirect";
 import { needsGoogleProfileCompletion } from "@/lib/authCompletion";
+import { BannerProvider } from "@/components/banners";
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const SignupPage = lazy(() => import("./pages/auth/SignupPage"));
@@ -30,7 +32,7 @@ const SubscriptionPage = lazy(() => import("./pages/salon/SubscriptionPage"));
 const CashflowPage = lazy(() => import("./pages/salon/CashflowPage"));
 const PayoutsPage = lazy(() => import("./pages/salon/PayoutsPage"));
 const ReportsPage = lazy(() => import("./pages/salon/ReportsPage"));
-const MessagingPage = lazy(() => import("./pages/salon/MessagingPage"));
+const MarketingPage = lazy(() => import("./pages/salon/MarketingPage"));
 const HelpPage = lazy(() => import("./pages/salon/HelpPage"));
 const StaffPage = lazy(() => import("./pages/salon/StaffPage"));
 const MyShiftPage = lazy(() => import("./pages/salon/MyShiftPage"));
@@ -220,7 +222,8 @@ const App = () => {
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <ProductTourProvider>
+          <BannerProvider platform="salon">
+            <ProductTourProvider>
             <RouteErrorBoundary>
             <Suspense fallback={<RouteLoading />}>
               <Routes>
@@ -363,12 +366,13 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+              <Route path="/salon/messaging" element={<LegacyMarketingRedirect />} />
               <Route
-                path="/salon/messaging"
+                path="/salon/marketing"
                 element={
                   <ProtectedRoute>
                     <ModuleProtectedRoute module="messaging">
-                      <MessagingPage />
+                      <MarketingPage />
                     </ModuleProtectedRoute>
                   </ProtectedRoute>
                 }
@@ -512,7 +516,8 @@ const App = () => {
             </Routes>
             </Suspense>
             </RouteErrorBoundary>
-          </ProductTourProvider>
+            </ProductTourProvider>
+          </BannerProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

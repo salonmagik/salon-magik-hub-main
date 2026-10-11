@@ -4,6 +4,7 @@ import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.t
 import { sendArkeselSMS, extractArkeselMessageId, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 import { checkAndAlertLowSmsBalance } from "../_shared/check-low-balance.ts";
 import { buildPublicBookingUrl } from "../_shared/public-booking-url.ts";
+import { DERIVED_SEGMENT_FLAGS, validateDerivedAudience } from "../_shared/broadcast-audience.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -15,6 +16,19 @@ const corsHeaders = {
 
 interface SendBulkMessageRequest {
   customerIds: string[];
+  audienceMode?: "single" | "group";
+  audiencePreset?:
+    | "all_customers"
+    | "vip_customers"
+    | "big_spenders"
+    | "regulars"
+    | "loves_packages"
+    | "lapsed_customers"
+    | "no_appointment_30"
+    | "no_appointment_60"
+    | "new_customers"
+    | "upcoming_appointments"
+    | "cancelled_appointments";
   channel: "email" | "sms" | "whatsapp";
   message: string;
   subject?: string;
@@ -33,6 +47,9 @@ type BulkCustomerRow = {
   phone: string | null;
   country: string | null;
   tenant_id: string | null;
+  created_at?: string | null;
+  last_visit_at?: string | null;
+  status?: string | null;
 };
 
 interface BulkMessageResult {
@@ -116,7 +133,7 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     const requestBody: SendBulkMessageRequest = await req.json();
-    const { customerIds, channel, message, subject, templateId, templateVariables, senderContext } = requestBody;
+    const { customerIds, audienceMode, audiencePreset, channel, message, subject, templateId, templateVariables, senderContext } = requestBody;
     const normalizedCustomerIds = [...new Set((customerIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
 
     // Validate required fields
@@ -124,6 +141,13 @@ const handler = async (req: Request): Promise<Response> => {
       return new Response(
         JSON.stringify({ error: "customerIds must be a non-empty array" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (audienceMode === "group" && !audiencePreset) {
+      return new Response(
+        JSON.stringify({ error: "audiencePreset is required for group sends", code: "AUDIENCE_PRESET_REQUIRED" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -155,7 +179,7 @@ const handler = async (req: Request): Promise<Response> => {
     // cannot be masked as "not found" because of relation or schema drift.
     const { data: customers, error: customersError } = await supabase
       .from("customers")
-      .select("id, full_name, email, phone, country, tenant_id")
+      .select("id, full_name, email, phone, country, tenant_id, created_at, last_visit_at, status")
       .in("id", normalizedCustomerIds);
 
     if (customersError || !customers || customers.length === 0) {
@@ -205,6 +229,118 @@ const handler = async (req: Request): Promise<Response> => {
         JSON.stringify({ error: "You do not have permission to send messages for this tenant" }),
         { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    }
+
+    const dynamicAudiencePresets = new Set([
+      "all_customers",
+      "no_appointment_30",
+      "no_appointment_60",
+      "new_customers",
+      "upcoming_appointments",
+      "cancelled_appointments",
+    ]);
+    const segmentFlag = audiencePreset ? DERIVED_SEGMENT_FLAGS[audiencePreset as keyof typeof DERIVED_SEGMENT_FLAGS] : undefined;
+    if (audiencePreset && audiencePreset !== "all_customers" && !segmentFlag && !dynamicAudiencePresets.has(audiencePreset)) {
+      return new Response(
+        JSON.stringify({ error: "Unsupported audience preset", code: "AUDIENCE_PRESET_INVALID" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (audiencePreset) {
+      // Rebuild the selected audience from tenant-owned data. The browser's
+      // customerIds are only a requested subset and are never trusted as the
+      // source of segment membership.
+      const { data: audienceCustomers, error: audienceCustomersError } = await supabase
+        .from("customers")
+        .select("id, created_at, last_visit_at, status")
+        .eq("tenant_id", tenantId)
+        .neq("status", "deleted")
+        .neq("status", "blocked");
+
+      if (audienceCustomersError) {
+        console.error("Failed to load marketing audience:", audienceCustomersError, { tenantId, audiencePreset });
+        return new Response(
+          JSON.stringify({ error: "Audience could not be verified. Please try again.", code: "AUDIENCE_VALIDATION_UNAVAILABLE" }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      const activeAudienceIds = new Set((audienceCustomers || []).map((customer) => String(customer.id)));
+      let audienceCustomerIds = new Set<string>();
+
+      if (segmentFlag) {
+        // customer_segments is a security-invoker view. Its result is
+        // intersected with active customers so blocked/deleted records cannot
+        // be reached through a stale segment row.
+        const { data: segmentRows, error: segmentError } = await supabase
+          .from("customer_segments")
+          .select("customer_id")
+          .eq("tenant_id", tenantId)
+          .eq(segmentFlag, true);
+
+        if (segmentError) {
+          console.error("Failed to validate marketing audience:", segmentError, { tenantId, audiencePreset });
+          return new Response(
+            JSON.stringify({ error: "Audience could not be verified. Please try again.", code: "AUDIENCE_VALIDATION_UNAVAILABLE" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+        audienceCustomerIds = new Set((segmentRows || []).map((row) => String(row.customer_id)).filter((id) => activeAudienceIds.has(id)));
+      } else if (audiencePreset === "all_customers") {
+        audienceCustomerIds = activeAudienceIds;
+      } else if (audiencePreset === "new_customers" || audiencePreset === "no_appointment_30" || audiencePreset === "no_appointment_60") {
+        const cutoffDays = audiencePreset === "new_customers" ? 30 : audiencePreset === "no_appointment_30" ? 30 : 60;
+        const cutoff = Date.now() - cutoffDays * 24 * 60 * 60 * 1000;
+        audienceCustomerIds = new Set((audienceCustomers || [])
+          .filter((customer) => audiencePreset === "new_customers"
+            ? Boolean(customer.created_at && new Date(customer.created_at).getTime() >= cutoff)
+            : !customer.last_visit_at || new Date(customer.last_visit_at).getTime() < cutoff)
+          .map((customer) => String(customer.id)));
+      } else {
+        const { data: appointmentRows, error: appointmentError } = await supabase
+          .from("appointments")
+          .select("customer_id, status, scheduled_start")
+          .eq("tenant_id", tenantId)
+          .not("customer_id", "is", null);
+
+        if (appointmentError) {
+          console.error("Failed to validate appointment audience:", appointmentError, { tenantId, audiencePreset });
+          return new Response(
+            JSON.stringify({ error: "Audience could not be verified. Please try again.", code: "AUDIENCE_VALIDATION_UNAVAILABLE" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
+
+        const now = Date.now();
+        audienceCustomerIds = new Set((appointmentRows || [])
+          .filter((appointment) => activeAudienceIds.has(String(appointment.customer_id)) && (
+            audiencePreset === "cancelled_appointments"
+              ? appointment.status === "cancelled"
+              : Boolean(appointment.scheduled_start && !["cancelled", "declined", "completed"].includes(appointment.status || "") && new Date(appointment.scheduled_start).getTime() > now)
+          ))
+          .map((appointment) => String(appointment.customer_id)));
+      }
+
+      const audienceValidation = validateDerivedAudience(normalizedCustomerIds, audienceCustomerIds);
+      if (!audienceValidation.ok && audienceValidation.code === "AUDIENCE_EMPTY") {
+        return new Response(
+          JSON.stringify({ error: "This audience has no customers to message.", code: "AUDIENCE_EMPTY", audiencePreset }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+
+      if (!audienceValidation.ok && audienceValidation.code === "AUDIENCE_SEGMENT_MISMATCH") {
+        return new Response(
+          JSON.stringify({
+            error: "One or more recipients do not belong to the selected audience.",
+            code: "AUDIENCE_SEGMENT_MISMATCH",
+            audiencePreset,
+            customerIds: audienceValidation.customerIds,
+          }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
     }
 
     const { data: tenant, error: tenantError } = await supabase

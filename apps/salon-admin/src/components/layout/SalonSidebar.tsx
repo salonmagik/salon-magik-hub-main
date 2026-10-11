@@ -54,7 +54,7 @@ import { QuickCreateDialog } from "@/components/dialogs/QuickCreateDialog";
 import { NotificationsPanel } from "@/components/notifications/NotificationsPanel";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
 import { useNotifications } from "@/hooks/useNotifications";
-import { BannerProvider, GlobalBanner, BlockingBannerOverlay, MaintenanceBannerModal } from "@/components/banners";
+import { GlobalBanner, BlockingBannerOverlay, MaintenanceBannerModal } from "@/components/banners";
 import { ProductAnnouncementCard } from "@shared/ProductAnnouncementCard";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useAuth } from "@/hooks/useAuth";
@@ -303,9 +303,9 @@ const mainNavItems: NavItem[] = [
 		module: "reports",
 	},
 	{
-		label: "Messaging",
+		label: "Marketing",
 		icon: MessageSquare,
-		path: "/salon/messaging",
+		path: "/salon/marketing",
 		module: "messaging",
 	},
 	{ label: "Staff", icon: UserCog, path: "/salon/staff-group" },
@@ -527,7 +527,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           if (isChain) {
             return {
               ...item,
-              label: "Business Settings",
+              label: "Advanced Settings",
               path: "/salon/business-settings",
               children: [
                 { label: "Business Profile", icon: Building2, path: "/salon/business-settings?tab=profile" },
@@ -543,7 +543,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           }
           return {
             ...item,
-            label: "Business Settings",
+            label: "Advanced Settings",
             path: "/salon/business-settings",
             children: [
               { label: "Salon Profile", icon: Building2, path: "/salon/business-settings?tab=profile" },
@@ -1154,8 +1154,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 				setMobileQuickAction,
 			}}
 		>
-			<BannerProvider platform="salon">
-				<InactivityGuard>
+			<InactivityGuard>
 					<div className="min-h-screen flex bg-surface">
 						{/* Sidebar — desktop and up only. Mobile uses the bottom nav and its
 							"More" sheet exclusively; there is no side drawer to duplicate it. */}
@@ -1767,7 +1766,6 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						onClose={() => setReviewSessionsOpen(false)}
 					/>
 				</InactivityGuard>
-			</BannerProvider>
 		</SidebarContext.Provider>
 	);
 }

@@ -25,7 +25,7 @@ const MODULES = [
   { key: "services", label: "Products & Services", description: "Manage catalog" },
   { key: "payments", label: "Payments", description: "View and process payments" },
   { key: "reports", label: "Reports", description: "View analytics and reports" },
-  { key: "messaging", label: "Messaging", description: "Send messages to customers" },
+  { key: "messaging", label: "Marketing", description: "Send messages to customers" },
   { key: "journal", label: "Cash Tracker", description: "View and manage Cash Tracker entries" },
   { key: "staff", label: "Staff", description: "Manage staff members" },
   { key: "settings", label: "Settings", description: "Manage salon settings" },

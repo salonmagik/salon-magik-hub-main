@@ -10,6 +10,7 @@ const preset: Pick<Config, "theme" | "plugins"> = {
     extend: {
       fontFamily: {
         sans: ["Questrial", "sans-serif"],
+        serif: ["Questrial", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",

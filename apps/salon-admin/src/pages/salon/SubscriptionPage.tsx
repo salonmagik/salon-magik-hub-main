@@ -1,5 +1,10 @@
 import SettingsPage from "./SettingsPage";
+import "./subscription.css";
 
 export default function SubscriptionPage() {
-  return <SettingsPage scope="subscription" />;
+  return (
+    <div className="subscription-redesign">
+      <SettingsPage scope="subscription" />
+    </div>
+  );
 }

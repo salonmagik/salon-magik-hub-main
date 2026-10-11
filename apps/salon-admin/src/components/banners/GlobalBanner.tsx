@@ -280,8 +280,8 @@ export function GlobalBanner({ className }: GlobalBannerProps) {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setSmsDetailsOpen(false)}>Close</Button>
-            <Button onClick={() => { setSmsDetailsOpen(false); navigate("/salon/messaging"); }}>
-              Open Messaging
+            <Button onClick={() => { setSmsDetailsOpen(false); navigate("/salon/marketing"); }}>
+              Open Marketing
             </Button>
           </DialogFooter>
         </DialogContent>

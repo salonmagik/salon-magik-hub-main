@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import type { CSSProperties } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@ui/ui/use-toast";
@@ -22,7 +23,6 @@ import {
 } from "@ui/select";
 import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
-import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface CancelSubscriptionDialogProps {
 	open: boolean;
@@ -100,22 +100,22 @@ export function CancelSubscriptionDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-md">
-				<DialogHeader>
-					<DialogTitle>Cancel your subscription</DialogTitle>
-					<DialogDescription>
+			<DialogContent className="rounded-[20px] sm:max-w-[430px]" closeButtonClassName="text-foreground hover:bg-muted hover:text-foreground">
+				<DialogHeader className="!space-y-1 !px-6 !pb-3 !pt-5 sm:!px-8 sm:!pb-3 sm:!pt-7" style={{ "--background": "0 0% 100%", "--foreground": "262 20% 12%", "--muted-foreground": "258 15% 45%", backgroundColor: "#fff", color: "#21152f" } as CSSProperties}>
+					<DialogTitle>Cancel your subscription?</DialogTitle>
+					<DialogDescription className="text-[13px] leading-[1.45]">
 						{accessEndDate
-							? `You'll keep full access until ${format(accessEndDate, "MMMM d, yyyy")} — the end of your current billing period. After that, your storefront and bookings will be disabled.`
-							: "You'll keep full access until the end of your current billing period."}{" "}
-						You can reverse this at any time before then, with no new payment required.
+							? `You'll keep full access to ${currentTenant?.plan || "your current"} Plan until ${format(accessEndDate, "MMMM d, yyyy")}, the end of your current billing period. After that, your plan will move to the free plan and you'll lose multi-branch reporting, extra staff seats, and booking themes.`
+							: "You'll keep full access until the end of your current billing period. After that, your plan will move to the free plan."
+					}
 					</DialogDescription>
 				</DialogHeader>
 
-				<div className={`${DIALOG_BODY_PADDING} space-y-4`}>
-					<div className="space-y-2">
+				<div className="space-y-3 px-6 pb-4 pt-3 sm:px-8 sm:pb-5 sm:pt-3">
+						<div className="space-y-1.5">
 						<Label htmlFor="cancellation-reason">Why are you cancelling?</Label>
 						<Select value={reason} onValueChange={setReason}>
-							<SelectTrigger id="cancellation-reason">
+						<SelectTrigger id="cancellation-reason" className="h-10">
 								<SelectValue placeholder="Select a reason" />
 							</SelectTrigger>
 							<SelectContent>
@@ -128,10 +128,11 @@ export function CancelSubscriptionDialog({
 						</Select>
 					</div>
 
-					<div className="space-y-2">
+						<div className="space-y-1.5">
 						<Label htmlFor="cancellation-note">Anything else you'd like to add? (optional)</Label>
 						<Textarea
 							id="cancellation-note"
+							className="min-h-[72px] resize-none"
 							value={note}
 							onChange={(event) => setNote(event.target.value)}
 							maxLength={1000}
@@ -140,9 +141,9 @@ export function CancelSubscriptionDialog({
 					</div>
 				</div>
 
-				<DialogFooter>
+				<DialogFooter className="gap-2 px-6 pb-5 pt-3 sm:flex-row sm:justify-end sm:gap-2 sm:px-8 sm:pb-5 sm:pt-3" style={{ "--primary": "0 72% 50%", "--primary-foreground": "0 0% 100%", "--accent": "262 45% 94%", "--accent-foreground": "262 46% 22%" } as CSSProperties}>
 					<Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
-						Keep subscription
+						Keep my plan
 					</Button>
 					<Button
 						variant="destructive"
