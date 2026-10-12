@@ -52,6 +52,11 @@
 .marketing-text-button { font-size: 11px; color: #7c6a95; padding: 3px 0; border-radius: 3px; }
 .marketing-input { width: 100%; border: 1px solid var(--mk-border); border-radius: 9px; background: white; padding: 10px 13px; font-size: 13px; line-height: 18px; color: #171715; }
 .marketing-input::placeholder { color: #929292; }
+.marketing-editable-wrap { position: relative; }
+.marketing-editable { outline: none; white-space: pre-wrap; word-break: break-word; cursor: text; }
+.marketing-editable:focus-visible { border-color: var(--mk-purple); box-shadow: 0 0 0 2px color-mix(in srgb, var(--mk-purple) 18%, transparent); }
+.marketing-editable-placeholder { position: absolute; left: 14px; top: 11px; color: #929292; pointer-events: none; }
+.marketing-editable-placeholder-multiline { top: 19px; }
 .marketing-search-results { border: 1px solid var(--mk-border); border-radius: 10px; padding: 4px; margin-top: 6px; max-height: 210px; overflow-y: auto; }
 .marketing-search-results button { display: flex; flex-direction: column; width: 100%; text-align: left; padding: 8px; border-radius: 7px; }
 .marketing-search-results button:hover { background: #f6f2fb; }
@@ -64,6 +69,7 @@
 .marketing-channels button[aria-pressed=true] { border-color: #766093; background: #f6f2fb; }
 .marketing-channels button:disabled { border-style: dashed; background: #faf9f6; color: #c9c3b4; }.marketing-channels button:disabled span { color: #c9c3b4; }
 .marketing-sender { margin-bottom: 14px; font-size: 12px; color: var(--mk-muted); }
+.marketing-audience-prompt { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: #171715; }
 .marketing-starters { margin-bottom: 12px; }.marketing-starters .marketing-chip { background: #faf9f6; padding: 5px 12px; font-size: 11px; }
 .marketing-message { display: block; resize: vertical; min-height: 112px; margin-top: 8px; }
 .marketing-composer-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }

@@ -167,9 +167,12 @@ export function useSMSTemplates() {
     }
   };
 
-  const getTemplate = (type: SMSTemplateType): SMSTemplate | undefined => {
-    return templates.find((t) => t.template_type === type);
-  };
+  const getTemplate = useCallback(
+    (type: SMSTemplateType): SMSTemplate | undefined => {
+      return templates.find((t) => t.template_type === type);
+    },
+    [templates]
+  );
 
   const getTemplateOrDefault = (
     type: SMSTemplateType

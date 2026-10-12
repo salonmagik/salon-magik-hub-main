@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { format, subDays } from "date-fns";
@@ -43,7 +43,6 @@ import {
 } from "lucide-react";
 import { MarketingStep } from "@/components/marketing/MarketingStep";
 import "@/components/marketing/marketing.css";
-import { wrapSelection } from "@/components/messaging/templateEditorUtils";
 
 type MarketingTab = "send-broadcast" | "templates" | "delivery-history";
 type AudienceMode = "single" | "group" | null;
@@ -161,10 +160,57 @@ const variableChips: VariableChip[] = [
   { label: "Amount", token: "{{amount}}", channels: ["sms", "email"] },
 ];
 
+// Tailwind classes must appear in source so they're included in the CSS bundle.
+// Low-tech salons found raw {{customer_name}} syntax confusing -- the composer
+// renders each token as a friendly, non-editable pill instead (contentEditable
+// div, not a plain textarea/input). The underlying message/subject state still
+// stores the raw {{token}} string; this is purely a display-layer conversion.
+const VAR_CHIP_CLASSES =
+  "inline-flex items-center bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-medium mx-0.5 align-middle select-none cursor-default";
+
+// Zero-width space used as cursor guards adjacent to contenteditable=false chip spans.
+// Without these, browsers can't position the cursor before/after a chip.
+const ZWS = "​";
+
+function messageToHtml(msg: string, chips: VariableChip[]): string {
+  const escaped = msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const withChips = escaped.replace(/\{\{(\w+)\}\}/g, (match) => {
+    const chip = chips.find((c) => c.token === match);
+    const label = chip?.label ?? match.slice(2, -2).replace(/_/g, " ");
+    // ZWS guards on both sides let the cursor navigate to/from the chip
+    return `${ZWS}<span data-token="${match}" contenteditable="false" class="${VAR_CHIP_CLASSES}">${label}</span>${ZWS}`;
+  });
+  return withChips.replace(/\n/g, "<br>");
+}
+
+function domToMessage(el: HTMLElement): string {
+  let result = "";
+  for (const node of el.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      // Strip ZWS cursor guards -- they're visual aids, not part of the message
+      result += (node.textContent ?? "").replace(/\u200b/g, "");
+    } else if (node instanceof HTMLElement) {
+      const token = node.dataset.token;
+      if (token) {
+        result += token;
+      } else if (node.tagName === "BR") {
+        result += "\n";
+      } else if (node.tagName === "DIV" || node.tagName === "P") {
+        if (result.length > 0 && !result.endsWith("\n")) result += "\n";
+        result += domToMessage(node);
+      } else {
+        result += domToMessage(node);
+      }
+    }
+  }
+  return result;
+}
+
 const starterMessages: StarterMessage[] = (["email", "sms"] as const).flatMap(channel => [
-  { id: `appointment_reminder_${channel}`, title: "Appointment reminder", channel,
-    subject: "Reminder: your appointment at {{salon_name}}",
-    body: "Hi {{customer_name}}, this is a reminder from {{salon_name}} about your appointment on {{appointment_date}} at {{appointment_time}}." },
+  // "Appointment reminder" is deliberately not a broadcast starter here --
+  // reminders are sent automatically per-appointment (see Templates ->
+  // Automated messages, system-configured and not salon-editable), not
+  // something a salon would bulk-send to a whole customer segment.
   { id: `new_service_${channel}`, title: "New service launch", channel,
     subject: "Something new at {{salon_name}}",
     body: "Hi {{customer_name}}, we have a new service at {{salon_name}}! Discover what's new and book your next visit: {{booking_link}}" },
@@ -271,8 +317,10 @@ export default function MarketingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitProgress, setSubmitProgress] = useState(0);
   const [activeLocation, setActiveLocation] = useState<SenderLocation | null>(null);
-  const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const subjectRef = useRef<HTMLInputElement | null>(null);
+  const composerRef = useRef<HTMLDivElement | null>(null);
+  const lastMessageFromDom = useRef<string>("");
+  const subjectRef = useRef<HTMLDivElement | null>(null);
+  const lastSubjectFromDom = useRef<string>("");
   const sendInFlight = useRef(false);
 
   const isChainPlan = String(currentTenant?.plan || "").toLowerCase() === "chain";
@@ -343,6 +391,24 @@ export default function MarketingPage() {
     setEmailSubject(activeDraft.subject || "");
     setMessage(activeDraft.body || "");
   }, [activeDraft, sendResult]);
+
+  // Sync external message state changes (template load, draft load, reset) to the DOM editor
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) return;
+    if (message === lastMessageFromDom.current) return;
+    lastMessageFromDom.current = message;
+    el.innerHTML = messageToHtml(message, variableChips);
+  }, [message]);
+
+  // Sync external emailSubject state to the subject contenteditable editor
+  useEffect(() => {
+    const el = subjectRef.current;
+    if (!el) return;
+    if (emailSubject === lastSubjectFromDom.current) return;
+    lastSubjectFromDom.current = emailSubject;
+    el.innerHTML = messageToHtml(emailSubject, variableChips);
+  }, [emailSubject]);
 
   // Pre-select lapsed clients when navigated here from the dashboard reactivation flow
   useEffect(() => {
@@ -749,14 +815,59 @@ export default function MarketingPage() {
     );
   };
 
+  const makeChipSpan = useCallback((token: string, label: string): HTMLSpanElement => {
+    const span = document.createElement("span");
+    span.dataset.token = token;
+    span.contentEditable = "false";
+    span.className = VAR_CHIP_CLASSES;
+    span.textContent = label;
+    return span;
+  }, []);
+
+  const insertChipIntoEditor = useCallback((
+    el: HTMLElement,
+    token: string,
+    label: string,
+    onSync: (value: string) => void,
+  ) => {
+    el.focus();
+    const sel = window.getSelection();
+    const span = makeChipSpan(token, label);
+    const zwsBefore = document.createTextNode(ZWS);
+    const zwsAfter = document.createTextNode(ZWS);
+
+    if (sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).commonAncestorContainer)) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      // Insert in reverse order (each insertNode goes before the previous)
+      range.insertNode(zwsAfter);
+      range.insertNode(span);
+      range.insertNode(zwsBefore);
+      range.setStartAfter(zwsAfter);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } else {
+      el.appendChild(zwsBefore);
+      el.appendChild(span);
+      el.appendChild(zwsAfter);
+    }
+    onSync(domToMessage(el));
+  }, [makeChipSpan]);
+
   const insertVariable = (token: string, target: "body" | "subject" = "body") => {
-    const element = target === "body" ? composerRef.current : subjectRef.current;
-    const value = target === "body" ? message : emailSubject;
-    const start = element?.selectionStart ?? value.length;
-    const end = element?.selectionEnd ?? value.length;
-    const next = value.slice(0, start) + token + value.slice(end);
-    if (target === "body") setMessage(next); else setEmailSubject(next);
-    requestAnimationFrame(() => { element?.focus(); element?.setSelectionRange(start + token.length, start + token.length); });
+    const el = target === "body" ? composerRef.current : subjectRef.current;
+    const chip = variableChips.find((c) => c.token === token);
+    if (!el || !chip) return;
+    insertChipIntoEditor(el, token, chip.label, (value) => {
+      if (target === "body") {
+        lastMessageFromDom.current = value;
+        setMessage(value);
+      } else {
+        lastSubjectFromDom.current = value;
+        setEmailSubject(value);
+      }
+    });
   };
 
   const handlePickTemplate = (templateId: string) => {
@@ -951,11 +1062,26 @@ export default function MarketingPage() {
   };
 
   const applyEmailFormat = (before: string, after = before) => {
-    const element = composerRef.current;
-    if (!element) return;
-    const { nextValue, nextCursor } = wrapSelection(message, element.selectionStart, element.selectionEnd, before, after);
-    setMessage(nextValue);
-    requestAnimationFrame(() => { element.focus(); element.setSelectionRange(nextCursor, nextCursor); });
+    const el = composerRef.current;
+    if (!el) return;
+    el.focus();
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (!el.contains(range.commonAncestorContainer)) return;
+    const selectedText = range.toString();
+    const textNode = document.createTextNode(`${before}${selectedText}${after}`);
+    range.deleteContents();
+    range.insertNode(textNode);
+    const cursorPos = selectedText.length > 0 ? textNode.length : before.length;
+    const newRange = document.createRange();
+    newRange.setStart(textNode, cursorPos);
+    newRange.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(newRange);
+    const value = domToMessage(el);
+    lastMessageFromDom.current = value;
+    setMessage(value);
   };
 
   const renderEmailPreview = (body: string): ReactNode => {
@@ -1094,6 +1220,7 @@ export default function MarketingPage() {
                     {singleCustomerSearch.trim() && <div className="marketing-search-results">{filteredSingleCustomers.length ? filteredSingleCustomers.map(customer => <button type="button" key={customer.id} onClick={() => { setSingleCustomerId(customer.id); setSingleCustomerSearch(""); setSelectedChannel(null); }}><span>{customer.full_name}</span><small>{customer.email || customer.phone || "No contact details"}</small></button>) : <p>No customers found.</p>}</div>}
                     {singleCustomerData && <div className="marketing-selected-customer"><span>Selected: {singleCustomerData.full_name}</span><button type="button" className="marketing-text-button" onClick={() => setOpenStep(2)}>Continue <span aria-hidden="true">→</span></button></div>}
                   </div> : <>
+                    <p className="marketing-audience-prompt">Choose a group below to send to:</p>
                     <div className="marketing-chips">
                       {audienceDefinitions
                         .slice()
@@ -1130,9 +1257,45 @@ export default function MarketingPage() {
 
                 {isAudienceComplete && selectedChannel && <MarketingStep number={3} title="What would you like to say?" open={openStep === 3} onToggle={() => toggleStep(3)}>
                   <div className="marketing-chips marketing-starters">{currentTemplatePool.map(template => <button type="button" key={template.id} className="marketing-chip" aria-pressed={selectedTemplateId === template.id} onClick={() => handlePickTemplate(template.id)}>{template.title}{template.isReusable ? " · saved" : ""}</button>)}</div>
-                  {selectedChannel === "email" && <><label htmlFor="marketing-subject" className="sr-only">Subject line</label><input ref={subjectRef} id="marketing-subject" className="marketing-input" placeholder="Subject line…" value={emailSubject} onChange={event => setEmailSubject(event.target.value)} /></>}
+                  {selectedChannel === "email" && <div className="marketing-editable-wrap"><label htmlFor="marketing-subject" className="sr-only">Subject line</label>{emailSubject === "" && <span className="marketing-editable-placeholder" aria-hidden="true">Subject line…</span>}<div
+                    ref={subjectRef}
+                    id="marketing-subject"
+                    className="marketing-input marketing-editable"
+                    contentEditable
+                    suppressContentEditableWarning
+                    role="textbox"
+                    aria-multiline="false"
+                    onInput={() => {
+                      const el = subjectRef.current;
+                      if (!el) return;
+                      const value = domToMessage(el);
+                      lastSubjectFromDom.current = value;
+                      setEmailSubject(value);
+                    }}
+                    onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }}
+                    onPaste={event => {
+                      event.preventDefault();
+                      const text = event.clipboardData.getData("text/plain").replace(/\n/g, " ");
+                      document.execCommand("insertText", false, text);
+                    }}
+                  /></div>}
                   <label htmlFor="marketing-message" className="sr-only">Message</label>
-                  <textarea ref={composerRef} id="marketing-message" className="marketing-input marketing-message" placeholder="Write your message…" value={message} onChange={event => setMessage(event.target.value)} />
+                  <div className="marketing-editable-wrap">{message === "" && <span className="marketing-editable-placeholder marketing-editable-placeholder-multiline" aria-hidden="true">Write your message…</span>}<div
+                    ref={composerRef}
+                    id="marketing-message"
+                    className="marketing-input marketing-message marketing-editable"
+                    contentEditable
+                    suppressContentEditableWarning
+                    role="textbox"
+                    aria-multiline="true"
+                    onInput={() => {
+                      const el = composerRef.current;
+                      if (!el) return;
+                      const value = domToMessage(el);
+                      lastMessageFromDom.current = value;
+                      setMessage(value);
+                    }}
+                  /></div>
                   <div className="marketing-composer-footer"><span>{messageCharacterCount.toLocaleString()} characters{selectedChannel === "sms" ? ` · ${smsSegments} SMS segment${smsSegments === 1 ? "" : "s"}` : ""}</span><button type="button" className="marketing-button" onClick={handleSaveDraft} disabled={!message.trim()}>Save draft</button></div>
                   <details className="marketing-personalise"><summary>Personalise & format</summary><div className="marketing-chips">{availableVariables.map(chip => <button type="button" className="marketing-chip" key={chip.token} onClick={() => insertVariable(chip.token)}>+ {chip.label}</button>)}</div>{selectedChannel === "email" && <div className="marketing-editor-tools"><button type="button" aria-label="Bold" onClick={() => applyEmailFormat("**")}><Bold size={15} /></button><button type="button" aria-label="Italic" onClick={() => applyEmailFormat("_")}><Italic size={15} /></button><button type="button" aria-label="Add link" onClick={() => applyEmailFormat("[", "](https://)")}><Link2 size={15} /></button><button type="button" onClick={() => insertVariable("{{customer_name}}", "subject")}>Add customer’s name to subject</button></div>}</details>
                 </MarketingStep>}
