@@ -380,8 +380,8 @@ export default function MarketingPage() {
     setCreditPurchaseSuccessOpen(true);
   }, [searchParams, setSearchParams]);
 
-  useEffect(() => {
-    if (!activeDraft || sendResult) return;
+  const resumeDraft = useCallback(() => {
+    if (!activeDraft) return;
     setAudienceMode("group");
     setAudienceChosen(true);
     setOpenStep(3);
@@ -390,7 +390,7 @@ export default function MarketingPage() {
     setSelectedCustomerOverrides(activeDraft.selected_customer_ids || []);
     setEmailSubject(activeDraft.subject || "");
     setMessage(activeDraft.body || "");
-  }, [activeDraft, sendResult]);
+  }, [activeDraft]);
 
   // Sync external message state changes (template load, draft load, reset) to the DOM editor
   useEffect(() => {
@@ -1200,7 +1200,7 @@ export default function MarketingPage() {
             <TabsTrigger value="delivery-history">Delivery History</TabsTrigger>
           </TabsList>
           <TabsContent value="send-broadcast" className="marketing-tab-content">
-            {activeDraft && !sendResult && <div className="marketing-notice"><span>Your saved draft is ready. Available until {format(new Date(activeDraft.expires_at), "MMM d, h:mm a")}.</span><button type="button" className="marketing-button" onClick={() => setOpenStep(3)}>Resume draft</button></div>}
+            {activeDraft && !sendResult && <div className="marketing-notice"><span>Your saved draft is ready. Available until {format(new Date(activeDraft.expires_at), "MMM d, h:mm a")}.</span><button type="button" className="marketing-button" onClick={resumeDraft}>Resume draft</button></div>}
             {sendResult && <div role="status" className={`marketing-confirmation ${sendResult.failed ? "partial" : ""}`}>
               <span className="marketing-confirmation-icon">{sendResult.failed ? <AlertCircle size={20} /> : <Check size={20} />}</span>
               <div><h2>{sendResult.sent > 0 ? `Sent to ${sendResult.sent} customer${sendResult.sent === 1 ? "" : "s"}` : "Broadcast wasn’t sent"}</h2><p>via {effectiveChannel === "email" ? "Email" : "SMS"} · {sendResult.creditsUsed ? `${sendResult.creditsUsed} credits used` : "no credits used"}{sendResult.failed > 0 ? ` · ${sendResult.failed} failed — see Delivery History` : ""}</p></div>
