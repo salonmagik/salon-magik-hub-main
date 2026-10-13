@@ -450,9 +450,12 @@ export function useEmailTemplates() {
     }
   };
 
-  const getTemplate = (type: TemplateType): EmailTemplate | undefined => {
-    return templates.find((t) => t.template_type === type);
-  };
+  const getTemplate = useCallback(
+    (type: TemplateType): EmailTemplate | undefined => {
+      return templates.find((t) => t.template_type === type);
+    },
+    [templates]
+  );
 
   const getTemplateOrDefault = (type: TemplateType): { subject: string; body_html: string } => {
     const template = getTemplate(type);

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import * as XLSX from "xlsx";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
@@ -395,12 +396,103 @@ export default function CustomersPage() {
     { header: "notes", example: "VIP customer", required: false },
   ];
 
+  const getField = (row: Record<string, unknown>, ...keys: string[]): string => {
+    const lowerMap: Record<string, unknown> = {};
+    for (const key of Object.keys(row)) lowerMap[key.trim().toLowerCase()] = row[key];
+    for (const key of keys) {
+      const value = lowerMap[key.toLowerCase()];
+      if (value !== undefined && value !== null && String(value).trim() !== "") return String(value).trim();
+    }
+    return "";
+  };
+
+  const normalizeEmail = (value: string): string | null => value.trim().toLowerCase() || null;
+  const normalizePhone = (value: string): string | null => value.replace(/[^\d+]/g, "") || null;
+
   const handleImport = async (file: File) => {
-    // TODO: Implement actual import logic
+    if (!currentTenant?.id) {
+      toast({ title: "Error", description: "No active tenant", variant: "destructive" });
+      return;
+    }
+
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+
+    if (rows.length === 0) {
+      toast({ title: "Empty file", description: "No rows found to import.", variant: "destructive" });
+      return;
+    }
+
+    const existingEmails = new Set(
+      customers.map((c) => normalizeEmail(c.email || "")).filter((v): v is string => Boolean(v)),
+    );
+    const existingPhones = new Set(
+      customers.map((c) => normalizePhone(c.phone || "")).filter((v): v is string => Boolean(v)),
+    );
+    const seenEmails = new Set<string>();
+    const seenPhones = new Set<string>();
+
+    const toInsert: { tenant_id: string; full_name: string; email: string | null; phone: string | null; notes: string | null }[] = [];
+    let skippedMissingName = 0;
+    let skippedDuplicate = 0;
+
+    for (const row of rows) {
+      const fullName = getField(row, "full_name", "name", "full name");
+      if (!fullName) {
+        skippedMissingName++;
+        continue;
+      }
+      const email = normalizeEmail(getField(row, "email"));
+      const phone = normalizePhone(getField(row, "phone"));
+      const notes = getField(row, "notes") || null;
+
+      const isDuplicate =
+        (email && (existingEmails.has(email) || seenEmails.has(email))) ||
+        (phone && (existingPhones.has(phone) || seenPhones.has(phone)));
+      if (isDuplicate) {
+        skippedDuplicate++;
+        continue;
+      }
+
+      if (email) seenEmails.add(email);
+      if (phone) seenPhones.add(phone);
+
+      toInsert.push({ tenant_id: currentTenant.id, full_name: fullName, email, phone, notes });
+    }
+
+    if (toInsert.length === 0) {
+      toast({
+        title: "Nothing to import",
+        description:
+          skippedDuplicate > 0
+            ? `All ${skippedDuplicate} row(s) matched an existing customer.`
+            : "No valid rows found — each row needs at least a full name.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { error } = await supabase.from("customers").insert(toInsert as never);
+    if (error) {
+      console.error("Error importing customers:", error);
+      toast({ title: "Import failed", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    const skippedParts: string[] = [];
+    if (skippedDuplicate > 0) skippedParts.push(`${skippedDuplicate} duplicate${skippedDuplicate === 1 ? "" : "s"}`);
+    if (skippedMissingName > 0) skippedParts.push(`${skippedMissingName} missing a name`);
+
     toast({
-      title: "Import started",
-      description: `Processing ${file.name}...`,
+      title: "Import complete",
+      description: `Added ${toInsert.length} customer${toInsert.length === 1 ? "" : "s"}.${
+        skippedParts.length ? ` Skipped ${skippedParts.join(" and ")}.` : ""
+      }`,
     });
+
+    await refetch();
   };
 
   return (
