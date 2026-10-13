@@ -39,6 +39,14 @@ async function selectEmail() {
   fireEvent.click(await screen.findByRole("button", { name: "VIP · 2" }));
   fireEvent.click(screen.getByRole("button", { name: "Email Included with your plan" }));
 }
+// The Message/Subject line fields are contentEditable divs (for the
+// {{token}} -> chip rendering), not native inputs -- they have no .value,
+// so simulate typing by setting the DOM content directly and firing the
+// same "input" event the real editor listens on.
+function typeIntoEditable(element: HTMLElement, text: string) {
+  element.textContent = text;
+  fireEvent.input(element);
+}
 beforeEach(() => {
   fixture.segments["0"].is_vip = true;
   fixture.segments["1"].is_vip = true;
@@ -59,27 +67,27 @@ describe("Marketing broadcast flow", () => {
 
   it("leaves both channels blank until the user explicitly picks a template", async () => {
     renderPage(); await selectEmail();
-    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("");
-    expect(screen.getByRole("textbox", { name: "Subject line" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Message" }).textContent).toBe("");
+    expect(screen.getByRole("textbox", { name: "Subject line" }).textContent).toBe("");
     expect(screen.getByRole("button", { name: "Send to 2 customers" })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: /How should we reach them/ }));
     fireEvent.click(screen.getByRole("button", { name: "SMS Uses credits" }));
-    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Message" }).textContent).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "Holiday hours" }));
-    expect((screen.getByRole("textbox", { name: "Message" }) as HTMLTextAreaElement).value).toContain("opening hours");
+    expect(screen.getByRole("textbox", { name: "Message" }).textContent).toContain("opening hours");
     expect(fixture.invoke).not.toHaveBeenCalled();
   });
   it("preserves written text when navigating the steps or changing channels", async () => {
     renderPage(); await selectEmail();
-    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "Our salon opens at 10 tomorrow." } });
+    typeIntoEditable(screen.getByRole("textbox", { name: "Message" }), "Our salon opens at 10 tomorrow.");
     fireEvent.click(screen.getByRole("button", { name: /How should we reach them/ }));
     fireEvent.click(screen.getByRole("button", { name: "SMS Uses credits" }));
-    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("Our salon opens at 10 tomorrow.");
+    expect(screen.getByRole("textbox", { name: "Message" }).textContent).toBe("Our salon opens at 10 tomorrow.");
   });
   it("previews without sending and sends only from the explicit final action", async () => {
     renderPage(); await selectEmail();
-    fireEvent.change(screen.getByRole("textbox", { name: "Subject line" }), { target: { value: "Holiday opening hours" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "We open at 10 tomorrow." } });
+    typeIntoEditable(screen.getByRole("textbox", { name: "Subject line" }), "Holiday opening hours");
+    typeIntoEditable(screen.getByRole("textbox", { name: "Message" }), "We open at 10 tomorrow.");
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
     const preview = screen.getByRole("dialog");
     expect(within(preview).getByText("Holiday opening hours")).toBeInTheDocument();

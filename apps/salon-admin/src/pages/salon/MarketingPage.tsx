@@ -1263,9 +1263,10 @@ export default function MarketingPage() {
 
                 {isAudienceComplete && selectedChannel && <MarketingStep number={3} title="What would you like to say?" open={openStep === 3} onToggle={() => toggleStep(3)}>
                   <div className="marketing-chips marketing-starters">{currentTemplatePool.map(template => <button type="button" key={template.id} className="marketing-chip" aria-pressed={selectedTemplateId === template.id} onClick={() => handlePickTemplate(template.id)}>{template.title}{template.isReusable ? " · saved" : ""}</button>)}</div>
-                  {selectedChannel === "email" && <div className="marketing-editable-wrap"><label htmlFor="marketing-subject" className="sr-only">Subject line</label>{emailSubject === "" && <span className="marketing-editable-placeholder" aria-hidden="true">Subject line…</span>}<div
+                  {selectedChannel === "email" && <div className="marketing-editable-wrap"><label id="marketing-subject-label" className="sr-only">Subject line</label>{emailSubject === "" && <span className="marketing-editable-placeholder" aria-hidden="true">Subject line…</span>}<div
                     ref={subjectRef}
                     id="marketing-subject"
+                    aria-labelledby="marketing-subject-label"
                     className="marketing-input marketing-editable"
                     contentEditable
                     suppressContentEditableWarning
@@ -1285,10 +1286,11 @@ export default function MarketingPage() {
                       document.execCommand("insertText", false, text);
                     }}
                   /></div>}
-                  <label htmlFor="marketing-message" className="sr-only">Message</label>
+                  <label id="marketing-message-label" className="sr-only">Message</label>
                   <div className="marketing-editable-wrap">{message === "" && <span className="marketing-editable-placeholder marketing-editable-placeholder-multiline" aria-hidden="true">Write your message…</span>}<div
                     ref={composerRef}
                     id="marketing-message"
+                    aria-labelledby="marketing-message-label"
                     className="marketing-input marketing-message marketing-editable"
                     contentEditable
                     suppressContentEditableWarning
