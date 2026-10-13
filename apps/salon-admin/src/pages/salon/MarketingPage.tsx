@@ -1059,6 +1059,12 @@ export default function MarketingPage() {
     setSelectedChannel(null);
     setMessage("");
     setEmailSubject("");
+    // Step 3 (and its contentEditable refs) unmounts the instant selectedChannel
+    // goes null, so the DOM-sync effects never run to clear these -- left stale,
+    // they can make a later resumeDraft() wrongly skip re-syncing the editor if
+    // the draft's content happens to match what was last typed here.
+    lastMessageFromDom.current = "";
+    lastSubjectFromDom.current = "";
   };
 
   const applyEmailFormat = (before: string, after = before) => {
