@@ -3,7 +3,7 @@ import { Label } from "@ui/label";
 import { Switch } from "@ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@ui/select";
 import { MapPin, Plus, Trash2, Star } from "lucide-react";
-import { cn } from "@shared/utils";
+import { cn, generateUUID } from "@shared/utils";
 import { useMarketCountries } from "@/hooks/useMarketCountries";
 
 export interface LocationInfo {
@@ -76,7 +76,7 @@ export function LocationsStep({
   const addLocation = () => {
     if (!canAddMoreLocations) return;
     const newLocation: LocationInfo = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       name: config.sameName ? businessName : "",
       city: "",
       address: "",

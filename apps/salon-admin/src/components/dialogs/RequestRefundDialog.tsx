@@ -17,7 +17,7 @@ import { CircleDollarSign, Loader2, RotateCcw, TriangleAlert, WalletCards } from
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
-import { cn } from "@shared/utils";
+import { cn, generateUUID } from "@shared/utils";
 import { formatCurrency } from "@shared/currency";
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
@@ -107,7 +107,7 @@ export function RequestRefundDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [recoverability, setRecoverability] = useState<RecoverabilityInfo | null>(null);
-  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
+  const idempotencyKeyRef = useRef<string>(generateUUID());
 
   const currency = transaction?.currency || currentTenant?.currency || "USD";
   const isApproval = Boolean(request);
@@ -138,7 +138,7 @@ export function RequestRefundDialog({
     setReason(request?.reason || "");
     setRefundType(request?.refund_type === "offline" ? "offline" : "store_credit");
     setRecoverability(null);
-    idempotencyKeyRef.current = crypto.randomUUID();
+    idempotencyKeyRef.current = generateUUID();
 
     const loadRefundableAmount = async () => {
       setIsLoading(true);
@@ -251,7 +251,7 @@ export function RequestRefundDialog({
     // A declined/failed attempt is terminal. A fresh key allows a genuinely
     // new attempt; if the prior outcome is still pending, the backend's
     // transaction lock and pending-refund guard reject the duplicate.
-    idempotencyKeyRef.current = crypto.randomUUID();
+    idempotencyKeyRef.current = generateUUID();
     setStage("form");
   };
 

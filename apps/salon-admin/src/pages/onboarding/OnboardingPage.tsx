@@ -8,7 +8,7 @@ import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
-import { cn } from "@shared/utils";
+import { cn, generateUUID } from "@shared/utils";
 
 import { RoleStep, type UserRole } from "@/components/onboarding/RoleStep";
 import { OwnerInviteStep, type OwnerInviteInfo } from "@/components/onboarding/OwnerInviteStep";
@@ -244,7 +244,7 @@ export default function OnboardingPage() {
       if (next === "locations" && locationsConfig.locations.length !== Math.max(1, effectiveExpectedChainLocations)) {
         const totalLocations = Math.max(1, effectiveExpectedChainLocations);
         const initialLocations: LocationInfo[] = Array.from({ length: totalLocations }).map((_, index) => ({
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           name: locationsConfig.sameName ? businessInfo.name : "",
           city: businessInfo.city,
           address: businessInfo.address,
@@ -322,7 +322,7 @@ export default function OnboardingPage() {
     setIsLoading(true);
 
     try {
-      const tenantId = crypto.randomUUID();
+      const tenantId = generateUUID();
       let creatorDefaultLocationId: string | null = null;
 
       const { error: tenantError } = await supabase.from("tenants").insert({

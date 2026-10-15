@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { generateUUID } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
 
 export interface SalonWalletAvailability {
@@ -72,7 +73,7 @@ export function useSalonWalletAvailability(tenantId?: string, locationId?: strin
   // multi-mount-collision fix as useNotifications/useWithdrawals: this hook
   // is used by both PayoutsPage and WithdrawalDialog at once, so each
   // instance needs its own channel name.
-  const instanceIdRef = useRef(crypto.randomUUID());
+  const instanceIdRef = useRef(generateUUID());
   useEffect(() => {
     if (!tenantId) return;
 

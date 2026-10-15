@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { generateUUID } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { useLocationScope } from "./useLocationScope";
@@ -276,7 +277,7 @@ export function useAppointmentActions() {
             
             // Generate unique file path
             const fileExt = attachment.fileName.split('.').pop() || 'png';
-            const filePath = `${currentTenant.id}/${appointment.id}/${crypto.randomUUID()}.${fileExt}`;
+            const filePath = `${currentTenant.id}/${appointment.id}/${generateUUID()}.${fileExt}`;
             
             // Upload to storage
             const { error: uploadError } = await supabase.storage

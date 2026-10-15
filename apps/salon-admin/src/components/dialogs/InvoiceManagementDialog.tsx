@@ -15,7 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatCurrency } from "@shared/currency";
 import { toast } from "@ui/ui/use-toast";
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
-import { cn } from "@shared/utils";
+import { cn, generateUUID } from "@shared/utils";
 
 interface InvoiceManagementDialogProps {
   open: boolean;
@@ -109,7 +109,7 @@ export function InvoiceManagementDialog({
   const addLineItem = () => {
     setLineItems([
       ...lineItems,
-      { id: crypto.randomUUID(), description: "", quantity: 1, unitPrice: 0 },
+      { id: generateUUID(), description: "", quantity: 1, unitPrice: 0 },
     ]);
   };
 

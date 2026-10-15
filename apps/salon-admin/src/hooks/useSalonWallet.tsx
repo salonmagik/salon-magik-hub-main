@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { generateUUID } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
 import type { Tables } from "@supabase-client";
 
@@ -52,7 +53,7 @@ export function useSalonWallet(tenantId?: string, locationId?: string | null) {
   // collision fix as useNotifications/useWithdrawals — unique channel name
   // per instance, since PayoutsPage and WithdrawalDialog both use this hook
   // at once.
-  const instanceIdRef = useRef(crypto.randomUUID());
+  const instanceIdRef = useRef(generateUUID());
   useEffect(() => {
     if (!tenantId) return;
 

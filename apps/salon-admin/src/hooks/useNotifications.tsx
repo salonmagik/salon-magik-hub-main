@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { generateUUID } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { toast } from "@ui/ui/use-toast";
@@ -85,7 +86,7 @@ export function useNotifications(enabled = true) {
   // name meant a second instance's .on() call landed on the first instance's
   // already-subscribed channel, throwing "cannot add postgres_changes
   // callbacks ... after subscribe()". Each instance needs its own channel.
-  const instanceIdRef = useRef(crypto.randomUUID());
+  const instanceIdRef = useRef(generateUUID());
 
   useEffect(() => {
     notificationsRef.current = notifications;

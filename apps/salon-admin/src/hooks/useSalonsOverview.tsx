@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { generateUUID } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { useLocationScope } from "./useLocationScope";
@@ -56,7 +57,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
   // instance's .subscribe() collided with the first's already-joined
   // channel of the same topic, throwing "cannot add postgres_changes
   // callbacks ... after subscribe()". Each instance needs its own channel.
-  const instanceIdRef = useRef(crypto.randomUUID());
+  const instanceIdRef = useRef(generateUUID());
 
   const fetchOverview = useCallback(async () => {
     if (permissionsLoading) {

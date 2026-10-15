@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { generateUUID } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { toast } from "@ui/ui/use-toast";
@@ -93,7 +94,7 @@ export function useRefunds() {
           reason: refundRequest.reason,
           requestId: refundId,
           refundType: refundRequest.refund_type,
-          idempotencyKey: crypto.randomUUID(),
+          idempotencyKey: generateUUID(),
         },
       });
       if (error) {

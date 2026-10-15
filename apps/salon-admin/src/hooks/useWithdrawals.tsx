@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { generateUUID } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
 import { toast } from "@ui/ui/use-toast";
 import type { Tables } from "@supabase-client";
@@ -64,7 +65,7 @@ export function useWithdrawals(tenantId?: string, locationId?: string | null) {
   // (PayoutsPage and WithdrawalDialog both use it) — a hardcoded channel
   // name would collide the same way useNotifications' did, so each instance
   // gets its own channel name.
-  const instanceIdRef = useRef(crypto.randomUUID());
+  const instanceIdRef = useRef(generateUUID());
   useEffect(() => {
     if (!tenantId) return;
 
