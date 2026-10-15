@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
@@ -51,8 +52,14 @@ function getSalonFacingWithdrawalStatus(status: string | null | undefined): stri
   return status === "awaiting_otp" ? "pending" : status || "pending";
 }
 
+const PAYOUTS_SUB_TABS = new Set(["history", "accounts", "settings"]);
+
 export default function PayoutsPage() {
-  const [payoutsSubTab, setPayoutsSubTab] = useState("history");
+  const [searchParams] = useSearchParams();
+  const [payoutsSubTab, setPayoutsSubTab] = useState(() => {
+    const tab = searchParams.get("tab");
+    return tab && PAYOUTS_SUB_TABS.has(tab) ? tab : "history";
+  });
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [selectedWithdrawal, setSelectedWithdrawal] = useState<SalonWithdrawal | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string>("");

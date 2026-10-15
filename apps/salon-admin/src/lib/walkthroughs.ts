@@ -37,7 +37,7 @@ export const CHECKLIST_META: Record<
     iconColor: "text-destructive",
     description: "Online deposits can't be settled to you until this is added.",
     actionLabel: "Set up",
-    warningTag: "Blocks deposits",
+    warningTag: "Required for deposits",
   },
   booking: {
     icon: Globe,
@@ -109,7 +109,7 @@ export type WalkthroughDataRequirement = "customers" | "catalog";
 // Which page component's mount-effect is responsible for auto-triggering a
 // walkthrough on first visit. Distinct from `section`, which is just the
 // grouping label shown on the Help page — several Business Hub pageKeys
-// share one "Business Hub" section there.
+// share one "Business settings" section there.
 export type WalkthroughPageKey =
   | "dashboard"
   | "services"
@@ -519,7 +519,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.branches",
     pageKey: "hub-overview",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Add a branch",
     description: "Open a new location from the overview page",
@@ -535,7 +535,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.overview",
     pageKey: "hub-overview",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Cross-location overview",
     description: "Read consolidated revenue and performance across branches",
@@ -551,7 +551,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.quick-actions",
     pageKey: "hub-overview",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Quick actions",
     description: "New booking, pending approvals, unpaid balances, and messages",
@@ -568,7 +568,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.branch-performance",
     pageKey: "hub-overview",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Branch performance table",
     description: "Compare inflow, bookings, and staff across every location",
@@ -595,7 +595,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub-switcher.switch-to-branch",
     pageKey: "hub-switcher",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Switch to a branch",
     description: "Jump from the business hub into an individual branch",
@@ -615,7 +615,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.booking-enable",
     pageKey: "hub-settings",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Enable online booking",
     description: "Let customers book through your public booking page",
@@ -631,7 +631,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.booking-auto-confirm",
     pageKey: "hub-settings",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Auto-confirm bookings",
     description: "Skip manual approval, or require it before a customer pays",
@@ -647,7 +647,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.booking-deposits",
     pageKey: "hub-settings",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Accept online deposits",
     description: "Company-level payment rule for public booking checkout",
@@ -663,7 +663,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.booking-allow-staff",
     pageKey: "hub-settings",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Allow staff selection",
     description: "Let customers choose a preferred staff member",
@@ -679,7 +679,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.booking-require-staff",
     pageKey: "hub-settings",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Require staff selection",
     description: "Force a staff pick before checkout",
@@ -695,7 +695,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.booking-auto-assign",
     pageKey: "hub-settings",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Auto-assign staff",
     description: "Automatically fill in a staff member if left unselected",
@@ -711,7 +711,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.business-profile",
     pageKey: "hub-settings",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Business profile",
     description: "Business details, HQ, and branch currencies",
@@ -727,7 +727,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.manage-branches-tab",
     pageKey: "hub-settings",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Pause & configure branches",
     description: "Pause bookings for a branch during breaks or closures",
@@ -743,7 +743,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.payout-destinations",
     pageKey: "hub-settings",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Payout destinations",
     description: "Where your online payments get settled",
@@ -759,7 +759,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.custom-domain",
     pageKey: "hub-settings",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Custom domain",
     description: "Connect your own domain to your booking page",
@@ -775,7 +775,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.subscription-plan",
     pageKey: "hub-subscription",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Your plan",
     description: "Current plan, status, and how to change it",
@@ -791,7 +791,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.subscription-usage",
     pageKey: "hub-subscription",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Usage",
     description: "Locations, seats, and storefront theme used",
@@ -807,7 +807,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.subscription-seats",
     pageKey: "hub-subscription",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Branches & team seats",
     description: "Adjust how many locations and seats you need",
@@ -823,7 +823,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.subscription-addons",
     pageKey: "hub-subscription",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Add-ons",
     description: "Staff Operations and other optional extras",
@@ -839,7 +839,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.theme-default",
     pageKey: "hub-theme",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "Default theme",
     description: "Your free, always-available booking page look",
@@ -855,7 +855,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   {
     id: "hub.theme-ecommerce",
     pageKey: "hub-theme",
-    section: "Business Hub",
+    section: "Business settings",
     sectionIcon: Building2,
     label: "E-commerce theme",
     description: "A paid theme built for selling products online",
