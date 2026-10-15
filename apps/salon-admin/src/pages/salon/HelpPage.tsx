@@ -131,6 +131,26 @@ export default function HelpPage() {
   const totalWalkthroughs =
     walkthroughSections.reduce((sum, s) => sum + s.items.length, 0) + checklistWalkthroughs.length;
 
+  // The search box sits above the tabs and reads as a universal search, so
+  // it needs to filter the Walkthroughs tab too, not just FAQs.
+  const trimmedQuery = searchQuery.trim().toLowerCase();
+  const filteredWalkthroughSections = useMemo(() => {
+    if (!trimmedQuery) return walkthroughSections;
+    return walkthroughSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter(
+          (w) =>
+            w.label.toLowerCase().includes(trimmedQuery) ||
+            w.description.toLowerCase().includes(trimmedQuery) ||
+            section.section.toLowerCase().includes(trimmedQuery),
+        ),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [walkthroughSections, trimmedQuery]);
+  const checklistMatchesSearch =
+    !trimmedQuery || "complete your setup".includes(trimmedQuery);
+
   const { data: supportTickets = [] } = useQuery({
     queryKey: ["salon-support-tickets", currentTenant?.id],
     enabled: Boolean(currentTenant?.id),
@@ -173,7 +193,7 @@ export default function HelpPage() {
             <div className="relative max-w-md mx-auto">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search FAQs..."
+                placeholder="Search FAQs and walkthroughs..."
                 className="pl-9 bg-background"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -274,14 +294,20 @@ export default function HelpPage() {
                       No walkthroughs available for your role yet.
                     </CardContent>
                   </Card>
+                ) : filteredWalkthroughSections.length === 0 && !checklistMatchesSearch ? (
+                  <Card>
+                    <CardContent className="p-8 text-center text-muted-foreground text-sm">
+                      No walkthroughs match "{searchQuery}".
+                    </CardContent>
+                  </Card>
                 ) : (
                   <Card>
                     <CardContent className="p-6">
                       <div className="space-y-6">
-                        {walkthroughSections.map((section, sectionIndex) => {
+                        {filteredWalkthroughSections.map((section, sectionIndex) => {
                           const SectionIcon = section.sectionIcon;
                           const isDashboardSection = section.section === "Dashboard";
-                          const showChecklistRow = isDashboardSection && checklistWalkthroughs.length > 0 && hasPermission("dashboard");
+                          const showChecklistRow = isDashboardSection && checklistWalkthroughs.length > 0 && hasPermission("dashboard") && checklistMatchesSearch;
 
                           const sectionSteps = section.items.map((w) => w.buildStep({ isDesktop }));
                           const sectionIds = section.items.map((w) => w.id);
