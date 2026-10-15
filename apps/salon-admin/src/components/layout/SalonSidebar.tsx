@@ -1659,8 +1659,32 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 									</div>
 
 									{/* Fixed footer — stays put while the overflow list above scrolls,
-										so "Sign out" is always reachable without hunting for it. */}
+										so Help and "Sign out" are always reachable without hunting for
+										them. Mirrors the desktop sidebar's footer, which renders
+										utilityNavItems (Help) right above Sign out -- the mobile sheet's
+										scrollable nav above only maps filteredMainNavItems, so Help never
+										showed up here otherwise. */}
 									<div className="shrink-0 border-t border-border px-4 py-2">
+										{utilityNavItems.map((item) => (
+											<button
+												key={item.path}
+												type="button"
+												onClick={() => {
+													navigate(item.path);
+													setMoreSheetOpen(false);
+												}}
+												className={cn(
+													"flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+													isActive(item.path)
+														? "bg-primary/10 font-semibold text-primary"
+														: "font-medium text-foreground hover:bg-surface",
+												)}
+											>
+												<item.icon className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+												<span className="flex-1 truncate">{item.label}</span>
+												{isActive(item.path) && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+											</button>
+										))}
 										<button
 											type="button"
 											onClick={() => {
