@@ -177,11 +177,11 @@ export function WelcomeModal({
           },
         },
       );
-      if (checkoutErr || !checkoutData?.authorization_url) {
+      if (checkoutErr || !checkoutData?.url) {
         throw new Error(checkoutData?.error || "Failed to create checkout session");
       }
 
-      window.location.href = checkoutData.authorization_url;
+      window.location.href = checkoutData.url;
     } catch (err) {
       console.error("WelcomeModal checkout error:", err);
       toast.error(err instanceof Error ? err.message : "Could not start checkout. Please try again.");
