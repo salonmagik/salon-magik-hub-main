@@ -77,8 +77,6 @@ import {
 	Globe,
 	Eye,
 	ExternalLink,
-	Palette,
-	Sparkles,
 	Minus,
 	Plus,
 	Info,
@@ -115,7 +113,6 @@ import { usePlans } from "@/hooks/usePlans";
 import { CustomDomainManager } from "./CustomDomainManager";
 import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
 import { useTenantRecurringTotal } from "@/hooks/useTenantRecurringTotal";
-import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
 import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
@@ -146,7 +143,6 @@ const BASE_SETTINGS_TABS = [
 	{ id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
 	{ id: "notifications", label: "Notifications", icon: Bell },
 	{ id: "subscription", label: "Subscription", icon: Zap },
-	{ id: "addons", label: "Add-ons", icon: Sparkles },
 	{ id: "custom-domain", label: "Custom Domain", icon: Globe },
 ] as const;
 
@@ -290,7 +286,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		useTenantEntitlements(currentTenant?.id);
 	const currentPlan = plans?.find((plan) => plan.slug === currentTenant?.plan);
 	const { data: recurringTotal } = useTenantRecurringTotal();
-	const staffOperationsAddon = useStaffOperationsAddon();
 
 	const { data: ecommerceThemePricing } = useQuery({
 		queryKey: [
@@ -345,10 +340,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{ id: "sessions", label: "Active Sessions", icon: Shield },
 			];
 		} else if (resolvedScope === "subscription") {
-			tabs = [
-				{ id: "subscription", label: "Subscription", icon: Zap },
-				{ id: "addons", label: "Add-ons", icon: Sparkles },
-			];
+			tabs = [{ id: "subscription", label: "Subscription", icon: Zap }];
 		} else {
 			tabs = [...BASE_SETTINGS_TABS];
 		}
@@ -358,10 +350,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	}, [resolvedScope]);
 
 	const [activeTab, setActiveTab] = useState(() => {
-		if (resolvedScope === "subscription") {
-			const tab = searchParams.get("tab");
-			return tab === "addons" ? "addons" : "subscription";
-		}
+		if (resolvedScope === "subscription") return "subscription";
 		const tab = searchParams.get("tab");
 		return tab && settingsTabs.some((t) => t.id === tab) ? tab : "profile";
 	});
@@ -4510,106 +4499,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		);
 	};
 
-	const renderAddonsTab = () => {
-		const expiresInDays = staffOperationsAddon.expiresAt
-			? Math.ceil((staffOperationsAddon.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-			: null;
-
-		return (
-			<Card data-tour-id="tour-subscription-addons">
-				<CardHeader>
-					<CardTitle>Add-ons</CardTitle>
-					<CardDescription>
-						Extra, optional features billed on their own — separate from your subscription, so they never ride on next month's invoice or get cancelled along with it.
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-4">
-					<div className="subscription-addon-card space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
-						<div className="flex items-center justify-between gap-4">
-							<div>
-								<p className="text-sm font-medium">Staff Operations</p>
-								<p className="mt-0.5 text-xs text-muted-foreground">
-									Check-ins, time-off requests, and leave allowances.
-									{staffOperationsAddon.isEnabled
-										? ""
-										: staffOperationsAddon.isPlanEligible && staffOperationsAddon.priceLabel
-											? ` ${staffOperationsAddon.priceLabel} for 30 days.`
-											: ""}
-									{!staffOperationsAddon.isPlanEligible ? " Available on Studio and Chain plans." : ""}
-								</p>
-								{staffOperationsAddon.isEnabled && expiresInDays !== null && (
-									<p className={cn("mt-1 text-xs font-medium", expiresInDays <= 3 ? "text-amber-600" : "text-muted-foreground")}>
-										{expiresInDays > 0 ? `Renews in ${expiresInDays} day${expiresInDays === 1 ? "" : "s"}` : "Expired — renew to keep using it"}
-									</p>
-								)}
-							</div>
-							{staffOperationsAddon.isPlanEligible ? (
-								staffOperationsAddon.isEnabled ? (
-									<div className="flex shrink-0 items-center gap-2">
-										{expiresInDays !== null && expiresInDays <= 3 && (
-											<Button
-												type="button"
-												size="sm"
-												className="rounded-full"
-												disabled={staffOperationsAddon.isUpdating}
-												onClick={() => staffOperationsAddon.purchase()}
-											>
-												Renew now
-											</Button>
-										)}
-										<Button
-											type="button"
-											variant="outline"
-											size="sm"
-											className="rounded-full"
-											disabled={staffOperationsAddon.isUpdating}
-											onClick={() => staffOperationsAddon.disable()}
-										>
-											Disable
-										</Button>
-									</div>
-								) : (
-									<Button
-										type="button"
-										size="sm"
-										className="shrink-0 rounded-full"
-										disabled={staffOperationsAddon.isUpdating || !staffOperationsAddon.hasValidPrice}
-										onClick={() => staffOperationsAddon.purchase()}
-									>
-										{staffOperationsAddon.isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : `Enable${staffOperationsAddon.priceLabel ? ` — ${staffOperationsAddon.priceLabel}` : ""}`}
-									</Button>
-								)
-							) : (
-								<Badge variant="outline" className="shrink-0">Studio+ only</Badge>
-							)}
-						</div>
-					</div>
-
-					<div className="subscription-addon-card space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
-						<div className="flex items-center justify-between gap-4">
-							<div>
-								<p className="text-sm font-medium">Booking page themes</p>
-								<p className="mt-0.5 text-xs text-muted-foreground">
-									Preview, purchase, and apply themes for your booking page.
-								</p>
-							</div>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="shrink-0 gap-1.5 rounded-full"
-								onClick={() => navigate("/salon/themes-settings")}
-							>
-								<Palette className="h-3.5 w-3.5" />
-								Browse themes
-							</Button>
-						</div>
-					</div>
-				</CardContent>
-			</Card>
-		);
-	};
-
 	const { data: referralCodes, isLoading: codesLoading } = useMyReferralCodes();
 	const { data: referralDiscounts, isLoading: discountsLoading } =
 		useMyReferralDiscounts();
@@ -4921,7 +4810,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "notifications" && renderNotificationsTab()}
 			{activeTab === "roles" && renderRolesTab()}
 			{activeTab === "subscription" && renderSubscriptionTab()}
-		{activeTab === "addons" && renderAddonsTab()}
 			{CUSTOM_DOMAINS_ENABLED && activeTab === "custom-domain" && (
 				<div data-tour-id="tour-custom-domain">
 					<CustomDomainManager />

@@ -707,6 +707,7 @@ export default function StaffPage() {
 				</div>
 
 				<div
+					data-tour-id="tour-staff-operations"
 					className={cn(
 						"flex flex-col gap-4 rounded-[18px] border px-5 py-4 sm:flex-row sm:items-center sm:justify-between",
 						staffOperationsEnabled
