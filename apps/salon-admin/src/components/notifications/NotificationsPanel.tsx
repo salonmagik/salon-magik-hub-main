@@ -8,7 +8,7 @@ import {
 } from "@ui/sheet";
 import { Button } from "@ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
-import { Bell, Calendar, CreditCard, UserPlus, Settings, Check, Loader2 } from "lucide-react";
+import { Bell, Calendar, CreditCard, UserPlus, Settings, Check, Loader2, ShoppingBag, Gift } from "lucide-react";
 import { cn } from "@shared/utils";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
@@ -51,6 +51,10 @@ const getIcon = (type: Notification["type"]) => {
       return UserPlus;
     case "system":
       return Settings;
+    case "product_order":
+      return ShoppingBag;
+    case "package_order":
+      return Gift;
     default:
       return Bell;
   }
@@ -66,6 +70,10 @@ const getIconColor = (type: Notification["type"]) => {
       return "text-purple-600 bg-purple-50";
     case "system":
       return "text-muted-foreground bg-muted";
+    case "product_order":
+      return "text-amber-700 bg-amber-50";
+    case "package_order":
+      return "text-pink-700 bg-pink-50";
     default:
       return "text-muted-foreground bg-muted";
   }
@@ -164,6 +172,16 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
     if (notification.type === "customer") {
       await switchToLocationIfNeeded();
       navigate("/salon/customers");
+      return;
+    }
+    if (notification.type === "product_order") {
+      await switchToLocationIfNeeded();
+      navigate("/salon/services?tab=products&subtab=fulfillment");
+      return;
+    }
+    if (notification.type === "package_order") {
+      await switchToLocationIfNeeded();
+      navigate("/salon/services?tab=packages");
       return;
     }
   };

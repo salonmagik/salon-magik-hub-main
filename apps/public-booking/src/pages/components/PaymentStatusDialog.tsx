@@ -23,6 +23,10 @@ interface PaymentStatusDialogProps {
    * color happens to be red can't have "success" read as an error.
    */
   brandColor?: string;
+  /** What to call this in the confirmation copy -- a pure product cart is
+   * an "order", a pure package cart a "package purchase", anything with a
+   * service in it (including mixed carts) stays a "booking". */
+  orderKind?: "order" | "package" | "booking";
 }
 
 type VerifyStatus = "processing" | "success" | "failed";
@@ -41,7 +45,9 @@ export function PaymentStatusDialog({
   reference,
   onSuccess,
   brandColor = "#2E1F4E",
+  orderKind = "booking",
 }: PaymentStatusDialogProps) {
+  const orderNounCap = orderKind === "order" ? "Order" : orderKind === "package" ? "Package purchase" : "Booking";
   const [status, setStatus] = useState<VerifyStatus>("processing");
   const verifiedRef = useRef<string | null>(null);
 
@@ -100,20 +106,31 @@ export function PaymentStatusDialog({
 
   const eyebrow = {
     processing: "Payment status",
-    success: "Booking confirmed",
+    success: `${orderNounCap} confirmed`,
     failed: "Payment issue",
   }[status];
 
   const title = {
     processing: "Confirming your payment",
-    success: "You're booked",
+    success:
+      orderKind === "order" ? "Your order is confirmed" : orderKind === "package" ? "You're all set" : "You're booked",
     failed: "Payment didn't go through",
   }[status];
 
   const copy = {
     processing: "This usually takes a few seconds. Don't close this window.",
-    success: "Payment received. Your appointment is confirmed.",
-    failed: "Your card wasn't charged and no appointment was booked. You can try again with the same or a different payment method.",
+    success:
+      orderKind === "order"
+        ? "Payment received. Your order is confirmed."
+        : orderKind === "package"
+          ? "Payment received. Your package purchase is confirmed."
+          : "Payment received. Your appointment is confirmed.",
+    failed:
+      orderKind === "order"
+        ? "Your card wasn't charged and no order was placed. You can try again with the same or a different payment method."
+        : orderKind === "package"
+          ? "Your card wasn't charged and no package was purchased. You can try again with the same or a different payment method."
+          : "Your card wasn't charged and no appointment was booked. You can try again with the same or a different payment method.",
   }[status];
 
   return (

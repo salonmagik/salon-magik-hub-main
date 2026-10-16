@@ -972,12 +972,28 @@ serve(async (req) => {
     const primaryAppointmentId = createdAppointmentIds[0] ?? null;
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
     const bookingSummaryHtml = renderBookingSummary(items, settlementCurrency);
-    const paymentLine = approvalRequired
-      ? paragraph("This booking requires salon approval before payment. If accepted, we will send an invoice to your email and client portal.")
-      : paragraph("Payment status: pending checkout completion.");
     const hasServiceLikeItems = items.some((item) => item.type === "service" || item.type === "package");
     const hasProductOnlyItems = items.every((item) => item.type === "product");
+    const hasPackageOnlyItems = items.every((item) => item.type === "package");
     const isSingleReviewItem = items.length === 1;
+
+    // What to call this order everywhere it's mentioned (notification,
+    // in-app routing, customer email, salon email) -- a pure product cart
+    // is an "order", a pure package cart is a "package purchase", anything
+    // with a service in it (including mixed carts) stays a "booking", since
+    // that's the dominant, most time-sensitive part of a mixed order.
+    const orderKind: "order" | "package" | "booking" = hasProductOnlyItems
+      ? "order"
+      : hasPackageOnlyItems
+        ? "package"
+        : "booking";
+    const notificationType = orderKind === "order" ? "product_order" : orderKind === "package" ? "package_order" : "appointment";
+    const orderNoun = orderKind === "order" ? "order" : orderKind === "package" ? "package purchase" : "booking";
+    const orderNounCap = orderKind === "order" ? "Order" : orderKind === "package" ? "Package purchase" : "Booking";
+    const orderArticle = orderKind === "order" ? "an" : "a";
+    const paymentLine = approvalRequired
+      ? paragraph(`This ${orderNoun} requires salon approval before payment. If accepted, we will send an invoice to your email and client portal.`)
+      : paragraph("Payment status: pending checkout completion.");
     const reviewBaseUrl = `${salonAdminBaseUrl.replace(/\/$/, "")}/appointments?tab=unconfirmed&bookingRef=${encodeURIComponent(reference)}`;
     const reviewActionsHtml = approvalRequired
       ? isSingleReviewItem && hasServiceLikeItems
@@ -1004,9 +1020,11 @@ serve(async (req) => {
 
     await createTenantNotification(supabase, {
       tenantId,
-      title: approvalRequired ? "Booking requires confirmation" : "New Booking",
-      description: `${customerFullName} placed a booking for ${itemCount} ${itemCount === 1 ? "item" : "items"} (${reference}).`,
+      type: notificationType,
+      title: approvalRequired ? `${orderNounCap} requires confirmation` : `New ${orderNounCap}`,
+      description: `${customerFullName} placed ${orderArticle} ${orderNoun} for ${itemCount} ${itemCount === 1 ? "item" : "items"} (${reference}).`,
       entityId: primaryAppointmentId,
+      entityType: orderKind === "booking" ? "appointment" : orderKind === "order" ? "product_order" : "package_order",
       urgent: approvalRequired,
       isGifted: items.some((item) => item.isGift),
     });
@@ -1016,12 +1034,12 @@ serve(async (req) => {
         resendApiKey,
         fromEmail: resendFromEmail,
         to: [customer.email],
-        subject: approvalRequired ? `Booking review started at ${tenant.name}` : `Booking received at ${tenant.name}`,
+        subject: approvalRequired ? `${orderNounCap} review started at ${tenant.name}` : `${orderNounCap} received at ${tenant.name}`,
         salonName: tenant.name,
         htmlContent:
-          heading(approvalRequired ? "Your booking is awaiting review" : "Your booking is in") +
+          heading(approvalRequired ? `Your ${orderNoun} is awaiting review` : `Your ${orderNoun} is in`) +
           paragraph(`Hi ${customer.firstName},`) +
-          paragraph(`We’ve received your booking with <strong>${tenant.name}</strong>.`) +
+          paragraph(`We’ve received your ${orderNoun} with <strong>${tenant.name}</strong>.`) +
           paragraph(`<strong>Booking reference:</strong> ${reference}`) +
           paymentLine +
           `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
@@ -1095,10 +1113,10 @@ serve(async (req) => {
           resendApiKey,
           fromEmail: resendFromEmail,
           to: recipients.map((recipient) => recipient.email),
-          subject: approvalRequired ? `Booking approval required at ${tenant.name}` : `New booking at ${tenant.name}`,
+          subject: approvalRequired ? `${orderNounCap} approval required at ${tenant.name}` : `New ${orderNoun} at ${tenant.name}`,
           salonName: tenant.name,
           htmlContent:
-            heading(approvalRequired ? "Booking approval required" : "New booking received") +
+            heading(approvalRequired ? `${orderNounCap} approval required` : `New ${orderNoun} received`) +
             paragraph(`<strong>Customer:</strong> ${customerFullName}`) +
             paragraph(`<strong>Booking reference:</strong> ${reference}`) +
             (promotionalDiscount > 0

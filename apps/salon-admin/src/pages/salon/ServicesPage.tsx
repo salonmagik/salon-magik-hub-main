@@ -132,7 +132,10 @@ export default function ServicesPage() {
     const tabFromUrl = searchParams.get("tab");
     return tabFromUrl && (TAB_VALUES as string[]).includes(tabFromUrl) ? (tabFromUrl as TabValue) : "all";
   });
-  const [productSubTab, setProductSubTab] = useState<ProductSubTab>("inventory");
+  const [productSubTab, setProductSubTab] = useState<ProductSubTab>(() => {
+    const subtabFromUrl = searchParams.get("subtab");
+    return subtabFromUrl === "fulfillment" ? "fulfillment" : "inventory";
+  });
 
   // Multi-select state - supports mixed selection in "All" tab
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
@@ -369,6 +372,16 @@ export default function ServicesPage() {
     const tabFromUrl = searchParams.get("tab");
     if (tabFromUrl && (TAB_VALUES as string[]).includes(tabFromUrl) && tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl as TabValue);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Same, for the Products tab's Inventory/Fulfillment sub-tab (e.g. a
+  // product-order notification linking straight to Fulfillment).
+  useEffect(() => {
+    const subtabFromUrl = searchParams.get("subtab");
+    if (subtabFromUrl === "fulfillment" && productSubTab !== "fulfillment") {
+      setProductSubTab("fulfillment");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);

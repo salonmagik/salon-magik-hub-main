@@ -393,11 +393,18 @@ function BookingPageWithCart({
   onLocationFilterChange,
   setCountry,
 }: BookingPageWithCartProps) {
-  const { clearCart } = useBookingCart();
+  const { clearCart, items: cartItems } = useBookingCart();
+  const cartItemsRef = useRef(cartItems);
+  cartItemsRef.current = cartItems;
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [modalCountryCode, setModalCountryCode] = useState<string | null>(null);
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [showPaymentStatus, setShowPaymentStatus] = useState(false);
+  // Snapshot of what was actually in the cart, taken the moment Paystack
+  // redirects back -- the cart clears once PaymentStatusDialog confirms
+  // success, so reading cartItems directly at render time would come back
+  // empty by the time this matters.
+  const [paymentOrderKind, setPaymentOrderKind] = useState<"order" | "package" | "booking">("booking");
   const [ecomSearchQuery, setEcomSearchQuery] = useState("");
 
   const handleSuggestionSelect = (itemId: string) => {
@@ -437,6 +444,14 @@ function BookingPageWithCart({
     if (reference) {
       setPaymentReference(reference);
       setShowPaymentStatus(true);
+      const cartAtRedirect = cartItemsRef.current;
+      setPaymentOrderKind(
+        cartAtRedirect.length > 0 && cartAtRedirect.every((item) => item.type === "product")
+          ? "order"
+          : cartAtRedirect.length > 0 && cartAtRedirect.every((item) => item.type === "package")
+            ? "package"
+            : "booking",
+      );
 
       // Cart is cleared once PaymentStatusDialog confirms the payment
       // actually succeeded (its onSuccess callback below) — not here. A
@@ -568,6 +583,7 @@ function BookingPageWithCart({
         reference={paymentReference}
         onSuccess={clearCart}
         brandColor={salon.brand_color}
+        orderKind={paymentOrderKind}
       />
 
       <Dialog open={isCatalogBlocked}>
