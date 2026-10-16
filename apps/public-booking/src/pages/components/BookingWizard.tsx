@@ -9,6 +9,7 @@ import {
 } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Separator } from "@ui/separator";
+import { hexToHsl } from "@shared/color";
 import {
   useBookingCart,
   useDepositCalculation,
@@ -989,6 +990,28 @@ export function BookingWizard({
   }, [open]);
 
   const brandColor = salon.brand_color || "#2E1F4E";
+  // The shared Dialog's header deliberately renders as a fixed Salon-Magik-
+  // purple "brand-plum" fill (see dialog-brand.ts) -- correct for
+  // salon-admin's own internal dialogs, wrong for this customer-facing
+  // checkout, which should read as the tenant's own brand. Re-hue the same
+  // background/card/border progression BRAND_DIALOG_STYLE already defines,
+  // keeping its saturation/lightness "shape", just shifted to the tenant's
+  // hue instead of the hardcoded default.
+  const brandHue = hexToHsl(brandColor)?.h ?? 262;
+  const dialogHeaderStyle = {
+    "--background": `${brandHue} 43% 21%`,
+    "--foreground": "0 0% 100%",
+    "--card": `${brandHue} 38% 26%`,
+    "--card-foreground": "0 0% 100%",
+    "--popover": `${brandHue} 38% 26%`,
+    "--popover-foreground": "0 0% 100%",
+    "--secondary": `${brandHue} 30% 28%`,
+    "--secondary-foreground": "0 0% 100%",
+    "--muted": `${brandHue} 30% 28%`,
+    "--muted-foreground": `${((brandHue - 4) % 360 + 360) % 360} 24% 81%`,
+    "--border": `${brandHue} 28% 34%`,
+    "--input": `${brandHue} 28% 34%`,
+  } as React.CSSProperties;
   const showSidebar = step !== "confirmation";
   const onReviewOrPayment = step === "review" || step === "payment";
 
@@ -1000,7 +1023,7 @@ export function BookingWizard({
       >
         <div className={`grid flex-1 min-h-0 ${showSidebar ? "lg:grid-cols-[1fr_300px]" : "lg:grid-cols-1"}`}>
         <div className="flex flex-col min-h-0 min-w-0">
-        <DialogHeader className="px-6 pt-6 pb-1 shrink-0">
+        <DialogHeader className="px-6 pt-6 pb-1 shrink-0" style={dialogHeaderStyle}>
           <DialogDescription className="sr-only">
             Complete your booking by reviewing your cart, schedule, and payment details.
           </DialogDescription>
