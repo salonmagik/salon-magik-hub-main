@@ -7350,6 +7350,8 @@ export type Database = {
           booking_page_bio: string | null
           booking_status_message: string | null
           brand_color: string | null
+          secondary_color: string | null
+          background_color: string | null
           cancellation_grace_hours: number | null
           cancellation_reason: string | null
           cancellation_reason_note: string | null
@@ -7426,6 +7428,8 @@ export type Database = {
           booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
+          secondary_color?: string | null
+          background_color?: string | null
           cancellation_grace_hours?: number | null
           cancellation_reason?: string | null
           cancellation_reason_note?: string | null
@@ -7502,6 +7506,8 @@ export type Database = {
           booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
+          secondary_color?: string | null
+          background_color?: string | null
           cancellation_grace_hours?: number | null
           cancellation_reason?: string | null
           cancellation_reason_note?: string | null
@@ -8438,6 +8444,8 @@ export type Database = {
           booking_page_bio: string | null
           booking_status_message: string | null
           brand_color: string | null
+          secondary_color: string | null
+          background_color: string | null
           cancellation_grace_hours: number | null
           contact_phone: string | null
           country: string | null
@@ -8475,6 +8483,8 @@ export type Database = {
           booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
+          secondary_color?: string | null
+          background_color?: string | null
           cancellation_grace_hours?: number | null
           contact_phone?: never
           country?: string | null
@@ -8512,6 +8522,8 @@ export type Database = {
           booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
+          secondary_color?: string | null
+          background_color?: string | null
           cancellation_grace_hours?: number | null
           contact_phone?: never
           country?: string | null

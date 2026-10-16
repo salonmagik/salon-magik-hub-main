@@ -64,6 +64,8 @@ export default function ThemesSettingsPage() {
   const [settings, setSettings] = useState({
     bookingPageBio: currentTenant?.booking_page_bio || "",
     brandColor: currentTenant?.brand_color || "#2563EB",
+    backgroundColor: (currentTenant as any)?.background_color || "",
+    secondaryColor: (currentTenant as any)?.secondary_color || "",
     storefrontMode: (currentTenant?.storefront_mode as "services" | "products" | "both") || "both",
     heroHeading: (currentTenant as any)?.hero_heading || currentTenant?.name || "",
     heroTagline: (currentTenant as any)?.hero_tagline || "",
@@ -92,6 +94,8 @@ export default function ThemesSettingsPage() {
     const next = {
       bookingPageBio: currentTenant.booking_page_bio || "",
       brandColor: currentTenant.brand_color || "#2563EB",
+      backgroundColor: (currentTenant as any)?.background_color || "",
+      secondaryColor: (currentTenant as any)?.secondary_color || "",
       storefrontMode: (currentTenant.storefront_mode as "services" | "products" | "both") || "both",
       heroHeading: (currentTenant as any)?.hero_heading || currentTenant.name || "",
       heroTagline: (currentTenant as any)?.hero_tagline || "",
@@ -273,6 +277,8 @@ export default function ThemesSettingsPage() {
         .update({
           booking_page_bio: settings.bookingPageBio || null,
           brand_color: settings.brandColor,
+          background_color: settings.backgroundColor || null,
+          secondary_color: settings.secondaryColor || null,
           storefront_mode: settings.storefrontMode,
           hero_heading: settings.heroHeading || null,
           hero_tagline: settings.heroTagline || null,
@@ -691,6 +697,72 @@ export default function ThemesSettingsPage() {
                       <div className="h-10 w-10 rounded-md border" style={{ backgroundColor: settings.brandColor }} />
                     </div>
                     <p className="text-xs text-muted-foreground">Used for buttons and accents on your booking page.</p>
+                  </div>
+
+                  {/* Background color */}
+                  <div className="space-y-1.5 mt-6">
+                    <Label>Background Color</Label>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        type="color"
+                        value={settings.backgroundColor || "#ffffff"}
+                        onChange={(e) => setSettings((p) => ({ ...p, backgroundColor: e.target.value }))}
+                        className="h-10 w-16 cursor-pointer p-1"
+                      />
+                      <Input
+                        type="text"
+                        value={settings.backgroundColor}
+                        onChange={(e) => setSettings((p) => ({ ...p, backgroundColor: e.target.value }))}
+                        placeholder="#FFFFFF (default)"
+                        className="w-32 font-mono text-sm"
+                      />
+                      {settings.backgroundColor && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs"
+                          onClick={() => setSettings((p) => ({ ...p, backgroundColor: "" }))}
+                        >
+                          Reset
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">The page background behind your catalog. Defaults to white.</p>
+                  </div>
+
+                  {/* Secondary color */}
+                  <div className="space-y-1.5 mt-6">
+                    <Label>Secondary Color</Label>
+                    <div className="flex items-center gap-3">
+                      <Input
+                        type="color"
+                        value={settings.secondaryColor || settings.brandColor}
+                        onChange={(e) => setSettings((p) => ({ ...p, secondaryColor: e.target.value }))}
+                        className="h-10 w-16 cursor-pointer p-1"
+                      />
+                      <Input
+                        type="text"
+                        value={settings.secondaryColor}
+                        onChange={(e) => setSettings((p) => ({ ...p, secondaryColor: e.target.value }))}
+                        placeholder="Auto from brand color"
+                        className="w-40 font-mono text-sm"
+                      />
+                      {settings.secondaryColor && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-xs"
+                          onClick={() => setSettings((p) => ({ ...p, secondaryColor: "" }))}
+                        >
+                          Reset
+                        </Button>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Used for chips, badges, and hover states. Leave blank to auto-generate a light tint of your brand color.
+                    </p>
                   </div>
 
                   {/* Storefront focus */}

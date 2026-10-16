@@ -39,7 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@ui/select";
-import { isLightColor } from "@shared/color";
+import { isLightColor, hexToHsl, hexToHslTriplet, deriveLightTint } from "@shared/color";
 import { COUNTRIES, getCountryByCode } from "@shared/countries";
 import { getCurrencyForCountryCode } from "@shared/country-currency";
 
@@ -234,11 +234,59 @@ function BookingPageContent() {
     root.style.setProperty("--brand-color", brandColor);
     root.style.setProperty("--brand-foreground", textColor);
 
+    // --brand-color above only ever reached the handful of components that
+    // read it directly via inline styles. Most of the storefront actually
+    // renders through Tailwind's semantic tokens (bg-primary, bg-secondary,
+    // hover:bg-accent, etc.), which were hardcoded to the default Salon
+    // Magik purple/gold in index.css and never varied per tenant -- that's
+    // why most of the UI stayed purple regardless of a salon's brand color.
+    // Override the real tokens here instead, so every component using the
+    // standard classes follows automatically, no per-component changes.
+    const primaryHsl = hexToHsl(brandColor);
+    const defaultHue = 262; // the hardcoded purple hue baked into index.css
+    const hueShift = primaryHsl ? primaryHsl.h - defaultHue : 0;
+    const rehue = (h: number) => ((h + hueShift) % 360 + 360) % 360;
+
+    const secondaryColor = salon.secondary_color || deriveLightTint(brandColor);
+    const secondaryForeground = isLightColor(secondaryColor) ? brandColor : "#ffffff";
+    const backgroundColor = salon.background_color || "#ffffff";
+    const foregroundColor = isLightColor(backgroundColor) ? "#1f1a24" : "#ffffff";
+
+    const tokens: Record<string, string> = {
+      "--primary": hexToHslTriplet(brandColor),
+      "--primary-foreground": hexToHslTriplet(textColor),
+      "--ring": hexToHslTriplet(brandColor),
+      "--background": hexToHslTriplet(backgroundColor),
+      "--foreground": hexToHslTriplet(foregroundColor),
+      "--secondary": hexToHslTriplet(secondaryColor),
+      "--secondary-foreground": hexToHslTriplet(secondaryForeground),
+      // Hover states (hover:bg-accent) used a fixed gold regardless of
+      // brand -- now follow the same pale tint as secondary.
+      "--accent": hexToHslTriplet(secondaryColor),
+      "--accent-foreground": hexToHslTriplet(secondaryForeground),
+      // Neutral supporting tokens (card surfaces, borders, muted text) keep
+      // their original lightness/saturation "shape" from index.css, just
+      // re-hued to match the brand instead of staying fixed at purple.
+      "--surface": `${rehue(262)} 67% 97%`,
+      "--card": hexToHslTriplet(backgroundColor),
+      "--muted": `${rehue(262)} 20% 95%`,
+      "--muted-foreground": `${rehue(262)} 10% 46%`,
+      "--border": `${rehue(262)} 15% 90%`,
+      "--input": `${rehue(262)} 15% 90%`,
+    };
+
+    for (const [prop, value] of Object.entries(tokens)) {
+      root.style.setProperty(prop, value);
+    }
+
     return () => {
       root.style.removeProperty("--brand-color");
       root.style.removeProperty("--brand-foreground");
+      for (const prop of Object.keys(tokens)) {
+        root.style.removeProperty(prop);
+      }
     };
-  }, [salon?.brand_color]);
+  }, [salon?.brand_color, salon?.secondary_color, salon?.background_color]);
 
   useEffect(() => {
     setSelectedLocationIds((prev) => {

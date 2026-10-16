@@ -26,6 +26,8 @@ export type PublicTenant = Pick<
   | "payment_setup_status"
 > & {
   brand_color?: string | null;
+  background_color?: string | null;
+  secondary_color?: string | null;
   contact_phone?: string | null;
   show_contact_on_booking?: boolean;
   auto_confirm_bookings?: boolean;
