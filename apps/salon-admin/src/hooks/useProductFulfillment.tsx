@@ -40,11 +40,22 @@ export function useProductFulfillment() {
     setError(null);
 
     try {
-      // First get all tenant appointments
-      const { data: appointments } = await supabase
+      // First get all tenant appointments. The customers(...) embed must be
+      // qualified by FK name -- appointments has two FKs into customers
+      // (customer_id and gift_recipient_customer_id), so the unqualified
+      // form is ambiguous and PostgREST errors (PGRST201). That error was
+      // going unnoticed here because only `data` was destructured, not
+      // `error`, so a failed query silently looked identical to "this
+      // tenant has no appointments yet" -- the Fulfillment tab showed
+      // empty with zero console output even though the product line items
+      // existed (and showed up fine in the appointment detail view, which
+      // doesn't embed customers at all).
+      const { data: appointments, error: appointmentsError } = await supabase
         .from("appointments")
-        .select("id, customer_id, scheduled_start, customers(full_name)")
+        .select("id, customer_id, scheduled_start, customers!appointments_customer_id_fkey(full_name)")
         .eq("tenant_id", currentTenant.id);
+
+      if (appointmentsError) throw appointmentsError;
 
       if (!appointments?.length) {
         setItems([]);
