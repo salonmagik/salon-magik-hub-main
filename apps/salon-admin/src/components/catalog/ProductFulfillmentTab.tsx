@@ -75,41 +75,84 @@ export function ProductFulfillmentTab() {
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-warning/20">
-              <Clock className="w-5 h-5 text-warning-foreground" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Pending Pickup</p>
-              <p className="text-2xl font-semibold">{stats.pending}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/20">
-              <Package className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Ready for Pickup</p>
-              <p className="text-2xl font-semibold">{stats.ready}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-success/20">
-              <CheckCircle2 className="w-5 h-5 text-success" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Fulfilled Today</p>
-              <p className="text-2xl font-semibold">{stats.fulfilledToday}</p>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Pickup stats */}
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Pickup</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-warning/20">
+                <Clock className="w-5 h-5 text-warning-foreground" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Pending Pickup</p>
+                <p className="text-2xl font-semibold">{stats.pending}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/20">
+                <Package className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Ready for Pickup</p>
+                <p className="text-2xl font-semibold">{stats.ready}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-success/20">
+                <CheckCircle2 className="w-5 h-5 text-success" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Picked Up Today</p>
+                <p className="text-2xl font-semibold">{stats.fulfilledToday}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {/* Delivery stats */}
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Delivery</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-warning/20">
+                <Clock className="w-5 h-5 text-warning-foreground" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Pending Delivery</p>
+                <p className="text-2xl font-semibold">{stats.pendingDelivery}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-primary/20">
+                <Truck className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Ready for Delivery</p>
+                <p className="text-2xl font-semibold">{stats.readyDelivery}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-success/20">
+                <CheckCircle2 className="w-5 h-5 text-success" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Delivered Today</p>
+                <p className="text-2xl font-semibold">{stats.deliveredToday}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Fulfillment Table */}
@@ -131,6 +174,7 @@ export function ProductFulfillmentTab() {
                 <TableHead>Product</TableHead>
                 <TableHead className="text-center">Qty</TableHead>
                 <TableHead>Price</TableHead>
+                <TableHead>Fulfillment</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
@@ -149,6 +193,16 @@ export function ProductFulfillmentTab() {
                     <TableCell>{item.product_name}</TableCell>
                     <TableCell className="text-center">{item.quantity}</TableCell>
                     <TableCell>{formatCurrency(Number(item.total_price))}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="gap-1 capitalize">
+                        {item.fulfillment_type === "delivery" ? (
+                          <Truck className="w-3 h-3" />
+                        ) : (
+                          <Package className="w-3 h-3" />
+                        )}
+                        {item.fulfillment_type}
+                      </Badge>
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant={config?.variant || "secondary"}
@@ -171,7 +225,7 @@ export function ProductFulfillmentTab() {
                               onClick={() => updateStatus(item.id, "ready")}
                             >
                               <Package className="w-4 h-4 mr-2" />
-                              Mark Ready
+                              {item.fulfillment_type === "delivery" ? "Mark Ready for Delivery" : "Mark Ready for Pickup"}
                             </DropdownMenuItem>
                           )}
                           {(item.fulfillment_status === "pending" ||
@@ -180,7 +234,7 @@ export function ProductFulfillmentTab() {
                               onClick={() => updateStatus(item.id, "fulfilled")}
                             >
                               <CheckCircle2 className="w-4 h-4 mr-2" />
-                              Mark Fulfilled
+                              {item.fulfillment_type === "delivery" ? "Mark Delivered" : "Mark Picked Up"}
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem

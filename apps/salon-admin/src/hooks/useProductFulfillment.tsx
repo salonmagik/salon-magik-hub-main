@@ -6,32 +6,47 @@ import { startOfDay, endOfDay } from "date-fns";
 import type { FulfillmentStatus, AppointmentProduct } from "./useAppointmentProducts";
 import type { TablesUpdate } from "@supabase-client";
 
+export type ProductFulfillmentType = "pickup" | "delivery";
+
 export interface FulfillmentItem extends AppointmentProduct {
   customer_name?: string;
   appointment_date?: string | null;
+  // appointment_products has no fulfillment_type column of its own -- this
+  // is read off the parent appointment's booking_metadata.line_item
+  // (set at checkout; see create-public-booking). Defaults to "pickup" for
+  // rows predating that field or added directly by the salon.
+  fulfillment_type: ProductFulfillmentType;
 }
 
 export interface FulfillmentStats {
   pending: number;
   ready: number;
   fulfilledToday: number;
+  pendingDelivery: number;
+  readyDelivery: number;
+  deliveredToday: number;
 }
+
+const EMPTY_STATS: FulfillmentStats = {
+  pending: 0,
+  ready: 0,
+  fulfilledToday: 0,
+  pendingDelivery: 0,
+  readyDelivery: 0,
+  deliveredToday: 0,
+};
 
 export function useProductFulfillment() {
   const { currentTenant } = useAuth();
   const [items, setItems] = useState<FulfillmentItem[]>([]);
-  const [stats, setStats] = useState<FulfillmentStats>({
-    pending: 0,
-    ready: 0,
-    fulfilledToday: 0,
-  });
+  const [stats, setStats] = useState<FulfillmentStats>(EMPTY_STATS);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchFulfillmentData = useCallback(async () => {
     if (!currentTenant?.id) {
       setItems([]);
-      setStats({ pending: 0, ready: 0, fulfilledToday: 0 });
+      setStats(EMPTY_STATS);
       setIsLoading(false);
       return;
     }
@@ -52,14 +67,14 @@ export function useProductFulfillment() {
       // doesn't embed customers at all).
       const { data: appointments, error: appointmentsError } = await supabase
         .from("appointments")
-        .select("id, customer_id, scheduled_start, customers!appointments_customer_id_fkey(full_name)")
+        .select("id, customer_id, scheduled_start, booking_metadata, customers!appointments_customer_id_fkey(full_name)")
         .eq("tenant_id", currentTenant.id);
 
       if (appointmentsError) throw appointmentsError;
 
       if (!appointments?.length) {
         setItems([]);
-        setStats({ pending: 0, ready: 0, fulfilledToday: 0 });
+        setStats(EMPTY_STATS);
         setIsLoading(false);
         return;
       }
@@ -76,32 +91,43 @@ export function useProductFulfillment() {
 
       if (productsError) throw productsError;
 
-      // Merge with customer info
+      // Merge with customer info and the fulfillment type off booking_metadata
       const enrichedItems: FulfillmentItem[] = (products || []).map((p) => {
         const apt = appointments.find((a) => a.id === p.appointment_id);
+        const metadata = apt?.booking_metadata as { line_item?: { fulfillment_type?: string | null } } | null;
+        const fulfillmentType: ProductFulfillmentType =
+          metadata?.line_item?.fulfillment_type === "delivery" ? "delivery" : "pickup";
         return {
           ...p,
           customer_name: (apt?.customers as any)?.full_name || "Unknown",
           appointment_date: apt?.scheduled_start,
+          fulfillment_type: fulfillmentType,
         } as FulfillmentItem;
       });
 
       setItems(enrichedItems);
 
-      // Calculate stats
+      // Calculate stats, split by pickup vs delivery
       const today = new Date();
       const todayStart = startOfDay(today);
       const todayEnd = endOfDay(today);
-
-      const pending = enrichedItems.filter((i) => i.fulfillment_status === "pending").length;
-      const ready = enrichedItems.filter((i) => i.fulfillment_status === "ready").length;
-      const fulfilledToday = enrichedItems.filter((i) => {
-        if (i.fulfillment_status !== "fulfilled" || !i.fulfilled_at) return false;
-        const fulfilledDate = new Date(i.fulfilled_at);
+      const isCompletedToday = (item: FulfillmentItem) => {
+        if (item.fulfillment_status !== "fulfilled" || !item.fulfilled_at) return false;
+        const fulfilledDate = new Date(item.fulfilled_at);
         return fulfilledDate >= todayStart && fulfilledDate <= todayEnd;
-      }).length;
+      };
 
-      setStats({ pending, ready, fulfilledToday });
+      const pickupItems = enrichedItems.filter((i) => i.fulfillment_type === "pickup");
+      const deliveryItems = enrichedItems.filter((i) => i.fulfillment_type === "delivery");
+
+      setStats({
+        pending: pickupItems.filter((i) => i.fulfillment_status === "pending").length,
+        ready: pickupItems.filter((i) => i.fulfillment_status === "ready").length,
+        fulfilledToday: pickupItems.filter(isCompletedToday).length,
+        pendingDelivery: deliveryItems.filter((i) => i.fulfillment_status === "pending").length,
+        readyDelivery: deliveryItems.filter((i) => i.fulfillment_status === "ready").length,
+        deliveredToday: deliveryItems.filter(isCompletedToday).length,
+      });
     } catch (err) {
       console.error("Error fetching fulfillment data:", err);
       setError(err as Error);
