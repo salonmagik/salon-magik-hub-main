@@ -24,8 +24,6 @@ SELECT
   t.logo_url,
   t.banner_urls,
   t.brand_color,
-  t.background_color,
-  t.secondary_color,
   t.currency,
   t.timezone,
   t.country,
@@ -52,7 +50,9 @@ SELECT
   t.hero_cta_secondary,
   t.hero_bg_color,
   t.about_text,
-  t.active_theme_key AS theme_key
+  t.active_theme_key AS theme_key,
+  t.background_color,
+  t.secondary_color
 FROM public.tenants t
 WHERE t.online_booking_enabled = true
   AND t.slug IS NOT NULL
