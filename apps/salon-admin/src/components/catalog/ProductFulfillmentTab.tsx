@@ -22,12 +22,10 @@ import {
   CheckCircle2,
   Truck,
   MoreHorizontal,
-  ExternalLink,
 } from "lucide-react";
 import { useProductFulfillment, type FulfillmentItem } from "@/hooks/useProductFulfillment";
 import { useAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
-import { useNavigate } from "react-router-dom";
 
 const statusConfig = {
   pending: { label: "Pending", variant: "secondary" as const, icon: Clock },
@@ -36,7 +34,6 @@ const statusConfig = {
 };
 
 export function ProductFulfillmentTab() {
-  const navigate = useNavigate();
   const { currentTenant } = useAuth();
   const { items, stats, isLoading, updateStatus } = useProductFulfillment();
   const currency = currentTenant?.currency || "USD";
@@ -237,12 +234,6 @@ export function ProductFulfillmentTab() {
                               {item.fulfillment_type === "delivery" ? "Mark Delivered" : "Mark Picked Up"}
                             </DropdownMenuItem>
                           )}
-                          <DropdownMenuItem
-                            onClick={() => navigate("/salon/appointments")}
-                          >
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            View Appointment
-                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
