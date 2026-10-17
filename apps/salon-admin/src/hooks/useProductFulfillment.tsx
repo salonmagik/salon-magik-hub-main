@@ -170,6 +170,15 @@ export function useProductFulfillment() {
 
       toast({ title: "Success", description: `Status updated to ${status}` });
       await fetchFulfillmentData();
+
+      // Fire-and-forget: a notification-email failure shouldn't undo the
+      // status change the salon just confirmed, or block their own UI on it.
+      if (status === "ready" || status === "fulfilled") {
+        supabase.functions.invoke("send-fulfillment-notification", { body: { productId: id } }).catch((notifyErr) => {
+          console.error("Error sending fulfillment notification:", notifyErr);
+        });
+      }
+
       return true;
     } catch (err) {
       console.error("Error updating status:", err);
