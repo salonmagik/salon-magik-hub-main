@@ -1,6 +1,5 @@
-import { AlertTriangle, Gift } from "lucide-react";
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { Check, Gift, Loader2, Mail, Pencil } from "lucide-react";
+import { useState } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -12,6 +11,7 @@ import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
 import { Checkbox } from "@ui/checkbox";
 import { Badge } from "@ui/badge";
+import { Button } from "@ui/button";
 import { PhoneInput } from "@ui/phone-input";
 import { getCountryByCode, PRODUCT_LIVE_COUNTRIES } from "@shared/countries";
 import {
@@ -27,6 +27,7 @@ import {
 } from "@ui/select";
 import type { CartItem, GiftRecipient } from "@/hooks/useBookingCart";
 import { useMarketCountries } from "@/hooks/useMarketCountries";
+import { useCheckedEmail } from "@/hooks/useCheckedEmail";
 
 interface GiftRecipientsStepProps {
   giftItems: CartItem[];
@@ -34,13 +35,7 @@ interface GiftRecipientsStepProps {
   onRecipientsChange: (recipients: Record<string, GiftRecipient>) => void;
   sameRecipient: boolean;
   onSameRecipientChange: (value: boolean) => void;
-  tenantId: string;
   bookerInfo: { firstName: string; email: string; phone: string };
-}
-
-interface IdentityMatch {
-  type: "self" | "other";
-  firstName: string;
 }
 
 interface RecipientFormProps {
@@ -48,48 +43,7 @@ interface RecipientFormProps {
   onUpdate: (field: string, value: string | boolean) => void;
   selectableCountries: { code: string; name: string }[];
   item?: CartItem;
-  tenantId: string;
   bookerInfo: { firstName: string; email: string; phone: string };
-}
-
-// Non-blocking — catches the case where a mistyped email/phone happens to
-// already belong to someone (the sender's own account, or another existing
-// customer of this salon), so a gift doesn't silently go to the wrong
-// person. Only the matched first name is shown, never the full identity.
-async function checkIdentityMatch(
-  tenantId: string,
-  bookerInfo: { firstName: string; email: string; phone: string },
-  email: string,
-  phone: string,
-): Promise<IdentityMatch | null> {
-  const normalizedEmail = email.trim().toLowerCase();
-  const normalizedPhone = phone.trim();
-  if (!normalizedEmail && !normalizedPhone) return null;
-
-  const bookerEmail = bookerInfo.email.trim().toLowerCase();
-  const bookerPhone = bookerInfo.phone.trim();
-  if (
-    (normalizedEmail && normalizedEmail === bookerEmail) ||
-    (normalizedPhone && normalizedPhone === bookerPhone)
-  ) {
-    return { type: "self", firstName: bookerInfo.firstName || "you" };
-  }
-
-  // Not .maybeSingle() — this project's PostgREST returns a genuine 406 for
-  // zero matching rows rather than a clean null, so a plain array response
-  // (data?.[0]) is the only way to treat "no match" as a non-error case.
-  const { data: matches } = await supabase
-    .rpc("lookup_booking_customer_match" as never, {
-      p_tenant_id: tenantId,
-      p_email: normalizedEmail || null,
-      p_phone: normalizedPhone || null,
-    } as never) as { data: { customer_id: string; first_name: string | null }[] | null };
-  const match = matches?.[0];
-
-  if (match?.first_name) {
-    return { type: "other", firstName: match.first_name };
-  }
-  return null;
 }
 
 const emptyRecipient: GiftRecipient = {
@@ -106,31 +60,38 @@ function RecipientForm({
   onUpdate,
   selectableCountries,
   item,
-  tenantId,
   bookerInfo,
 }: RecipientFormProps) {
-  const [identityMatch, setIdentityMatch] = useState<IdentityMatch | null>(null);
-  const [identityMatchDismissed, setIdentityMatchDismissed] = useState(false);
+  // Cheap, client-side, and checked before the backend identity lookup —
+  // gifting yourself is always a mistake regardless of what
+  // customer_identity_exists would say.
+  const [selfMatch, setSelfMatch] = useState(false);
+  // "unknown" = still on the email-first ask; "exists" = a Salon Magik
+  // account already owns this email (name/phone are never asked for or
+  // shown — the recipient's own account covers that, and asking would just
+  // be a phishing-shaped request for someone else's details); "new" = no
+  // account, so collect the rest of the form normally.
+  const [resolution, setResolution] = useState<"unknown" | "exists" | "new">("unknown");
 
-  // Debounced on email/phone change rather than onBlur — PhoneInput doesn't
-  // expose a blur handler.
-  useEffect(() => {
-    setIdentityMatchDismissed(false);
-    if (!recipient.email && !recipient.phone) {
-      setIdentityMatch(null);
+  const emailCheck = useCheckedEmail((exists) => {
+    setResolution(exists ? "exists" : "new");
+    if (exists) {
+      onUpdate("firstName", "");
+      onUpdate("lastName", "");
+      onUpdate("phone", "");
+    }
+  });
+
+  const handleEmailCheck = () => {
+    const email = recipient.email.trim().toLowerCase();
+    const bookerEmail = bookerInfo.email.trim().toLowerCase();
+    if (email && bookerEmail && email === bookerEmail) {
+      setSelfMatch(true);
       return;
     }
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      const result = await checkIdentityMatch(tenantId, bookerInfo, recipient.email, recipient.phone || "");
-      if (!cancelled) setIdentityMatch(result);
-    }, 600);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recipient.email, recipient.phone, tenantId]);
+    setSelfMatch(false);
+    void emailCheck.check(recipient.email);
+  };
 
   const needsDeliveryAddress = item?.type === "product" && item.fulfillmentType === "delivery";
   const inferredCountryCode =
@@ -149,94 +110,113 @@ function RecipientForm({
         </Badge>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs">First Name *</Label>
-          <Input
-            value={recipient.firstName}
-            onChange={(e) => onUpdate("firstName", e.target.value)}
-            placeholder="Jane"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">Last Name *</Label>
-          <Input
-            value={recipient.lastName}
-            onChange={(e) => onUpdate("lastName", e.target.value)}
-            placeholder="Smith"
-          />
-        </div>
-      </div>
-
       <div className="space-y-1">
         <Label className="text-xs">Email *</Label>
-        <Input
-          type="email"
-          value={recipient.email}
-          onChange={(e) => onUpdate("email", e.target.value)}
-          placeholder="jane@example.com"
-        />
-      </div>
-
-      <div className="space-y-1">
-        <Label className="text-xs">Phone *</Label>
-        <PhoneInput
-          value={recipient.phone || ""}
-          onChange={(value) => onUpdate("phone", value)}
-          placeholder="Phone number"
-          defaultCountry="NG"
-          allowedCountryCodes={selectableCountries.map((country) => country.code)}
-        />
-      </div>
-
-      {identityMatch && !identityMatchDismissed && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-          <div className="flex-1 space-y-2">
-            <p className="text-sm text-amber-900">
-              {identityMatch.type === "self"
-                ? "This looks like your own email or phone number — did you mean to gift someone else?"
-                : `This looks like ${identityMatch.firstName}'s account — is that who you mean to gift?`}
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setIdentityMatchDismissed(true)}
-                className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700"
-              >
-                Yes, that's right
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  // Just one onUpdate call — the parent's updateRecipient/
-                  // applySharedRecipient close over `recipients` per call,
-                  // so two synchronous calls in the same tick would have
-                  // the second (stale) one clobber the first.
-                  setIdentityMatchDismissed(true);
-                  onUpdate("email", "");
-                  setIdentityMatch(null);
-                }}
-                className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100"
-              >
-                Let me fix this
-              </button>
-            </div>
-          </div>
+        <div className="relative">
+          <Input
+            type="email"
+            value={recipient.email}
+            onChange={(e) => {
+              onUpdate("email", e.target.value);
+              setSelfMatch(false);
+            }}
+            placeholder="jane@example.com"
+            disabled={emailCheck.isLocked}
+            className="pr-10"
+          />
+          {emailCheck.phase === "checking" && (
+            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+          )}
+          {emailCheck.phase === "confirmed" && (
+            <Check className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-success" />
+          )}
+          {emailCheck.phase === "locked" && (
+            <button
+              type="button"
+              onClick={emailCheck.startEdit}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+              aria-label="Edit email"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
+        {selfMatch && (
+          <p className="text-xs text-amber-700">
+            This looks like your own email — did you mean to gift someone else?
+          </p>
+        )}
+      </div>
+
+      {emailCheck.phase === "editable" && (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={handleEmailCheck}
+          disabled={!recipient.email.trim()}
+        >
+          <Mail className="w-3.5 h-3.5 mr-1.5" />
+          Continue
+        </Button>
       )}
 
-      <div className="space-y-1">
-        <Label className="text-xs">Gift Message</Label>
-        <Textarea
-          value={recipient.message || ""}
-          onChange={(e) => onUpdate("message", e.target.value)}
-          placeholder="A special message for the recipient..."
-          rows={2}
-        />
-      </div>
+      {resolution !== "unknown" && (
+        <>
+          {resolution === "exists" ? (
+            <div className="flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <p className="text-sm text-foreground">
+                This belongs to an existing Salon Magik account — we'll deliver the gift to them directly, no need to re-enter their details.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">First Name *</Label>
+                  <Input
+                    value={recipient.firstName}
+                    onChange={(e) => onUpdate("firstName", e.target.value)}
+                    placeholder="Jane"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Last Name *</Label>
+                  <Input
+                    value={recipient.lastName}
+                    onChange={(e) => onUpdate("lastName", e.target.value)}
+                    placeholder="Smith"
+                  />
+                </div>
+              </div>
 
-      {needsDeliveryAddress && (
+              <div className="space-y-1">
+                <Label className="text-xs">Phone *</Label>
+                <PhoneInput
+                  value={recipient.phone || ""}
+                  onChange={(value) => onUpdate("phone", value)}
+                  placeholder="Phone number"
+                  defaultCountry="NG"
+                  allowedCountryCodes={selectableCountries.map((country) => country.code)}
+                />
+              </div>
+            </>
+          )}
+
+          <div className="space-y-1">
+            <Label className="text-xs">Gift Message</Label>
+            <Textarea
+              value={recipient.message || ""}
+              onChange={(e) => onUpdate("message", e.target.value)}
+              placeholder="A special message for the recipient..."
+              rows={2}
+            />
+          </div>
+        </>
+      )}
+
+      {resolution !== "unknown" && needsDeliveryAddress && (
         <div className="space-y-3 rounded-lg border p-4">
           <div>
             <Label className="font-medium text-sm">Delivery Address</Label>
@@ -352,7 +332,6 @@ export function GiftRecipientsStep({
   onRecipientsChange,
   sameRecipient,
   onSameRecipientChange,
-  tenantId,
   bookerInfo,
 }: GiftRecipientsStepProps) {
   const { data: marketCountries } = useMarketCountries();
@@ -427,7 +406,6 @@ export function GiftRecipientsStep({
               onUpdate={(field, value) => updateRecipient(item.id, field, value)}
               selectableCountries={selectableCountries}
               item={item}
-              tenantId={tenantId}
               bookerInfo={bookerInfo}
             />
           </AccordionContent>
@@ -449,7 +427,6 @@ export function GiftRecipientsStep({
           onUpdate={(field, value) => updateRecipient(item.id, field, value)}
           selectableCountries={selectableCountries}
           item={item}
-          tenantId={tenantId}
           bookerInfo={bookerInfo}
         />
       </div>
@@ -493,8 +470,7 @@ export function GiftRecipientsStep({
             onUpdate={applySharedRecipient}
             selectableCountries={selectableCountries}
             item={giftItems[0]}
-            tenantId={tenantId}
-            bookerInfo={bookerInfo}
+              bookerInfo={bookerInfo}
           />
         </div>
       ) : (

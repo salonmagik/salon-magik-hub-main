@@ -1115,7 +1115,6 @@ export function BookingWizard({
                 onRecipientsChange={setGiftRecipients}
                 sameRecipient={meta.giftsBelongToSamePerson}
                 onSameRecipientChange={(value) => updateMeta({ giftsBelongToSamePerson: value })}
-                tenantId={salon.id}
                 bookerInfo={{ firstName: bookerInfo.firstName, email: bookerInfo.email, phone: bookerInfo.phone }}
               />
             )}

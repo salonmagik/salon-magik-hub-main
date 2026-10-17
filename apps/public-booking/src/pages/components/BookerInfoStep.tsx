@@ -18,8 +18,8 @@ import {
 } from "@ui/select";
 import { useMarketCountries } from "@/hooks/useMarketCountries";
 import type { DeliveryAddress } from "@/hooks";
-import { AlertTriangle, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Check, Eye, EyeOff, Loader2, Lock, Mail, Pencil, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 export interface BookerInfo {
   firstName: string;
@@ -86,6 +86,41 @@ export function BookerInfoStep({
     onChange({ ...info, [field]: value });
   };
 
+  // Only relevant once we've reached the manual-entry form for someone who
+  // doesn't already have an account (an existing account instead goes
+  // through the OTP/password flow above, whose fields are already locked).
+  // auth-resolve-identifier already confirmed no account exists for the
+  // email they arrived with, so it starts locked without a second backend
+  // round-trip -- clicking the pencil re-opens it, and "Check email" below
+  // re-runs the SAME onEmailContinue/auth-resolve-identifier call used for
+  // the very first email. If that now finds an account, emailStage moves to
+  // "otp"/"password" (this whole block disappears, replaced by sign-in) --
+  // so manually-typed name/phone are cleared defensively rather than risk
+  // them leaking back in if the user bails out of sign-in to a guest entry.
+  const showCheckedEmailField = emailStage === "details" && !hasExistingAccount;
+  const [emailEditing, setEmailEditing] = useState(false);
+  const [emailJustConfirmed, setEmailJustConfirmed] = useState(false);
+  const wasProcessingEmailRef = useRef(false);
+
+  useEffect(() => {
+    const wasProcessing = wasProcessingEmailRef.current;
+    wasProcessingEmailRef.current = isProcessingEmail;
+    if (!(wasProcessing && !isProcessingEmail && emailEditing)) return;
+
+    if (emailStage === "details") {
+      setEmailJustConfirmed(true);
+      const timer = setTimeout(() => {
+        setEmailJustConfirmed(false);
+        setEmailEditing(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+
+    setEmailEditing(false);
+    onChange({ ...info, firstName: "", lastName: "", phone: "" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isProcessingEmail, emailEditing, emailStage]);
+
   return (
     <div className="space-y-6">
       <div>
@@ -99,18 +134,61 @@ export function BookerInfoStep({
 
       <div className="space-y-2">
         <Label>Email *</Label>
-        <Input
-          type="email"
-          value={info.email}
-          onChange={(e) => updateField("email", e.target.value)}
-          placeholder="john@example.com"
-          disabled={
-            emailStage === "otp" ||
-            emailStage === "password" ||
-            isProcessingEmail ||
-            (emailStage === "details" && hasExistingAccount)
-          }
-        />
+        {showCheckedEmailField ? (
+          <>
+            <div className="relative">
+              <Input
+                type="email"
+                value={info.email}
+                onChange={(e) => updateField("email", e.target.value)}
+                placeholder="john@example.com"
+                disabled={!emailEditing || isProcessingEmail}
+                className="pr-10"
+              />
+              {emailEditing && isProcessingEmail && (
+                <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              )}
+              {emailJustConfirmed && (
+                <Check className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-success" />
+              )}
+              {!emailEditing && !emailJustConfirmed && (
+                <button
+                  type="button"
+                  onClick={() => setEmailEditing(true)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Edit email"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {emailEditing && !isProcessingEmail && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onEmailContinue}
+                disabled={!info.email.trim()}
+              >
+                <Mail className="w-3.5 h-3.5 mr-1.5" />
+                Check email
+              </Button>
+            )}
+          </>
+        ) : (
+          <Input
+            type="email"
+            value={info.email}
+            onChange={(e) => updateField("email", e.target.value)}
+            placeholder="john@example.com"
+            disabled={
+              emailStage === "otp" ||
+              emailStage === "password" ||
+              isProcessingEmail ||
+              (emailStage === "details" && hasExistingAccount)
+            }
+          />
+        )}
       </div>
 
       {emailStage === "email" && (
