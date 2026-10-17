@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from "@ui/select";
 import { useMarketCountries } from "@/hooks/useMarketCountries";
+import { validateE164Phone } from "@shared/validation";
 import type { DeliveryAddress } from "@/hooks";
 import { AlertTriangle, Check, Eye, EyeOff, Loader2, Lock, Mail, Pencil, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -51,6 +52,8 @@ interface BookerInfoStepProps {
   onOtpChange?: (value: string) => void;
   onOtpSubmit?: () => void;
   onOtpResend?: () => void;
+  /** Fires whenever the in-place email edit (pencil → re-check) is open and unconfirmed, so the wizard can block "Continue" until it settles. */
+  onEmailEditPendingChange?: (pending: boolean) => void;
 }
 
 export function BookerInfoStep({
@@ -73,6 +76,7 @@ export function BookerInfoStep({
   onOtpChange,
   onOtpSubmit,
   onOtpResend,
+  onEmailEditPendingChange,
 }: BookerInfoStepProps) {
   const { data: marketCountries } = useMarketCountries();
   const selectableCountries = marketCountries ?? PRODUCT_LIVE_COUNTRIES;
@@ -101,6 +105,11 @@ export function BookerInfoStep({
   const [emailEditing, setEmailEditing] = useState(false);
   const [emailJustConfirmed, setEmailJustConfirmed] = useState(false);
   const wasProcessingEmailRef = useRef(false);
+  // Snapshot of the email at the moment edit mode opened — "Check email"
+  // only makes sense once they've actually changed it, not the instant they
+  // click the pencil.
+  const emailAtEditStartRef = useRef("");
+  const emailHasBeenEdited = emailEditing && info.email.trim() !== emailAtEditStartRef.current.trim();
 
   useEffect(() => {
     const wasProcessing = wasProcessingEmailRef.current;
@@ -120,6 +129,16 @@ export function BookerInfoStep({
     onChange({ ...info, firstName: "", lastName: "", phone: "" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isProcessingEmail, emailEditing, emailStage]);
+
+  // Block "Continue" on the wizard's own footer for as long as the email is
+  // unlocked for editing but hasn't been re-confirmed yet (covers both "they
+  // just clicked the pencil" and "they edited it and the check is running").
+  useEffect(() => {
+    onEmailEditPendingChange?.(showCheckedEmailField && emailEditing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCheckedEmailField, emailEditing]);
+
+  const phoneValidation = validateE164Phone(info.phone);
 
   return (
     <div className="space-y-6">
@@ -154,7 +173,10 @@ export function BookerInfoStep({
               {!emailEditing && !emailJustConfirmed && (
                 <button
                   type="button"
-                  onClick={() => setEmailEditing(true)}
+                  onClick={() => {
+                    emailAtEditStartRef.current = info.email;
+                    setEmailEditing(true);
+                  }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                   aria-label="Edit email"
                 >
@@ -162,7 +184,7 @@ export function BookerInfoStep({
                 </button>
               )}
             </div>
-            {emailEditing && !isProcessingEmail && (
+            {emailHasBeenEdited && !isProcessingEmail && (
               <Button
                 type="button"
                 size="sm"
@@ -284,6 +306,8 @@ export function BookerInfoStep({
 
       {emailStage === "details" && (
         <>
+      {!hasExistingAccount && (
+        <>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>First Name *</Label>
@@ -291,7 +315,6 @@ export function BookerInfoStep({
             value={info.firstName}
             onChange={(e) => updateField("firstName", e.target.value)}
             placeholder="John"
-            disabled={hasExistingAccount}
           />
         </div>
         <div className="space-y-2">
@@ -300,7 +323,6 @@ export function BookerInfoStep({
             value={info.lastName}
             onChange={(e) => updateField("lastName", e.target.value)}
             placeholder="Doe"
-            disabled={hasExistingAccount}
           />
         </div>
       </div>
@@ -313,8 +335,11 @@ export function BookerInfoStep({
           placeholder="Phone number"
           defaultCountry="NG"
           allowedCountryCodes={selectableCountries.map((country) => country.code)}
-          disabled={hasExistingAccount}
+          hasError={!phoneValidation.isValid}
         />
+        {!phoneValidation.isValid && (
+          <p className="text-sm text-destructive">{phoneValidation.error}</p>
+        )}
         {phoneEmailConflict && (
           <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
@@ -324,6 +349,8 @@ export function BookerInfoStep({
           </div>
         )}
       </div>
+      </>
+      )}
 
       <div className="space-y-2">
         <Label>Notes for the salon</Label>

@@ -1,5 +1,6 @@
-import { Check, Gift, Loader2, Mail, Pencil } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Check, Gift, Loader2, Mail, Pencil } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { validateE164Phone } from "@shared/validation";
 import {
   Accordion,
   AccordionContent,
@@ -29,6 +30,8 @@ import type { CartItem, GiftRecipient } from "@/hooks/useBookingCart";
 import { useMarketCountries } from "@/hooks/useMarketCountries";
 import { useCheckedEmail } from "@/hooks/useCheckedEmail";
 
+export type RecipientIdentityStatus = "pending" | "exists" | "new";
+
 interface GiftRecipientsStepProps {
   giftItems: CartItem[];
   recipients: Record<string, GiftRecipient>;
@@ -36,14 +39,18 @@ interface GiftRecipientsStepProps {
   sameRecipient: boolean;
   onSameRecipientChange: (value: boolean) => void;
   bookerInfo: { firstName: string; email: string; phone: string };
+  /** Fires per cart item whenever its recipient's email-identity check state changes, so the wizard can block "Continue" while any recipient is still "pending" (unchecked or re-checking). */
+  onRecipientStatusChange?: (itemId: string, status: RecipientIdentityStatus) => void;
 }
 
 interface RecipientFormProps {
+  itemId: string;
   recipient: GiftRecipient;
   onUpdate: (field: string, value: string | boolean) => void;
   selectableCountries: { code: string; name: string }[];
   item?: CartItem;
   bookerInfo: { firstName: string; email: string; phone: string };
+  onStatusChange?: (itemId: string, status: RecipientIdentityStatus) => void;
 }
 
 const emptyRecipient: GiftRecipient = {
@@ -56,11 +63,13 @@ const emptyRecipient: GiftRecipient = {
 };
 
 function RecipientForm({
+  itemId,
   recipient,
   onUpdate,
   selectableCountries,
   item,
   bookerInfo,
+  onStatusChange,
 }: RecipientFormProps) {
   // Cheap, client-side, and checked before the backend identity lookup —
   // gifting yourself is always a mistake regardless of what
@@ -72,15 +81,30 @@ function RecipientForm({
   // be a phishing-shaped request for someone else's details); "new" = no
   // account, so collect the rest of the form normally.
   const [resolution, setResolution] = useState<"unknown" | "exists" | "new">("unknown");
+  // Snapshot of the email when it was last (re)confirmed — the "Continue"/
+  // recheck button only shows once they've actually changed it since then,
+  // not the instant they reopen it.
+  const emailAtLastCheckRef = useRef("");
 
   const emailCheck = useCheckedEmail((exists) => {
     setResolution(exists ? "exists" : "new");
+    emailAtLastCheckRef.current = recipient.email;
     if (exists) {
       onUpdate("firstName", "");
       onUpdate("lastName", "");
       onUpdate("phone", "");
     }
   });
+
+  const identityStatus: RecipientIdentityStatus =
+    resolution === "unknown" || emailCheck.phase === "editable" || emailCheck.phase === "checking"
+      ? "pending"
+      : resolution;
+
+  useEffect(() => {
+    onStatusChange?.(itemId, identityStatus);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId, identityStatus]);
 
   const handleEmailCheck = () => {
     const email = recipient.email.trim().toLowerCase();
@@ -93,6 +117,8 @@ function RecipientForm({
     void emailCheck.check(recipient.email);
   };
 
+  const emailHasChangedSinceCheck = recipient.email.trim() !== emailAtLastCheckRef.current.trim();
+  const phoneValidation = validateE164Phone(recipient.phone || "");
   const needsDeliveryAddress = item?.type === "product" && item.fulfillmentType === "delivery";
   const inferredCountryCode =
     item?.eligibleBranches?.find((branch) => branch.id === item.branchId)?.country_code ||
@@ -148,7 +174,7 @@ function RecipientForm({
         )}
       </div>
 
-      {emailCheck.phase === "editable" && (
+      {emailCheck.phase === "editable" && emailHasChangedSinceCheck && (
         <Button
           type="button"
           size="sm"
@@ -199,7 +225,14 @@ function RecipientForm({
                   placeholder="Phone number"
                   defaultCountry="NG"
                   allowedCountryCodes={selectableCountries.map((country) => country.code)}
+                  hasError={!phoneValidation.isValid}
                 />
+                {!phoneValidation.isValid && (
+                  <p className="flex items-start gap-1.5 text-xs text-destructive">
+                    <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {phoneValidation.error}
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -333,6 +366,7 @@ export function GiftRecipientsStep({
   sameRecipient,
   onSameRecipientChange,
   bookerInfo,
+  onRecipientStatusChange,
 }: GiftRecipientsStepProps) {
   const { data: marketCountries } = useMarketCountries();
   const selectableCountries = marketCountries ?? PRODUCT_LIVE_COUNTRIES;
@@ -402,11 +436,13 @@ export function GiftRecipientsStep({
           <AccordionTrigger>{item.name}</AccordionTrigger>
           <AccordionContent>
             <RecipientForm
+              itemId={item.id}
               recipient={recipients[item.id] || emptyRecipient}
               onUpdate={(field, value) => updateRecipient(item.id, field, value)}
               selectableCountries={selectableCountries}
               item={item}
               bookerInfo={bookerInfo}
+              onStatusChange={onRecipientStatusChange}
             />
           </AccordionContent>
         </AccordionItem>
@@ -423,11 +459,13 @@ export function GiftRecipientsStep({
           <h3 className="font-serif text-lg font-semibold">Gift Recipient</h3>
         </div>
         <RecipientForm
+          itemId={item.id}
           recipient={recipients[item.id] || emptyRecipient}
           onUpdate={(field, value) => updateRecipient(item.id, field, value)}
           selectableCountries={selectableCountries}
           item={item}
           bookerInfo={bookerInfo}
+          onStatusChange={onRecipientStatusChange}
         />
       </div>
     );
@@ -466,11 +504,15 @@ export function GiftRecipientsStep({
             ))}
           </div>
           <RecipientForm
+            itemId={giftItems[0]?.id || "shared"}
             recipient={sharedRecipient}
             onUpdate={applySharedRecipient}
             selectableCountries={selectableCountries}
             item={giftItems[0]}
-              bookerInfo={bookerInfo}
+            bookerInfo={bookerInfo}
+            onStatusChange={(_, status) => {
+              giftItems.forEach((item) => onRecipientStatusChange?.(item.id, status));
+            }}
           />
         </div>
       ) : (

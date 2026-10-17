@@ -1,4 +1,4 @@
-import { getCountryByCode } from "./countries";
+import { ALL_COUNTRIES, getCountryByCode, parseE164 } from "./countries";
 
 export type PasswordRuleKey =
   | "minLength"
@@ -90,6 +90,22 @@ export function validatePhoneByCountry(countryCode: string, localDigits: string)
     expectedLength: null,
     error: nationalDigits.length >= 6 ? undefined : "Enter a valid phone number",
   };
+}
+
+// Validates a full E.164 phone number (as PhoneInput emits via onChange)
+// against its own country's digit-count/prefix rules, by parsing the dial
+// code back out first. An empty value or one whose dial code we can't
+// resolve is treated as valid -- this never blocks on a country PhoneInput
+// doesn't carry strict rules for, only on GH/NG numbers of the wrong shape.
+export function validateE164Phone(phone: string): { isValid: boolean; error?: string } {
+  const trimmed = phone.trim();
+  if (!trimmed) return { isValid: true };
+  const parsed = parseE164(trimmed);
+  if (!parsed) return { isValid: true };
+  const country = ALL_COUNTRIES.find((c) => c.dialCode === parsed.dialCode);
+  if (!country) return { isValid: true };
+  const result = validatePhoneByCountry(country.code, parsed.nationalNumber);
+  return { isValid: result.isValid, error: result.error };
 }
 
 export function toE164(countryCode: string, localDigits: string): string | null {
