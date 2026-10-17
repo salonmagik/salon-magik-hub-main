@@ -43,6 +43,25 @@ function bookingStatus(booking: {
   return booking.status === "scheduled" ? "Confirmed" : booking.status;
 }
 
+/** What to call a booking row when it has no services -- a product-only
+ * purchase previously fell back to "Salon appointment"/"Salon visit", which
+ * misdescribes an order. */
+function bookingHeadline(
+  booking: {
+    services?: { service_name: string }[] | null;
+    products?: { product_name: string }[] | null;
+  },
+  fallback: string,
+) {
+  if (booking.services && booking.services.length > 0) {
+    return booking.services.map((service) => service.service_name).join(", ");
+  }
+  if (booking.products && booking.products.length > 0) {
+    return booking.products.map((product) => product.product_name).join(", ");
+  }
+  return fallback;
+}
+
 export default function ClientDashboard() {
   const { customers, isLoading: authLoading } = useClientAuth();
   const {
@@ -57,9 +76,7 @@ export default function ClientDashboard() {
 
   const customerName = customers[0]?.full_name?.split(" ")[0] || "there";
   const activePackages = packages.filter((item) => item.status === "active");
-  const nextService =
-    nextAppointment?.services?.map((service) => service.service_name).join(", ") ||
-    "your appointment";
+  const nextService = nextAppointment ? bookingHeadline(nextAppointment, "your appointment") : "your appointment";
   const daysUntilNext =
     nextAppointment?.scheduled_start
       ? differenceInCalendarDays(
@@ -176,8 +193,7 @@ export default function ClientDashboard() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-lg font-medium">
-                        {booking.services?.map((service) => service.service_name).join(", ") ||
-                          "Salon appointment"}
+                        {bookingHeadline(booking, "Salon appointment")}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {booking.tenant?.name || "Salon"}
@@ -373,7 +389,7 @@ export default function ClientDashboard() {
                           : "—"}
                       </span>
                       <span className="font-medium">
-                        {booking.services?.[0]?.service_name || "Salon visit"}
+                        {bookingHeadline(booking, "Salon visit")}
                       </span>
                       <span className="text-sm text-muted-foreground">
                         {booking.tenant?.name || "Salon"}

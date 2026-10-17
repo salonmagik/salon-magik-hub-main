@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
+import { classifyOrderKind, orderKindNounCap } from "@shared/order-kind";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { startClientBookingPayment } from "@/lib/bookingPayments";
 import { useToast } from "@ui/ui/use-toast";
@@ -424,6 +425,7 @@ export default function ClientBookingDetailPage() {
 
   const services = booking.services || [];
   const products = (booking as { products?: AppointmentProduct[] }).products || [];
+  const orderKind = classifyOrderKind({ services, products });
   const servicesTotalDuration = services.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
   const bookingReference = approvalBooking.booking_reference || null;
   const bookingMetadata = (approvalBooking.booking_metadata || null) as BookingLineMetadata;
@@ -591,8 +593,12 @@ export default function ClientBookingDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1">
-            <p className="text-xs uppercase tracking-[0.12em] text-primary/65">Appointment</p>
-            <h1 className="font-serif text-3xl font-medium tracking-[-0.5px]">Booking details</h1>
+            <p className="text-xs uppercase tracking-[0.12em] text-primary/65">
+              {orderKind === "order" ? "Product order" : orderKind === "package" ? "Package purchase" : "Appointment"}
+            </p>
+            <h1 className="font-serif text-3xl font-medium tracking-[-0.5px]">
+              {orderKindNounCap(orderKind)} details
+            </h1>
             <p className="mt-0.5 text-sm text-muted-foreground">
               {booking.tenant?.name || "Salon"}
             </p>
@@ -629,7 +635,7 @@ export default function ClientBookingDetailPage() {
               <Badge className={`cursor-default ${status.className}`}>{status.label}</Badge>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-56 text-xs">
-              Where the appointment is in its lifecycle — scheduled, in progress, or completed.
+              Where the {orderKind === "booking" ? "appointment" : orderKindNounCap(orderKind).toLowerCase()} is in its lifecycle — scheduled, in progress, or completed.
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -870,7 +876,9 @@ export default function ClientBookingDetailPage() {
                 )}
               </>
             ) : (
-              <p className="text-muted-foreground">Unscheduled appointment</p>
+              <p className="text-muted-foreground">
+                {orderKind === "order" ? "No pickup/delivery time scheduled" : "Unscheduled appointment"}
+              </p>
             )}
           </CardContent>
         </Card>
@@ -900,7 +908,7 @@ export default function ClientBookingDetailPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Store className="h-4 w-4 text-primary" />
-                Services
+                {orderKind === "package" ? "Package includes" : "Services"}
               </CardTitle>
             </CardHeader>
             <CardContent>

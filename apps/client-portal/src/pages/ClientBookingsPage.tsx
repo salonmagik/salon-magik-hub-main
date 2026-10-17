@@ -8,9 +8,10 @@ import { Button } from "@ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
-import { Calendar, Clock, MapPin, Store, XCircle, ChevronRight, Info } from "lucide-react";
+import { Calendar, Clock, MapPin, Store, XCircle, ChevronRight, Info, ShoppingBag, Gift } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
+import { classifyOrderKind, orderKindNounCap } from "@shared/order-kind";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 
 type BookingFilter = "upcoming" | "completed" | "cancelled" | "unpaid";
@@ -71,6 +72,14 @@ function BookingCard({ booking }: { booking: ApprovalAwareBooking }) {
     }
   };
 
+  const orderKind = classifyOrderKind({ services: booking.services, products: booking.products });
+  const kindBadge =
+    orderKind === "order"
+      ? { label: "Product order", icon: ShoppingBag, className: "bg-sky-100 text-sky-900" }
+      : orderKind === "package"
+        ? { label: "Package purchase", icon: Gift, className: "bg-pink-100 text-pink-900" }
+        : null;
+
   const balanceDue = Math.max(Number(booking.total_amount || 0) - Number(booking.amount_paid || 0), 0);
   const canCompletePayment =
     balanceDue > 0 &&
@@ -88,6 +97,12 @@ function BookingCard({ booking }: { booking: ApprovalAwareBooking }) {
           {/* Left side - Main info */}
           <div className="space-y-2 flex-1">
             <div className="flex flex-wrap items-center gap-2">
+              {kindBadge && (
+                <Badge className={`cursor-default gap-1 ${kindBadge.className}`}>
+                  <kindBadge.icon className="h-3 w-3" />
+                  {kindBadge.label}
+                </Badge>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge className={`cursor-default ${statusColors[booking.status] || "bg-muted"}`}>
@@ -95,7 +110,7 @@ function BookingCard({ booking }: { booking: ApprovalAwareBooking }) {
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-56 text-xs">
-                  Where the appointment is in its lifecycle — scheduled, in progress, or completed.
+                  Where the {orderKind === "booking" ? "appointment" : orderKindNounCap(orderKind).toLowerCase()} is in its lifecycle — scheduled, in progress, or completed.
                 </TooltipContent>
               </Tooltip>
               <Tooltip>
@@ -154,11 +169,28 @@ function BookingCard({ booking }: { booking: ApprovalAwareBooking }) {
             {/* Services */}
             {booking.services && booking.services.length > 0 && (
               <div className="pt-2">
-                <p className="text-xs text-muted-foreground mb-1">Services:</p>
+                <p className="text-xs text-muted-foreground mb-1">
+                  {orderKind === "package" ? "Package includes:" : "Services:"}
+                </p>
                 <div className="flex flex-wrap gap-1">
                   {booking.services.map((service) => (
                     <Badge key={service.id} variant="secondary" className="text-xs">
                       {service.service_name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Products */}
+            {booking.products && booking.products.length > 0 && (
+              <div className="pt-2">
+                <p className="text-xs text-muted-foreground mb-1">Products:</p>
+                <div className="flex flex-wrap gap-1">
+                  {booking.products.map((product) => (
+                    <Badge key={product.id} variant="secondary" className="text-xs">
+                      {product.product_name}
+                      {product.quantity > 1 ? ` ×${product.quantity}` : ""}
                     </Badge>
                   ))}
                 </div>
@@ -230,9 +262,9 @@ function BookingsList({ filter }: { filter: BookingFilter }) {
 
   if (bookings.length === 0) {
     const messages: Record<BookingFilter, string> = {
-      upcoming: "No upcoming appointments",
-      completed: "No completed appointments",
-      cancelled: "No cancelled appointments",
+      upcoming: "No upcoming bookings",
+      completed: "No completed bookings",
+      cancelled: "No cancelled bookings",
       unpaid: "You're all paid up — no unpaid bookings",
     };
 
