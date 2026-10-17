@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext, ReactNode, useMemo, use
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard,
+  LayoutGrid,
   Building2,
   Calendar,
   Scissors,
@@ -289,7 +290,7 @@ const mainNavItems: NavItem[] = [
 	},
 	{
 		label: "Catalog",
-		icon: Scissors,
+		icon: LayoutGrid,
 		path: "/salon/services",
 		module: "services",
 	},
