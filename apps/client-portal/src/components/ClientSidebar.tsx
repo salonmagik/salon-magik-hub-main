@@ -44,7 +44,7 @@ interface ClientSidebarProps {
 // listed in both places at once.
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
-  { label: "Bookings", icon: Calendar, path: "/bookings" },
+  { label: "Bookings & Orders", icon: Calendar, path: "/bookings" },
   { label: "History", icon: Clock, path: "/history" },
   { label: "Store Credit", icon: RefreshCcw, path: "/balance" },
   { label: "Notifications", icon: Bell, path: "/notifications", showBadge: true },

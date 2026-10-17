@@ -3,6 +3,9 @@ import { TooltipProvider } from "@ui/tooltip";
 import ClientLoginPage from "@/pages/ClientLoginPage";
 import ClientDashboard from "@/pages/ClientDashboard";
 import ClientBookingsPage from "@/pages/ClientBookingsPage";
+import ClientPackagesPage from "@/pages/ClientPackagesPage";
+import ClientProductsPage from "@/pages/ClientProductsPage";
+import ClientVouchersPage from "@/pages/ClientVouchersPage";
 import ClientBookingDetailPage from "@/pages/ClientBookingDetailPage";
 import ClientHistoryPage from "@/pages/ClientHistoryPage";
 import ClientRefundsPage from "@/pages/ClientRefundsPage";
@@ -49,6 +52,30 @@ function App() {
             element={
               <ClientProtectedRoute>
                 <ClientBookingsPage />
+              </ClientProtectedRoute>
+            }
+          />
+          <Route
+            path="/bookings/packages"
+            element={
+              <ClientProtectedRoute>
+                <ClientPackagesPage />
+              </ClientProtectedRoute>
+            }
+          />
+          <Route
+            path="/bookings/products"
+            element={
+              <ClientProtectedRoute>
+                <ClientProductsPage />
+              </ClientProtectedRoute>
+            }
+          />
+          <Route
+            path="/bookings/vouchers"
+            element={
+              <ClientProtectedRoute>
+                <ClientVouchersPage />
               </ClientProtectedRoute>
             }
           />
