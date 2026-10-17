@@ -374,9 +374,9 @@ export function useDashboardStats() {
       const checklist: ChecklistItem[] = [
         { id: "payments", label: "Set up payouts", completed: currentTenant.payment_setup_status === "ready", href: "/salon/payouts?tab=accounts" },
         { id: "booking", label: "Enable online booking", completed: currentTenant.online_booking_enabled || false, href: "/salon/business-settings?tab=booking" },
-        { id: "products", label: "Add products", completed: (productsCountResult.count || 0) > 0, href: "/salon/services?tab=products" },
+        { id: "products", label: "Add products", completed: (productsCountResult.count || 0) > 0, href: "/salon/products" },
         { id: "appointment", label: "Book your first appointment", completed: apts.length > 0 || (completedAptsResult.data?.length || 0) > 0, href: "/salon/appointments" },
-        { id: "services", label: "Add services", completed: (servicesCountResult.count || 0) > 0, href: "/salon/services?tab=services" },
+        { id: "services", label: "Add services", completed: (servicesCountResult.count || 0) > 0, href: "/salon/services" },
         ...(canViewCustomers ? [{ id: "customer", label: "Add first customer", completed: (customerCountResult.count || 0) > 0, href: "/salon/customers" }] : []),
       ];
       setChecklistItems(checklist);

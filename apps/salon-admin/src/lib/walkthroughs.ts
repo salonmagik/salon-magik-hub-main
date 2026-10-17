@@ -2,6 +2,9 @@ import type { ElementType } from "react";
 import {
   LayoutGrid,
   Scissors,
+  ShoppingBag,
+  Package,
+  Gift,
   CalendarDays,
   Users,
   UserPlus,
@@ -113,6 +116,9 @@ export type WalkthroughDataRequirement = "customers" | "catalog";
 export type WalkthroughPageKey =
   | "dashboard"
   | "services"
+  | "products"
+  | "packages"
+  | "vouchers"
   | "team"
   | "appointments"
   | "customers"
@@ -188,18 +194,18 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     }),
   },
 
-  // ── Services & Products ────────────────────────────────────────────────
+  // ── Catalog (Services, Products, Packages, Vouchers) ──────────────────
   {
     id: "services.create-service",
     pageKey: "services",
-    section: "Services & Products",
+    section: "Catalog",
     sectionIcon: Scissors,
     label: "Create your first service",
     description: "Set a price, duration, and staff assignment",
     permission: "services",
     buildStep: ({ isDesktop }) => ({
       id: "services.create-service",
-      path: "/salon/services?tab=services",
+      path: "/salon/services",
       target: isDesktop ? '[data-tour-id="tour-add-service"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Add your services",
       content: isDesktop
@@ -209,15 +215,15 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   },
   {
     id: "services.create-product",
-    pageKey: "services",
-    section: "Services & Products",
-    sectionIcon: Scissors,
+    pageKey: "products",
+    section: "Catalog",
+    sectionIcon: ShoppingBag,
     label: "Create your first product",
     description: "Sell retail items alongside your services",
     permission: "services",
     buildStep: ({ isDesktop }) => ({
       id: "services.create-product",
-      path: "/salon/services?tab=products",
+      path: "/salon/products",
       target: isDesktop ? '[data-tour-id="tour-add-product"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Add your products",
       content: isDesktop
@@ -227,15 +233,15 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   },
   {
     id: "services.create-voucher",
-    pageKey: "services",
-    section: "Services & Products",
-    sectionIcon: Scissors,
+    pageKey: "vouchers",
+    section: "Catalog",
+    sectionIcon: Gift,
     label: "Create your first voucher",
     description: "Gift vouchers customers can redeem",
     permission: "services",
     buildStep: ({ isDesktop }) => ({
       id: "services.create-voucher",
-      path: "/salon/services?tab=vouchers",
+      path: "/salon/vouchers",
       target: isDesktop ? '[data-tour-id="tour-add-voucher"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Create a voucher",
       content: isDesktop
@@ -245,16 +251,16 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   },
   {
     id: "services.create-package",
-    pageKey: "services",
-    section: "Services & Products",
-    sectionIcon: Scissors,
+    pageKey: "packages",
+    section: "Catalog",
+    sectionIcon: Package,
     label: "Create your first package",
     description: "Bundle services and products at a discount",
     permission: "services",
     requires: "catalog",
     buildStep: ({ isDesktop }) => ({
       id: "services.create-package",
-      path: "/salon/services?tab=packages",
+      path: "/salon/packages",
       target: isDesktop ? '[data-tour-id="tour-add-package"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Bundle a package",
       content: isDesktop

@@ -176,12 +176,12 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
     }
     if (notification.type === "product_order") {
       await switchToLocationIfNeeded();
-      navigate("/salon/services?tab=products&subtab=fulfillment");
+      navigate("/salon/products?subtab=fulfillment");
       return;
     }
     if (notification.type === "package_order") {
       await switchToLocationIfNeeded();
-      navigate("/salon/services?tab=packages");
+      navigate("/salon/packages");
       return;
     }
   };

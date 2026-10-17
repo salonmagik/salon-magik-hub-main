@@ -60,7 +60,7 @@ const faqs = [
   {
     question: "How do I add a new service?",
     answer:
-      "Go to Services and Products, click on the Services tab, then click 'Add Service'. Fill in the service name, price, duration, and any other details. You can also assign services to categories for better organization.",
+      "Go to Catalog > Services, then click 'Add Service'. Fill in the service name, price, duration, and any other details. You can also assign services to categories for better organization.",
   },
   {
     question: "How do I manage customer appointments?",
@@ -75,7 +75,7 @@ const faqs = [
   {
     question: "Can I offer packages and bundles?",
     answer:
-      "Yes! Go to Services and Products, click on the Packages tab, and create a new package. You can bundle multiple services together at a discounted price. The savings will be automatically displayed to customers.",
+      "Yes! Go to Catalog > Packages and create a new package. You can bundle multiple services together at a discounted price. The savings will be automatically displayed to customers.",
   },
   {
     question: "How do I process refunds?",

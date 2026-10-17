@@ -32,6 +32,9 @@ import {
   Wallet,
   MapPin,
   MoreHorizontal,
+  ShoppingBag,
+  Package,
+  Gift,
 } from "lucide-react";
 import { MyProfileModal } from "@/components/profile/MyProfileModal";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
@@ -285,7 +288,7 @@ const mainNavItems: NavItem[] = [
 		module: "customers",
 	},
 	{
-		label: "Services and Products",
+		label: "Catalog",
 		icon: Scissors,
 		path: "/salon/services",
 		module: "services",
@@ -521,6 +524,17 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
           return { ...item, label: children[0].label, icon: children[0].icon, path: children[0].path };
         }
         return { ...item, children };
+      }
+      if (item.path === "/salon/services") {
+        return {
+          ...item,
+          children: [
+            { label: "Services", icon: Scissors, path: "/salon/services" },
+            { label: "Products", icon: ShoppingBag, path: "/salon/products" },
+            { label: "Packages", icon: Package, path: "/salon/packages" },
+            { label: "Vouchers", icon: Gift, path: "/salon/vouchers" },
+          ],
+        };
       }
       if (item.path === "/salon/settings") {
         if (activeContextType === "owner_hub") {
