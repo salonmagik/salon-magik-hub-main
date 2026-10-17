@@ -10,6 +10,7 @@ export type ProductFulfillmentType = "pickup" | "delivery";
 
 export interface FulfillmentItem extends AppointmentProduct {
   customer_name?: string;
+  customer_email?: string | null;
   appointment_date?: string | null;
   // appointment_products has no fulfillment_type column of its own -- this
   // is read off the parent appointment's booking_metadata.line_item
@@ -18,22 +19,25 @@ export interface FulfillmentItem extends AppointmentProduct {
   fulfillment_type: ProductFulfillmentType;
 }
 
+interface FulfillmentCount {
+  pickup: number;
+  delivery: number;
+}
+
+// Combined counts (pickup + delivery together) with the per-type split kept
+// alongside -- 6 separate cards was too much chrome for what's usually a
+// handful of orders, but the pickup/delivery breakdown still matters
+// operationally, so each stat keeps both numbers.
 export interface FulfillmentStats {
-  pending: number;
-  ready: number;
-  fulfilledToday: number;
-  pendingDelivery: number;
-  readyDelivery: number;
-  deliveredToday: number;
+  pending: FulfillmentCount;
+  ready: FulfillmentCount;
+  completedToday: FulfillmentCount;
 }
 
 const EMPTY_STATS: FulfillmentStats = {
-  pending: 0,
-  ready: 0,
-  fulfilledToday: 0,
-  pendingDelivery: 0,
-  readyDelivery: 0,
-  deliveredToday: 0,
+  pending: { pickup: 0, delivery: 0 },
+  ready: { pickup: 0, delivery: 0 },
+  completedToday: { pickup: 0, delivery: 0 },
 };
 
 export function useProductFulfillment() {
@@ -67,7 +71,7 @@ export function useProductFulfillment() {
       // doesn't embed customers at all).
       const { data: appointments, error: appointmentsError } = await supabase
         .from("appointments")
-        .select("id, customer_id, scheduled_start, booking_metadata, customers!appointments_customer_id_fkey(full_name)")
+        .select("id, customer_id, scheduled_start, booking_metadata, customers!appointments_customer_id_fkey(full_name, email)")
         .eq("tenant_id", currentTenant.id);
 
       if (appointmentsError) throw appointmentsError;
@@ -100,6 +104,7 @@ export function useProductFulfillment() {
         return {
           ...p,
           customer_name: (apt?.customers as any)?.full_name || "Unknown",
+          customer_email: (apt?.customers as any)?.email || null,
           appointment_date: apt?.scheduled_start,
           fulfillment_type: fulfillmentType,
         } as FulfillmentItem;
@@ -121,12 +126,18 @@ export function useProductFulfillment() {
       const deliveryItems = enrichedItems.filter((i) => i.fulfillment_type === "delivery");
 
       setStats({
-        pending: pickupItems.filter((i) => i.fulfillment_status === "pending").length,
-        ready: pickupItems.filter((i) => i.fulfillment_status === "ready").length,
-        fulfilledToday: pickupItems.filter(isCompletedToday).length,
-        pendingDelivery: deliveryItems.filter((i) => i.fulfillment_status === "pending").length,
-        readyDelivery: deliveryItems.filter((i) => i.fulfillment_status === "ready").length,
-        deliveredToday: deliveryItems.filter(isCompletedToday).length,
+        pending: {
+          pickup: pickupItems.filter((i) => i.fulfillment_status === "pending").length,
+          delivery: deliveryItems.filter((i) => i.fulfillment_status === "pending").length,
+        },
+        ready: {
+          pickup: pickupItems.filter((i) => i.fulfillment_status === "ready").length,
+          delivery: deliveryItems.filter((i) => i.fulfillment_status === "ready").length,
+        },
+        completedToday: {
+          pickup: pickupItems.filter(isCompletedToday).length,
+          delivery: deliveryItems.filter(isCompletedToday).length,
+        },
       });
     } catch (err) {
       console.error("Error fetching fulfillment data:", err);
