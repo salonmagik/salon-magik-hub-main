@@ -44,7 +44,7 @@ const CANONICAL_PERMISSION_KEYS: PermissionKey[] = [
   { key: "customers.view_tenants", label: "Customers · Tenants", description: "View tenants and unlock requests" },
   { key: "customers.view_ops_monitor", label: "Customers · Ops Monitor", description: "View setup/import/reactivation monitoring" },
   { key: "plans.view", label: "Plans", description: "View and manage plans" },
-  { key: "plans.manage_paystack_codes", label: "Plans · Paystack Codes", description: "View and edit Paystack subscription plan codes (sensitive — monthly & annual PLN codes per currency)" },
+  { key: "plans.manage_paystack_codes", label: "Plans · Paystack Codes", description: "View and edit Paystack subscription plan codes (sensitive: monthly & annual PLN codes per currency)" },
   { key: "comms.view", label: "Comms", description: "View and manage platform-owned communication templates" },
   { key: "settings.view", label: "Settings", description: "View settings" },
   { key: "audit_logs.view", label: "Audit Logs", description: "View audit logs" },

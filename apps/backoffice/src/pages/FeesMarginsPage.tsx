@@ -167,7 +167,7 @@ export default function FeesMarginsPage() {
             <CardTitle>Booking Payment Fees</CardTitle>
             <CardDescription>
               Applied to every Paystack-split booking and invoice payment. Paystack's own card-processing fee is separate
-              and always billed to the customer automatically — nothing to configure here for that part.
+              and always billed to the customer automatically. Nothing to configure here for that part.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">

@@ -47,6 +47,8 @@ interface RecipientFormProps {
   itemId: string;
   recipient: GiftRecipient;
   onUpdate: (field: string, value: string | boolean) => void;
+  /** Merges several address fields in one update -- onUpdate calls made back-to-back in the same handler would each close over the same stale `recipients`, so only the last one would actually stick. */
+  onUpdateAddress: (patch: Record<string, string>) => void;
   selectableCountries: { code: string; name: string }[];
   item?: CartItem;
   bookerInfo: { firstName: string; email: string; phone: string };
@@ -66,6 +68,7 @@ function RecipientForm({
   itemId,
   recipient,
   onUpdate,
+  onUpdateAddress,
   selectableCountries,
   item,
   bookerInfo,
@@ -306,11 +309,9 @@ function RecipientForm({
               <Label className="text-xs">State / Region *</Label>
               <Select
                 value={recipient.address?.state || ""}
-                onValueChange={(value) => {
-                  onUpdate("address.state", value);
-                  onUpdate("address.city", "");
-                  onUpdate("address.country", inferredCountryName);
-                }}
+                onValueChange={(value) =>
+                  onUpdateAddress({ state: value, city: "", country: inferredCountryName })
+                }
                 disabled={regionOptions.length === 0}
               >
                 <SelectTrigger>
@@ -401,6 +402,29 @@ export function GiftRecipientsStep({
     });
   };
 
+  const updateRecipientAddress = (itemId: string, patch: Record<string, string>) => {
+    const current = recipients[itemId] || emptyRecipient;
+    onRecipientsChange({
+      ...recipients,
+      [itemId]: {
+        ...current,
+        address: { line1: "", city: "", country: "", ...(current.address || {}), ...patch },
+      },
+    });
+  };
+
+  const applySharedRecipientAddress = (patch: Record<string, string>) => {
+    const updated: Record<string, GiftRecipient> = {};
+    giftItems.forEach((item) => {
+      const current = recipients[item.id] || emptyRecipient;
+      updated[item.id] = {
+        ...current,
+        address: { line1: "", city: "", country: "", ...(current.address || {}), ...patch },
+      };
+    });
+    onRecipientsChange(updated);
+  };
+
   const applySharedRecipient = (field: string, value: string | boolean) => {
     const updated: Record<string, GiftRecipient> = {};
     giftItems.forEach((item) => {
@@ -439,6 +463,7 @@ export function GiftRecipientsStep({
               itemId={item.id}
               recipient={recipients[item.id] || emptyRecipient}
               onUpdate={(field, value) => updateRecipient(item.id, field, value)}
+              onUpdateAddress={(patch) => updateRecipientAddress(item.id, patch)}
               selectableCountries={selectableCountries}
               item={item}
               bookerInfo={bookerInfo}
@@ -462,6 +487,7 @@ export function GiftRecipientsStep({
           itemId={item.id}
           recipient={recipients[item.id] || emptyRecipient}
           onUpdate={(field, value) => updateRecipient(item.id, field, value)}
+          onUpdateAddress={(patch) => updateRecipientAddress(item.id, patch)}
           selectableCountries={selectableCountries}
           item={item}
           bookerInfo={bookerInfo}
@@ -507,6 +533,7 @@ export function GiftRecipientsStep({
             itemId={giftItems[0]?.id || "shared"}
             recipient={sharedRecipient}
             onUpdate={applySharedRecipient}
+            onUpdateAddress={applySharedRecipientAddress}
             selectableCountries={selectableCountries}
             item={giftItems[0]}
             bookerInfo={bookerInfo}

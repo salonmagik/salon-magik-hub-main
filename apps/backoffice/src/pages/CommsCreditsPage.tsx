@@ -170,7 +170,7 @@ function TenantMessageLogDrawer({ tenant, onClose }: { tenant: CommsUsageRow | n
       <Sheet open={Boolean(tenant)} onOpenChange={(open) => !open && onClose()}>
         <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>{tenant?.tenant_name} — message log</SheetTitle>
+            <SheetTitle>{tenant?.tenant_name} message log</SheetTitle>
             <SheetDescription>
               Salon-sent messages only. Click a row to see exactly what was sent.
             </SheetDescription>
