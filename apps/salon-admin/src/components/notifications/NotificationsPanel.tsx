@@ -8,7 +8,7 @@ import {
 } from "@ui/sheet";
 import { Button } from "@ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
-import { Bell, Calendar, CreditCard, UserPlus, Settings, Check, Loader2, ShoppingBag, Gift } from "lucide-react";
+import { Bell, Calendar, CreditCard, UserPlus, Settings, Check, Loader2, ShoppingBag, Gift, Undo2, LayoutGrid } from "lucide-react";
 import { cn } from "@shared/utils";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
@@ -16,6 +16,9 @@ import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
+import { ProductOrderDetailDialog } from "@/components/ProductOrderDetailDialog";
+import { PackagePurchaseDetailDialog } from "@/components/PackagePurchaseDetailDialog";
+import { MixedPurchaseDetailDialog } from "@/components/MixedPurchaseDetailDialog";
 
 type AppointmentNotificationMeta = {
   id: string;
@@ -55,6 +58,10 @@ const getIcon = (type: Notification["type"]) => {
       return ShoppingBag;
     case "package_order":
       return Gift;
+    case "refund_request":
+      return Undo2;
+    case "mixed_order":
+      return LayoutGrid;
     default:
       return Bell;
   }
@@ -74,6 +81,10 @@ const getIconColor = (type: Notification["type"]) => {
       return "text-amber-700 bg-amber-50";
     case "package_order":
       return "text-pink-700 bg-pink-50";
+    case "refund_request":
+      return "text-rose-700 bg-rose-50";
+    case "mixed_order":
+      return "text-indigo-700 bg-indigo-50";
     default:
       return "text-muted-foreground bg-muted";
   }
@@ -86,6 +97,9 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
   const { notifications, isLoading, markAsRead, markAllAsRead, refetch } =
     notificationsData || notificationsHook;
   const [appointmentMetaById, setAppointmentMetaById] = useState<Record<string, AppointmentNotificationMeta>>({});
+  const [detailDialog, setDetailDialog] = useState<
+    { kind: "product_order" | "package_order" | "mixed_order"; bookingReference: string } | null
+  >(null);
 
   useEffect(() => {
     if (open) {
@@ -93,10 +107,20 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
     }
   }, [open, refetch]);
 
+  // entity_id is always an appointments.id regardless of notification type
+  // (appointment, product_order, package_order and mixed_order all point at
+  // the first appointment row created for that order), so this metadata --
+  // in particular booking_reference, used to look up every other line item
+  // in the same order for the new detail dialogs -- is loaded the same way
+  // for all of them, not just "appointment" notifications.
   const appointmentNotificationIds = useMemo(
     () =>
       notifications
-        .filter((notification) => notification.type === "appointment" && notification.entity_id)
+        .filter(
+          (notification) =>
+            ["appointment", "product_order", "package_order", "mixed_order"].includes(notification.type) &&
+            notification.entity_id,
+        )
         .map((notification) => notification.entity_id as string),
     [notifications],
   );
@@ -176,12 +200,43 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
     }
     if (notification.type === "product_order") {
       await switchToLocationIfNeeded();
+      const bookingReference = notification.entity_id
+        ? appointmentMetaById[notification.entity_id]?.booking_reference
+        : null;
       navigate("/salon/products?subtab=fulfillment");
+      if (bookingReference) {
+        setDetailDialog({ kind: "product_order", bookingReference });
+      }
       return;
     }
     if (notification.type === "package_order") {
       await switchToLocationIfNeeded();
-      navigate("/salon/packages");
+      const bookingReference = notification.entity_id
+        ? appointmentMetaById[notification.entity_id]?.booking_reference
+        : null;
+      navigate("/salon/packages?tab=purchases");
+      if (bookingReference) {
+        setDetailDialog({ kind: "package_order", bookingReference });
+      }
+      return;
+    }
+    if (notification.type === "mixed_order") {
+      // Per the approved Routing Rules design, a mixed order gets no tab
+      // navigation -- just the standalone Order Summary modal, since there
+      // is no single destination page that represents a heterogeneous
+      // order of services, products and packages together.
+      await switchToLocationIfNeeded();
+      const bookingReference = notification.entity_id
+        ? appointmentMetaById[notification.entity_id]?.booking_reference
+        : null;
+      if (bookingReference) {
+        setDetailDialog({ kind: "mixed_order", bookingReference });
+      }
+      return;
+    }
+    if (notification.type === "refund_request") {
+      await switchToLocationIfNeeded();
+      navigate("/salon/transactions");
       return;
     }
   };
@@ -211,6 +266,7 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
   };
 
   return (
+    <>
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full sm:max-w-md flex flex-col">
         <SheetHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
@@ -339,6 +395,23 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
         </div>
       </SheetContent>
     </Sheet>
+
+    <ProductOrderDetailDialog
+      open={detailDialog?.kind === "product_order"}
+      onOpenChange={(next) => !next && setDetailDialog(null)}
+      bookingReference={detailDialog?.kind === "product_order" ? detailDialog.bookingReference : null}
+    />
+    <PackagePurchaseDetailDialog
+      open={detailDialog?.kind === "package_order"}
+      onOpenChange={(next) => !next && setDetailDialog(null)}
+      bookingReference={detailDialog?.kind === "package_order" ? detailDialog.bookingReference : null}
+    />
+    <MixedPurchaseDetailDialog
+      open={detailDialog?.kind === "mixed_order"}
+      onOpenChange={(next) => !next && setDetailDialog(null)}
+      bookingReference={detailDialog?.kind === "mixed_order" ? detailDialog.bookingReference : null}
+    />
+    </>
   );
 }
 

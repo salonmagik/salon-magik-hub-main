@@ -57,6 +57,12 @@ export function ClientRefundRequestDialog({ open, onOpenChange, transaction }: C
       return;
     }
 
+    // Fire-and-forget: the request already succeeded above, an email failure
+    // here must never block the confirmation the customer is about to see.
+    void supabase.functions.invoke("send-refund-request-notification", {
+      body: { transactionId: transaction.id, amount: numericAmount, reason: reason.trim() },
+    });
+
     setSubmitted(true);
   };
 

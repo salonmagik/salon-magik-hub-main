@@ -3,6 +3,7 @@
 // refunds through the atomic local refund RPC.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import type { SupabaseClient, User } from "npm:@supabase/supabase-js@2";
+import { sendRefundEmails } from "../_shared/refund-emails.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -70,7 +71,9 @@ export async function handleRefundViaPaystack(
 
     const { data: transaction, error: transactionError } = await serviceSupabase
       .from("transactions")
-      .select("id, tenant_id, appointment_id, amount, currency, type, status, method, provider, provider_reference, paystack_reference")
+      .select(
+        "id, tenant_id, appointment_id, customer_id, amount, currency, type, status, method, provider, provider_reference, paystack_reference",
+      )
       .eq("id", transactionId)
       .maybeSingle();
 
@@ -105,6 +108,40 @@ export async function handleRefundViaPaystack(
       p_reason: reason.trim(), p_actor_id: user.id, p_key: debitIdempotencyKey, p_request_id: requestId || null,
     });
     if (refundError) throw refundError;
+
+    if (result?.success) {
+      // Awaited, not fire-and-forget: a Deno edge function's isolate can be
+      // torn down right after the response is sent, so a detached promise
+      // here would race shutdown and may never actually send. A caught
+      // failure still never undoes or blocks the refund, which already
+      // completed above.
+      try {
+        const [{ data: tenant }, { data: customer }] = await Promise.all([
+          serviceSupabase.from("tenants").select("name, logo_url, currency").eq("id", transaction.tenant_id).maybeSingle(),
+          transaction.customer_id
+            ? serviceSupabase.from("customers").select("full_name, email").eq("id", transaction.customer_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+        ]);
+        if (customer?.email || tenant) {
+          await sendRefundEmails(serviceSupabase, {
+            mode: "completed",
+            tenantId: transaction.tenant_id,
+            tenantName: tenant?.name || "Our Salon",
+            tenantLogoUrl: tenant?.logo_url ?? null,
+            customerEmail: customer?.email ?? null,
+            customerName: customer?.full_name || "Valued Customer",
+            amount,
+            currency: tenant?.currency || transaction.currency,
+            reason: reason.trim(),
+            refundDestination: refundType === "store_credit" ? "store_credit" : "offline",
+            fromEmail: Deno.env.get("RESEND_FROM_EMAIL") || "noreply@salonmagik.com",
+          });
+        }
+      } catch (error) {
+        console.error("Failed to send refund-completed emails:", error);
+      }
+    }
+
     return json(result, result?.success ? 200 : 409);
   } catch (error) {
     console.error("refund-via-paystack error:", error);

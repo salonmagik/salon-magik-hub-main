@@ -54,7 +54,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
-import { useTransactions } from "@/hooks/useTransactions";
+import { useTransactions, type TransactionWithDetails } from "@/hooks/useTransactions";
 import { useRefunds, type RefundWithDetails } from "@/hooks/useRefunds";
 import { useAuth } from "@/hooks/useAuth";
 import { useSalonsOverview } from "@/hooks/useSalonsOverview";
@@ -63,6 +63,7 @@ import { endOfDay, endOfMonth, format, startOfDay, startOfMonth, subDays } from 
 import { cn } from "@shared/utils";
 import { RequestRefundDialog } from "@/components/dialogs/RequestRefundDialog";
 import { RejectRefundDialog } from "@/components/dialogs/RejectRefundDialog";
+import { TransactionDetailDialog } from "@/components/dialogs/TransactionDetailDialog";
 import { ExportDropdown } from "@/components/ExportDropdown";
 import { RecordPaymentDialog } from "@/components/dialogs/RecordPaymentDialog";
 import { formatCurrency as sharedFormatCurrency } from "@shared/currency";
@@ -118,6 +119,8 @@ export default function CashflowPage() {
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
+  const [detailTransaction, setDetailTransaction] = useState<TransactionWithDetails | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedRefund, setSelectedRefund] = useState<RefundWithDetails | null>(null);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -134,6 +137,20 @@ export default function CashflowPage() {
     updateRefundStatusLocally,
   } = useRefunds();
   const { locations } = useSalonsOverview("today");
+
+  // A fresh object literal on every render (even an unrelated one, like the
+  // refetches onSuccess triggers right after a refund completes) would give
+  // RequestRefundDialog a new `transaction` reference each time, re-firing
+  // its reset effect and wiping the just-set "success" stage back to the
+  // form before the user ever sees it. Memoized so identity only changes
+  // when the underlying refund actually does.
+  const approveDialogTransaction = useMemo(
+    () =>
+      selectedRefund?.transaction
+        ? { ...selectedRefund.transaction, customer: selectedRefund.customer }
+        : null,
+    [selectedRefund],
+  );
 
   const isOwnerHub = activeContextType === "owner_hub";
   const canCompleteRefunds = currentRole === "owner" || currentRole === "manager";
@@ -396,7 +413,10 @@ export default function CashflowPage() {
 
     return (
       <div key={txn.id} className="md:[&:last-child>div]:border-b-0">
-        <article className="rounded-[14px] border border-border/60 bg-white p-4 shadow-sm md:hidden">
+        <article
+          className="rounded-[14px] border border-border/60 bg-white p-4 shadow-sm md:hidden"
+          onClick={() => { setDetailTransaction(txn); setDetailDialogOpen(true); }}
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate font-medium">{txn.customer?.full_name || "Guest"}</p>
@@ -444,14 +464,17 @@ export default function CashflowPage() {
             <p className="text-xs text-muted-foreground">
               {format(new Date(txn.created_at), "MMM d, yyyy")}
             </p>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
               <Badge className={cn("rounded-full px-3 text-xs capitalize", style.bg, style.text)}>{txn.status}</Badge>
               {refundAction}
             </div>
           </div>
         </article>
 
-        <div className="hidden gap-3 border-b px-5 py-4 md:grid md:grid-cols-[100px_minmax(105px,.85fr)_minmax(150px,1.2fr)_minmax(90px,.65fr)_minmax(110px,.75fr)_minmax(125px,.9fr)] md:items-center">
+        <div
+          className="hidden cursor-pointer gap-3 border-b px-5 py-4 md:grid md:grid-cols-[100px_minmax(105px,.85fr)_minmax(150px,1.2fr)_minmax(90px,.65fr)_minmax(110px,.75fr)_minmax(125px,.9fr)_28px] md:items-center md:hover:bg-muted/20"
+          onClick={() => { setDetailTransaction(txn); setDetailDialogOpen(true); }}
+        >
           <p className="text-sm text-muted-foreground">
             {format(new Date(txn.created_at), "MMM d, yyyy")}
           </p>
@@ -494,23 +517,25 @@ export default function CashflowPage() {
           <p className={cn("font-serif text-base font-semibold", amountColorClass)}>
               {isIncoming ? "+" : "-"}{sharedFormatCurrency(Number(txn.amount), txn.currency)}
           </p>
-          <div className="flex items-center justify-start gap-2">
+          <div className="flex items-center justify-start gap-2" onClick={(e) => e.stopPropagation()}>
             <Badge className={cn("rounded-full px-4 text-xs capitalize", style.bg, style.text)}>{txn.status}</Badge>
             {refundAction}
           </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </div>
       </div>
     );
   };
 
   const transactionTableHeader = (
-    <div className="hidden grid-cols-[100px_minmax(105px,.85fr)_minmax(150px,1.2fr)_minmax(90px,.65fr)_minmax(110px,.75fr)_minmax(125px,.9fr)] gap-3 border-b bg-muted/20 px-5 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground md:grid">
+    <div className="hidden grid-cols-[100px_minmax(105px,.85fr)_minmax(150px,1.2fr)_minmax(90px,.65fr)_minmax(110px,.75fr)_minmax(125px,.9fr)_28px] gap-3 border-b bg-muted/20 px-5 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground md:grid">
       <span>Date</span>
       <span>Customer</span>
       <span>Type</span>
       <span>Method</span>
       <span>Amount</span>
       <span>Status</span>
+      <span></span>
     </div>
   );
 
@@ -739,16 +764,37 @@ export default function CashflowPage() {
         onOpenChange={setApproveDialogOpen}
         mode="complete"
         request={selectedRefund}
-        transaction={selectedRefund?.transaction ? {
-          ...selectedRefund.transaction,
-          customer: selectedRefund.customer,
-        } : null}
+        transaction={approveDialogTransaction}
         onSuccess={() => {
           if (selectedRefund?.id) {
             updateRefundStatusLocally(selectedRefund.id, "completed");
           }
           void refetchRefunds();
           void refetchTransactions();
+        }}
+      />
+
+      <TransactionDetailDialog
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+        transaction={detailTransaction}
+        refunds={refunds}
+        fallbackCurrency={currency}
+        canCompleteRefunds={canCompleteRefunds}
+        onIssueRefund={(txn) => {
+          setDetailDialogOpen(false);
+          setSelectedTransaction(txn);
+          setRefundDialogOpen(true);
+        }}
+        onApproveRefund={(refund) => {
+          setDetailDialogOpen(false);
+          setSelectedRefund(refund);
+          setApproveDialogOpen(true);
+        }}
+        onDeclineRefund={(refund) => {
+          setDetailDialogOpen(false);
+          setSelectedRefund(refund);
+          setRejectDialogOpen(true);
         }}
       />
 

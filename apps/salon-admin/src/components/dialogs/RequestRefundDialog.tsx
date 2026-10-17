@@ -127,7 +127,7 @@ export function RequestRefundDialog({
       numericAmount > 0 &&
       numericAmount > recoverability.walletBalance,
   );
-  const storeCreditBlockedByWallet = mode === "complete" && !isApproval && walletShortfall;
+  const storeCreditBlockedByWallet = mode === "complete" && walletShortfall;
   const bothDestinationsBlocked = storeCreditBlockedByWallet;
 
   useEffect(() => {

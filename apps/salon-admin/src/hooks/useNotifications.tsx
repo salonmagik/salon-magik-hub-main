@@ -46,7 +46,16 @@ export interface Notification {
   id: string;
   tenant_id: string;
   user_id: string | null;
-  type: "appointment" | "payment" | "customer" | "system" | "staff" | "product_order" | "package_order";
+  type:
+    | "appointment"
+    | "payment"
+    | "customer"
+    | "system"
+    | "staff"
+    | "product_order"
+    | "package_order"
+    | "refund_request"
+    | "mixed_order";
   title: string;
   description: string;
   read: boolean;

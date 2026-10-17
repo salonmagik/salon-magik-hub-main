@@ -1093,73 +1093,73 @@ export default function AppointmentsPage() {
 
         {/* Tab-Specific Stats Grid */}
         {activeTab === "scheduled" ? (
-          <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">{getPresetLabel(dateRangePreset)}</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.rangeCount}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
-                <Calendar className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Amount due</p>
-                {statsLoading ? <Skeleton className="h-6 w-16 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{formatCurrency(scheduledStats.amountDue, currency)}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
-                <Clock className="h-5 w-5 text-amber-600" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Gifted</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.giftedCount}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
-                <Gift className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Cancelled</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.cancelledCount}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-destructive/10">
-                <XCircle className="h-5 w-5 text-destructive" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Rescheduled</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.rescheduledCount}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
-                <RotateCcw className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Confirmed</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{Math.max(0, scheduledStats.rangeCount - scheduledStats.unconfirmedCount)}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-success/10">
-                <Check className="h-5 w-5 text-success" />
-              </div>
-            </div>
+          <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0 xl:grid-cols-4">
+            <Card className="rounded-[14px] border-border/60 bg-white shadow-sm">
+              <CardContent className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">{getPresetLabel(dateRangePreset)}</p>
+                  {statsLoading ? <Skeleton className="h-8 w-8 mt-1" /> : (
+                    <>
+                      <p className="mt-1 font-serif text-2xl font-semibold">{scheduledStats.rangeCount}</p>
+                      {scheduledStats.giftedCount > 0 && (
+                        <p className="mt-0.5 text-xs font-medium text-pink-600">{scheduledStats.giftedCount} gifted</p>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+                  <Calendar className="h-5 w-5 text-primary" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-[14px] border-border/60 bg-white shadow-sm">
+              <CardContent className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Amount due</p>
+                  {statsLoading ? <Skeleton className="h-8 w-16 mt-1" /> : (
+                    <p className="mt-1 font-serif text-2xl font-semibold">{formatCurrency(scheduledStats.amountDue, currency)}</p>
+                  )}
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
+                  <Clock className="h-5 w-5 text-amber-600" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-[14px] border-border/60 bg-white shadow-sm">
+              <CardContent className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Confirmed</p>
+                  {statsLoading ? <Skeleton className="h-8 w-8 mt-1" /> : (
+                    <p className="mt-1 font-serif text-2xl font-semibold">{Math.max(0, scheduledStats.rangeCount - scheduledStats.unconfirmedCount)}</p>
+                  )}
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-success/10">
+                  <Check className="h-5 w-5 text-success" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-[14px] border-border/60 bg-white shadow-sm">
+              <CardContent className="flex items-center justify-between gap-4 px-5 py-4">
+                <div className="flex flex-1 items-center gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Cancelled</p>
+                    {statsLoading ? <Skeleton className="h-6 w-6 mt-1" /> : (
+                      <p className="mt-1 font-serif text-xl font-semibold">{scheduledStats.cancelledCount}</p>
+                    )}
+                  </div>
+                  <div className="h-8 w-px bg-border/60" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Rescheduled</p>
+                    {statsLoading ? <Skeleton className="h-6 w-6 mt-1" /> : (
+                      <p className="mt-1 font-serif text-xl font-semibold">{scheduledStats.rescheduledCount}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-destructive/10">
+                  <RotateCcw className="h-5 w-5 text-destructive" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
         ) : activeTab === "unscheduled" ? (
           <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">

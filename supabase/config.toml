@@ -97,6 +97,9 @@ verify_jwt = true
 [functions.refund-cancelled-appointment]
 verify_jwt = true
 
+[functions.send-refund-request-notification]
+verify_jwt = true
+
 [functions.public-booking-prefill]
 verify_jwt = false
 
