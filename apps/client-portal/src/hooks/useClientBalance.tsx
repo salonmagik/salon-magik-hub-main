@@ -34,6 +34,7 @@ export interface ClientPackageEntitlement {
   status: string;
   starts_at: string;
   expires_at: string | null;
+  purchased_transaction_id: string | null;
   package: { id: string; name: string; description: string | null } | null;
   items: Array<{
     id: string;

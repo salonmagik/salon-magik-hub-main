@@ -26,7 +26,7 @@ interface AddTenantOwnerDialogProps {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Restricted to salons with no active owner — this repairs the "owner was
+ * Restricted to salons with no active owner, this repairs the "owner was
  * invited but the invite silently never recorded" case, it isn't a general
  * reassign-ownership tool. Every use requires a fresh TOTP code, checked
  * independently of the session-level "already verified this session" flag
@@ -86,7 +86,7 @@ export function AddTenantOwnerDialog({ tenant, onOpenChange, onSuccess }: AddTen
         setDetailsError(
           data.reason === "already_owner"
             ? "This email already owns another salon on Salon Magik."
-            : "This email already has a Salon Magik account under a different role — it can't be added as an owner yet.",
+            : "This email already has a Salon Magik account under a different role. It can't be added as an owner yet.",
         );
         return;
       }
@@ -145,8 +145,7 @@ export function AddTenantOwnerDialog({ tenant, onOpenChange, onSuccess }: AddTen
                 Add owner
               </DialogTitle>
               <DialogDescription>
-                {tenant?.name} has no active owner. Add one below — this is only for salons missing an
-                owner, not for reassigning an existing one.
+                {tenant?.name} currently has no owner. Enter the details of the person you want to add as the owner. This is only for salons missing an owner, not for reassigning an existing one.
               </DialogDescription>
             </DialogHeader>
             <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>

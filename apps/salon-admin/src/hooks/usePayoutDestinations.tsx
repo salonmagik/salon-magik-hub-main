@@ -112,7 +112,7 @@ export function usePayoutDestinations(tenantId?: string) {
     }
 
     try {
-      // Only one destination is ever "the" default (General) account — clear
+      // Only one destination is ever "the" default (General) account, so clear
       // any other before setting this one, so the two states can't diverge.
       if (makeDefault) {
         const { error: clearError } = await supabase
@@ -168,7 +168,7 @@ export function usePayoutDestinations(tenantId?: string) {
 
       toast({
         title: "Success",
-        description: "Payout account unblocked — it can be used for withdrawals again.",
+        description: "Payout account unblocked. It can be used for withdrawals again.",
       });
 
       await fetchDestinations();

@@ -37,7 +37,7 @@ const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
-// Fixed placeholder year (2000, a leap year) — only month/day are ever used
+// Fixed placeholder year (2000, a leap year): only month/day are ever used
 // or displayed; matches how the birthday-messages feature already reads this
 // column (month+day only, year ignored).
 const DOB_YEAR = 2000;
@@ -271,7 +271,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           </>
         )}
 
-        {/* Step 2a: found elsewhere — minimal form */}
+        {/* Step 2a: found elsewhere, minimal form */}
         {step === "existing" && match && (
           <form onSubmit={handleSubmitExisting}>
           <div className={DIALOG_BODY_PADDING}>
@@ -280,7 +280,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
               <div>
                 <p className="font-medium">{match.full_name}</p>
                 <p className="text-sm text-muted-foreground">
-                  Already a Salon Magik customer — their profile details are on file.
+                  Already a Salon Magik customer. Their profile details are on file.
                   You can add your own notes and mark them as VIP for your salon.
                 </p>
               </div>
@@ -327,7 +327,7 @@ export function AddCustomerDialog({ open, onOpenChange, onSuccess }: AddCustomer
           </form>
         )}
 
-        {/* Step 2b: not found — full form */}
+        {/* Step 2b: not found, full form */}
         {step === "new" && (
           <form onSubmit={handleSubmitNew}>
           <div className={DIALOG_BODY_PADDING}>

@@ -7,7 +7,7 @@ import { toast } from "@ui/ui/use-toast";
 /**
  * Shared by StaffPage (where the add-on lives conceptually) and the
  * subscription tab (where owners actually expect to see and manage billed
- * add-ons) — same entitlement, same pricing, same toggle action either way.
+ * add-ons): same entitlement, same pricing, same toggle action either way.
  */
 export function useStaffOperationsAddon() {
   const { currentTenant } = useAuth();
@@ -82,7 +82,7 @@ export function useStaffOperationsAddon() {
   };
 
   // Disabling is free and immediate. Enabling is a standalone, fixed-term
-  // purchase — it's billed on its own 30-day term via Paystack, not folded
+  // purchase: it's billed on its own 30-day term via Paystack, not folded
   // into the subscription's recurring total, so turning it off before that
   // term is up doesn't refund it and turning it back on starts a fresh term.
   const disable = async () => {
@@ -130,7 +130,7 @@ export function useStaffOperationsAddon() {
         return true;
       }
 
-      // Charged immediately via stored card — no redirect needed.
+      // Charged immediately via stored card, no redirect needed.
       await refreshAfterChange();
       toast({
         title: "Staff Operations enabled",

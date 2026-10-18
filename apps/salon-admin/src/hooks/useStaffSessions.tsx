@@ -177,7 +177,7 @@ export function useStaffSessions() {
         return;
       }
 
-      // Check for existing active session — use order+limit so multiple sessions don't cause an error
+      // Check for existing active session; use order+limit so multiple sessions don't cause an error
       const { data: existingSession } = await supabase
         .from("staff_sessions")
         .select("*")

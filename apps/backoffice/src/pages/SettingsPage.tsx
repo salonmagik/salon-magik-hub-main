@@ -581,7 +581,7 @@ export default function BackofficeSettingsPage() {
         ends_at: overrideEndsAt,
       });
 
-      // Best-effort — the override is already live regardless of whether
+      // Best-effort: the override is already live regardless of whether
       // this notification succeeds.
       supabase.functions
         .invoke("send-trial-extension-notice", {
@@ -755,7 +755,7 @@ export default function BackofficeSettingsPage() {
   };
 
   // backoffice_step_up_challenges.resource_id is a real uuid column (it
-  // audits *which row* a step-up covered) — passing the platform_settings
+  // audits *which row* a step-up covered), so passing the platform_settings
   // *key* string ("kill_switch"/"maintenance_banner") instead of its actual
   // row id fails the insert with "invalid input syntax for type uuid" and
   // surfaces to the user as a bare "Edge Function returned a non-2xx status
@@ -1182,7 +1182,7 @@ export default function BackofficeSettingsPage() {
                   <div>
                     <CardTitle>OTP Rate Limiting</CardTitle>
                     <CardDescription>
-                      Controls how many OTP requests a single identifier — or a single sender IP, across all phone numbers — can make. Disable during testing to remove all limits.
+                      Controls how many OTP requests a single identifier, or a single sender IP across all phone numbers, can make. Disable during testing to remove all limits.
                     </CardDescription>
                   </div>
                 </div>
@@ -1269,7 +1269,7 @@ export default function BackofficeSettingsPage() {
                     <CardTitle>Promo Code Trial Bonus</CardTitle>
                     <CardDescription>
                       Extra trial days when a new salon applies a promo code within N days of signing up. Read live by the
-                      salon-admin app's upgrade nudges (banner + reminder modals) — turning this off here removes the offer
+                      salon-admin app's upgrade nudges (banner + reminder modals). Turning this off here removes the offer
                       from that UI immediately, no code change needed.
                     </CardDescription>
                   </div>
@@ -1413,7 +1413,7 @@ export default function BackofficeSettingsPage() {
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-56 text-xs">
                             {override.status === "active"
-                              ? "Currently in effect — this tenant's trial window is extended."
+                              ? "Currently in effect: this tenant's trial window is extended."
                               : "No longer in effect, either because it expired naturally or was manually revoked."}
                           </TooltipContent>
                         </Tooltip>
@@ -1448,7 +1448,7 @@ export default function BackofficeSettingsPage() {
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-default" />
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-56 text-xs">
-                          Live balance on our third-party SMS gateway (Arkesel), fetched in real time — not stored in our database. At zero, OTP and marketing SMS stop sending for that account until topped up.
+                          Live balance on our third-party SMS gateway (Arkesel), fetched in real time and not stored in our database. At zero, OTP and marketing SMS stop sending for that account until topped up.
                         </TooltipContent>
                       </Tooltip>
                     </CardTitle>
@@ -1473,8 +1473,8 @@ export default function BackofficeSettingsPage() {
                     {(
                       [
                         { key: "gh", label: "Ghana (GH)" },
-                        { key: "ng_transactional", label: "Nigeria — Transactional" },
-                        { key: "ng_promotional", label: "Nigeria — Promotional" },
+                        { key: "ng_transactional", label: "Nigeria: Transactional" },
+                        { key: "ng_promotional", label: "Nigeria: Promotional" },
                       ] as const
                     ).map(({ key, label }) => {
                       const entry = arkeselBalance?.[key];
@@ -1486,7 +1486,7 @@ export default function BackofficeSettingsPage() {
                           ) : (
                             <>
                               <p className="mt-1 text-2xl font-semibold tabular-nums">
-                                {entry?.sms_balance != null ? entry.sms_balance.toLocaleString() : "—"}
+                                {entry?.sms_balance != null ? entry.sms_balance.toLocaleString() : "N/A"}
                                 <span className="ml-1.5 text-sm font-normal text-muted-foreground">credits</span>
                               </p>
                               {entry?.main_balance && (
@@ -1514,7 +1514,7 @@ export default function BackofficeSettingsPage() {
                           <Info className="h-3.5 w-3.5 text-muted-foreground cursor-default" />
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-56 text-xs">
-                          Live settlement balance on our Paystack accounts, fetched in real time — funds available to withdraw right now. Separate from tenant salon wallets.
+                          Live settlement balance on our Paystack accounts, fetched in real time: funds available to withdraw right now. Separate from tenant salon wallets.
                         </TooltipContent>
                       </Tooltip>
                     </CardTitle>
@@ -1552,7 +1552,7 @@ export default function BackofficeSettingsPage() {
                             <p className="mt-1 text-2xl font-semibold tabular-nums">
                               {entry?.balance != null && entry.currency
                                 ? formatCurrency(entry.balance, entry.currency)
-                                : "—"}
+                                : "N/A"}
                             </p>
                           )}
                         </div>
@@ -1826,7 +1826,7 @@ export default function BackofficeSettingsPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-        {/* Maintenance Banner — 2FA confirm before save */}
+        {/* Maintenance Banner: 2FA confirm before save */}
         <Dialog open={maintBannerDialogOpen} onOpenChange={setMaintBannerDialogOpen}>
           <DialogContent>
             <DialogHeader>

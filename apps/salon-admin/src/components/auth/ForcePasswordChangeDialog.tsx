@@ -79,7 +79,7 @@ export function ForcePasswordChangeDialog({
         return;
       }
 
-      // Capture email before the edge function — admin.updateUserById revokes
+      // Capture email before the edge function, since admin.updateUserById revokes
       // the current refresh token as a side effect, so we must re-sign in after.
       const userEmail = currentUser?.email;
 

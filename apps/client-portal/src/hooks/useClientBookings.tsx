@@ -5,11 +5,13 @@ import type { Tables } from "@/lib/supabase";
 
 type Appointment = Tables<"appointments">;
 type AppointmentService = Tables<"appointment_services">;
+type AppointmentProduct = Tables<"appointment_products">;
 type Tenant = Tables<"tenants">;
 type Location = Tables<"locations">;
 
 export interface ClientAppointmentWithDetails extends Appointment {
   services: AppointmentService[];
+  products: AppointmentProduct[];
   tenant: Tenant | null;
   location: Location | null;
 }
@@ -40,6 +42,7 @@ export function useClientBookings(filter: BookingFilter = "upcoming") {
         .select(`
           *,
           services:appointment_services(*),
+          products:appointment_products(*),
           tenant:tenants(*),
           location:locations(*)
         `)
@@ -65,7 +68,7 @@ export function useClientBookings(filter: BookingFilter = "upcoming") {
         query = query.eq("status", "cancelled");
       } else if (filter === "unpaid") {
         // Any non-cancelled booking still owing money, regardless of whether
-        // the appointment itself is upcoming or already completed — this is
+        // the appointment itself is upcoming or already completed. This is
         // about money owed, not scheduling status.
         query = query.neq("status", "cancelled").in("payment_status", ["unpaid", "deposit_paid"]);
       }

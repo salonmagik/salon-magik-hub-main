@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
+import { generateUUID } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
 
 export interface SalonWalletAvailability {
@@ -66,13 +67,13 @@ export function useSalonWalletAvailability(tenantId?: string, locationId?: strin
   }, [tenantId, locationId, fetchAvailability]);
 
   // "Available" is computed from both the wallet balance and any pending
-  // withdrawals — a withdrawal's status changing (e.g. the transfer.success/
+  // withdrawals: a withdrawal's status changing (e.g. the transfer.success/
   // failed webhook resolving it, with no action from whoever's looking at
   // this page) needs to be reflected without a manual refresh. Same
   // multi-mount-collision fix as useNotifications/useWithdrawals: this hook
   // is used by both PayoutsPage and WithdrawalDialog at once, so each
   // instance needs its own channel name.
-  const instanceIdRef = useRef(crypto.randomUUID());
+  const instanceIdRef = useRef(generateUUID());
   useEffect(() => {
     if (!tenantId) return;
 

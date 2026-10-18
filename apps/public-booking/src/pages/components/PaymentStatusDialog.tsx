@@ -8,6 +8,7 @@ import {
 } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { supabase } from "@/lib/supabase";
+import { isLightColor, deriveLightTint } from "@shared/color";
 
 interface PaymentStatusDialogProps {
   open: boolean;
@@ -23,6 +24,10 @@ interface PaymentStatusDialogProps {
    * color happens to be red can't have "success" read as an error.
    */
   brandColor?: string;
+  /** What to call this in the confirmation copy -- a pure product cart is
+   * an "order", a pure package cart a "package purchase", anything with a
+   * service in it (including mixed carts) stays a "booking". */
+  orderKind?: "order" | "package" | "booking";
 }
 
 type VerifyStatus = "processing" | "success" | "failed";
@@ -41,7 +46,16 @@ export function PaymentStatusDialog({
   reference,
   onSuccess,
   brandColor = "#2E1F4E",
+  orderKind = "booking",
 }: PaymentStatusDialogProps) {
+  const orderNounCap = orderKind === "order" ? "Order" : orderKind === "package" ? "Package purchase" : "Booking";
+  // The "processing" state and the chrome around it (top strip, close
+  // button, reference box) used a fixed Salon Magik purple regardless of
+  // the tenant's own brand color -- derive the same pale-tint pattern used
+  // for the storefront's --secondary token instead. Success/failure keep
+  // their fixed green/red (those are semantic, not brand), untouched here.
+  const brandTint = deriveLightTint(brandColor);
+  const brandTintText = isLightColor(brandTint) ? brandColor : "#ffffff";
   const [status, setStatus] = useState<VerifyStatus>("processing");
   const verifiedRef = useRef<string | null>(null);
 
@@ -82,7 +96,10 @@ export function PaymentStatusDialog({
 
   const badge = {
     processing: (
-      <div className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-[#f4effb] text-[#5d4385]">
+      <div
+        className="flex h-[68px] w-[68px] items-center justify-center rounded-full"
+        style={{ backgroundColor: brandTint, color: brandTintText }}
+      >
         <Loader2 className="h-[29px] w-[29px] animate-spin" />
       </div>
     ),
@@ -100,31 +117,43 @@ export function PaymentStatusDialog({
 
   const eyebrow = {
     processing: "Payment status",
-    success: "Booking confirmed",
+    success: `${orderNounCap} confirmed`,
     failed: "Payment issue",
   }[status];
 
   const title = {
     processing: "Confirming your payment",
-    success: "You're booked",
+    success:
+      orderKind === "order" ? "Your order is confirmed" : orderKind === "package" ? "You're all set" : "You're booked",
     failed: "Payment didn't go through",
   }[status];
 
   const copy = {
     processing: "This usually takes a few seconds. Don't close this window.",
-    success: "Payment received. Your appointment is confirmed.",
-    failed: "Your card wasn't charged and no appointment was booked. You can try again with the same or a different payment method.",
+    success:
+      orderKind === "order"
+        ? "Payment received. Your order is confirmed."
+        : orderKind === "package"
+          ? "Payment received. Your package purchase is confirmed."
+          : "Payment received. Your appointment is confirmed.",
+    failed:
+      orderKind === "order"
+        ? "Your card wasn't charged and no order was placed. You can try again with the same or a different payment method."
+        : orderKind === "package"
+          ? "Your card wasn't charged and no package was purchased. You can try again with the same or a different payment method."
+          : "Your card wasn't charged and no appointment was booked. You can try again with the same or a different payment method.",
   }[status];
 
   return (
     <Dialog open={open} onOpenChange={status === "processing" ? undefined : onOpenChange}>
       <DialogContent
         className="overflow-hidden sm:max-w-md"
-        closeButtonClassName="text-[#7d7483] hover:bg-[#f5f2f8] hover:text-[#30204f]"
+        closeButtonClassName="text-[#7d7483] hover:bg-[var(--payment-status-tint)] hover:text-[var(--payment-status-tint-text)]"
+        style={{ "--payment-status-tint": brandTint, "--payment-status-tint-text": brandTintText } as React.CSSProperties}
         onPointerDownOutside={(e) => status === "processing" && e.preventDefault()}
         onEscapeKeyDown={(e) => status === "processing" && e.preventDefault()}
       >
-        <div className="h-2 shrink-0 bg-[#30204f]" />
+        <div className="h-2 shrink-0" style={{ backgroundColor: brandColor }} />
         <div className="px-5 pb-6 pt-10 text-center sm:px-7">
           <div className="flex flex-col items-center">
             {badge}
@@ -150,7 +179,10 @@ export function PaymentStatusDialog({
           )}
 
           {status === "processing" && (
-            <div className="mt-6 flex items-start gap-3 rounded-[14px] border border-[#ddd0ed] bg-[#f8f4fc] p-4 text-left text-[#4f3970]">
+            <div
+              className="mt-6 flex items-start gap-3 rounded-[14px] border p-4 text-left"
+              style={{ borderColor: brandTint, backgroundColor: brandTint, color: brandTintText }}
+            >
               <Info className="mt-0.5 h-[19px] w-[19px] shrink-0" />
               <div>
                 <p className="text-sm font-medium">Checking with your payment provider</p>
@@ -174,9 +206,12 @@ export function PaymentStatusDialog({
           )}
 
           {reference && status !== "processing" && (
-            <div className="mt-3 flex w-full items-center justify-between gap-4 rounded-[11px] bg-[#f5f2f8] px-[15px] py-[13px] text-left">
+            <div
+              className="mt-3 flex w-full items-center justify-between gap-4 rounded-[11px] px-[15px] py-[13px] text-left"
+              style={{ backgroundColor: brandTint }}
+            >
               <span className="text-[10px] uppercase tracking-[0.1em] text-[#80768b]">Reference</span>
-              <span className="break-all text-right font-mono text-[11px] font-semibold text-[#30204f]">{reference}</span>
+              <span className="break-all text-right font-mono text-[11px] font-semibold" style={{ color: brandTintText }}>{reference}</span>
             </div>
           )}
 
@@ -197,7 +232,7 @@ export function PaymentStatusDialog({
                 <Button onClick={handleRetry} className="w-full rounded-[12px] border-0 text-white" style={{ backgroundColor: brandColor }}>
                   Try again
                 </Button>
-                <Button variant="ghost" onClick={() => onOpenChange(false)} className="w-full text-[#7d7483] hover:text-[#30204f]">
+                <Button variant="ghost" onClick={() => onOpenChange(false)} className="w-full text-[#7d7483] hover:text-[var(--payment-status-tint-text)]">
                   Close
                 </Button>
               </>

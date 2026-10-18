@@ -51,7 +51,7 @@ export function AppointmentBlock({
 }: AppointmentBlockProps) {
   const startTime = appointment.scheduled_start
     ? format(new Date(appointment.scheduled_start), "h:mm a")
-    : "—";
+    : "N/A";
   const serviceName = appointment.services[0]?.service_name || "Service";
   const customerName = appointment.customer?.full_name || "Walk-in";
   const paidOffline = appointment.transactions?.some(
@@ -166,7 +166,7 @@ export function MonthAppointmentItem({
               <p className="mt-0.5 font-medium">
                 {appointment.scheduled_start
                   ? format(new Date(appointment.scheduled_start), "h:mm a")
-                  : "—"}
+                  : "N/A"}
               </p>
             </div>
           </div>

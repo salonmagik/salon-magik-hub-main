@@ -256,7 +256,7 @@ export default function CustomersPage() {
       icon: Tag,
       color: "text-purple-600",
       bgColor: "bg-purple-50",
-      description: "Customers you've manually starred as VIP — a different, hand-picked list from the \"VIP\" segment tag shown on individual customer rows below.",
+      description: "Customers you've manually starred as VIP: a different, hand-picked list from the \"VIP\" segment tag shown on individual customer rows below.",
     },
     {
       label: "New This Month",
@@ -271,7 +271,7 @@ export default function CustomersPage() {
       icon: Calendar,
       color: "text-muted-foreground",
       bgColor: "bg-muted",
-      description: `Hasn't booked in the last ${inactiveDaysThreshold} days — you can change this threshold below. Different from the "Lapsed" segment tag, which always uses a fixed 45-day cutoff.`,
+      description: `Hasn't booked in the last ${inactiveDaysThreshold} days. You can change this threshold below. Different from the "Lapsed" segment tag, which always uses a fixed 45-day cutoff.`,
     },
   ];
 
@@ -468,7 +468,7 @@ export default function CustomersPage() {
         description:
           skippedDuplicate > 0
             ? `All ${skippedDuplicate} row(s) matched an existing customer.`
-            : "No valid rows found — each row needs at least a full name.",
+            : "No valid rows found: each row needs at least a full name.",
         variant: "destructive",
       });
       return;
@@ -1045,13 +1045,13 @@ export default function CustomersPage() {
 										<p className="font-medium">{row.customer_name}</p>
 										<p className="text-xs text-muted-foreground">
 											{row.days_since_last_transaction} days inactive • Last
-											item: {row.last_purchased_item || "—"}
+											item: {row.last_purchased_item || "N/A"}
 										</p>
 										<p className="text-xs text-muted-foreground">
 											Last transaction:{" "}
 											{row.last_transaction_at
 												? new Date(row.last_transaction_at).toLocaleDateString()
-												: "—"}
+												: "N/A"}
 										</p>
 									</div>
 									<div className="flex items-center gap-2">

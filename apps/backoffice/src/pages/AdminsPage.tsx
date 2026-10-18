@@ -578,10 +578,10 @@ export default function AdminsPage() {
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-56 text-xs">
                                 {user.status === "invited"
-                                  ? "Sent an invite but hasn't signed in yet — can't access backoffice until they do."
+                                  ? "Sent an invite but hasn't signed in yet. Can't access backoffice until they do."
                                   : user.status === "active"
                                     ? "Can sign in to the backoffice."
-                                    : "Deactivated — can no longer sign in."}
+                                    : "Deactivated and cannot sign in to the backoffice."}
                               </TooltipContent>
                             </Tooltip>
                           </TableCell>
@@ -596,7 +596,7 @@ export default function AdminsPage() {
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-56 text-xs">
-                                Has a currently active, unexpired session right now — not whether they've ever logged in before.
+                                This means they have an active, unexpired session right now. It doesn't reflect whether they've ever logged in before.
                               </TooltipContent>
                             </Tooltip>
                           </TableCell>

@@ -25,6 +25,9 @@ const SalonDashboard = lazy(() => import("./pages/salon/SalonDashboard"));
 const AppointmentsPage = lazy(() => import("./pages/salon/AppointmentsPage"));
 const CustomersPage = lazy(() => import("./pages/salon/CustomersPage"));
 const ServicesPage = lazy(() => import("./pages/salon/ServicesPage"));
+const ProductsPage = lazy(() => import("./pages/salon/ProductsPage"));
+const PackagesPage = lazy(() => import("./pages/salon/PackagesPage"));
+const VouchersPage = lazy(() => import("./pages/salon/VouchersPage"));
 const SettingsPage = lazy(() => import("./pages/salon/SettingsPage"));
 const BusinessSettingsPage = lazy(() => import("./pages/salon/BusinessSettingsPage"));
 const BranchSettingsPage = lazy(() => import("./pages/salon/BranchSettingsPage"));
@@ -209,7 +212,7 @@ function RootRoute() {
 }
 
 const App = () => {
-  // A route rendered without throwing — clear the chunk-reload guard so a
+  // A route rendered without throwing: clear the chunk-reload guard so a
   // later transient chunk-load failure still gets its one auto-retry.
   useEffect(() => {
     sessionStorage.removeItem("salon-admin-chunk-reload");
@@ -332,6 +335,36 @@ const App = () => {
                   <ProtectedRoute>
                     <ModuleProtectedRoute module="services">
                       <ServicesPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/products"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="services">
+                      <ProductsPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/packages"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="services">
+                      <PackagesPage />
+                    </ModuleProtectedRoute>
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/salon/vouchers"
+                element={
+                  <ProtectedRoute>
+                    <ModuleProtectedRoute module="services">
+                      <VouchersPage />
                     </ModuleProtectedRoute>
                   </ProtectedRoute>
                 }

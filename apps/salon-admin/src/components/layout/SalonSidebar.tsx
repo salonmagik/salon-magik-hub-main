@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext, ReactNode, useMemo, use
 import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   LayoutDashboard,
+  LayoutGrid,
   Building2,
   Calendar,
   Scissors,
@@ -32,6 +33,9 @@ import {
   Wallet,
   MapPin,
   MoreHorizontal,
+  ShoppingBag,
+  Package,
+  Gift,
 } from "lucide-react";
 import { MyProfileModal } from "@/components/profile/MyProfileModal";
 import { TenantSwitcher } from "@/components/layout/TenantSwitcher";
@@ -244,15 +248,15 @@ function IntentionalSidebarLink({
   );
 }
 
-// These paths live on the mobile bottom nav — hide them from the drawer on mobile/tablet
+// These paths live on the mobile bottom nav, so hide them from the drawer on mobile/tablet
 const BOTTOM_NAV_PATHS = new Set([
   "/salon",
   "/salon/appointments",
   "/salon/transactions",
-  // Customers and Services both live in "More" now — Home/Bookings/[+]/
+  // Customers and Services both live in "More" now. Home/Bookings/[+]/
   // Transactions/More keeps the branch bar at 5 slots instead of 6, room
   // for the "+" the bar notches in at the middle.
-  // Business Hub context's bottom nav (see the mobile nav render block) —
+  // Business Hub context's bottom nav (see the mobile nav render block):
   // harmless to list unconditionally, since these paths don't exist in the
   // branch-context nav tree the filter also runs against.
   "/salon/overview",
@@ -285,8 +289,8 @@ const mainNavItems: NavItem[] = [
 		module: "customers",
 	},
 	{
-		label: "Services and Products",
-		icon: Scissors,
+		label: "Catalog",
+		icon: LayoutGrid,
 		path: "/salon/services",
 		module: "services",
 	},
@@ -337,7 +341,7 @@ const utilityNavItems: NavItem[] = [
 // bottom nav on some pages (Appointments, Customers, Staff, Services,
 // Cashflow, Messaging, the Business Hub overview) while every page also
 // carried a second, unrelated "+" in the mobile header for the global
-// Quick Create dialog. Both are gone now — a page registers what its "+"
+// Quick Create dialog. Both are gone now: a page registers what its "+"
 // should do via useSidebar().setMobileQuickAction, and the single FAB
 // SalonSidebar renders reads it; a page that registers nothing falls back
 // to the same Quick Create dialog the header button used to open.
@@ -373,7 +377,7 @@ export function useSidebar() {
 }
 
 // A page calls `<SalonSidebar>{children}</SalonSidebar>` itself, so the
-// page's own top-level render runs BEFORE that provider exists — useSidebar()
+// page's own top-level render runs BEFORE that provider exists, so useSidebar()
 // can't be called there directly. This registers a page's quick action from
 // inside the tree instead: render it as a child anywhere inside
 // <SalonSidebar>, and it reads/writes the real context.
@@ -405,7 +409,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   const [mobileNavVisible, setMobileNavVisible] = useState(true);
   const mobileContentRef = useRef<HTMLDivElement | null>(null);
   const lastMobileScrollTopRef = useRef(0);
-  // "More" on the bottom nav — a dedicated bottom sheet, distinct from the
+  // "More" on the bottom nav: a dedicated bottom sheet, distinct from the
   // full-height side drawer the top-header hamburger still opens. Only ever
   // holds what isn't already on the bar: the context switcher (folded to
   // the current context by default) and the same BOTTOM_NAV_PATHS-filtered
@@ -522,6 +526,17 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
         }
         return { ...item, children };
       }
+      if (item.path === "/salon/services") {
+        return {
+          ...item,
+          children: [
+            { label: "Services", icon: Scissors, path: "/salon/services" },
+            { label: "Products", icon: ShoppingBag, path: "/salon/products" },
+            { label: "Packages", icon: Package, path: "/salon/packages" },
+            { label: "Vouchers", icon: Gift, path: "/salon/vouchers" },
+          ],
+        };
+      }
       if (item.path === "/salon/settings") {
         if (activeContextType === "owner_hub") {
           if (isChain) {
@@ -603,7 +618,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
       return { emoji: "⚠️", label: "Past Due" };
     }
     if (isTrialing) {
-      // The countdown lives in the header chip only — this badge just shows
+      // The countdown lives in the header chip only; this badge just shows
       // which tier they'd be upgrading to, same styling whether trialing or
       // already paying for it.
       return { emoji: "✨", label: `${planLabel} plan (trial)` };
@@ -831,14 +846,14 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
   };
 
   // Whether the current route is one of the items living behind "More"
-  // rather than on the bar itself — so the bottom nav's More tab stays
+  // rather than on the bar itself, so the bottom nav's More tab stays
   // highlighted while browsing its pages, the same way any other tab does,
   // not just while its sheet happens to be open. Children are query-string
   // routes (?tab=...), so this must use isChildActive, not isActive.
   const isOnOverflowPage = filteredMainNavItems.some((item) => {
     // A group's own path being on the bar (e.g. "Cashflow & Payouts" keyed by
     // /salon/transactions, same as the "Cashflow" tab) doesn't mean every one
-    // of its children is too — Payouts lives under that same group but isn't
+    // of its children is too: Payouts lives under that same group but isn't
     // on the bar, so it still needs to light up "More". Check children
     // regardless of whether the parent itself is skipped.
     const parentOnBar = BOTTOM_NAV_PATHS.has(item.path);
@@ -1156,7 +1171,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 		>
 			<InactivityGuard>
 					<div className="min-h-screen flex bg-surface">
-						{/* Sidebar — desktop and up only. Mobile uses the bottom nav and its
+						{/* Sidebar: desktop and up only. Mobile uses the bottom nav and its
 							"More" sheet exclusively; there is no side drawer to duplicate it. */}
 						<aside
 							className={cn(
@@ -1186,7 +1201,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 							className={cn(
 								// h-dvh + overflow-hidden makes this the scroll boundary on mobile, so
 								// the pb-adjacent content pane below (mobileContentRef) becomes its own
-								// scroll container — the auto-hide bottom nav's scroll listener is
+								// scroll container, and the auto-hide bottom nav's scroll listener is
 								// attached there and never fires if the whole page scrolls instead.
 								// Reverts to natural page-height flow on desktop, where there's no
 								// bottom nav to hide.
@@ -1206,7 +1221,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 										if (!currentTenant) return null;
 										// An active gifted-trial override (Backoffice → Tenant
 										// Gifted Trials) takes precedence over the tenant's own
-										// trial dates — see useActiveTrialOverride's doc comment.
+										// trial dates. See useActiveTrialOverride's doc comment.
 										const effectiveTrialEndsAt = activeTrialOverride?.ends_at ?? currentTenant.trial_ends_at;
 										if (
 											(activeTrialOverride || currentTenant.subscription_status === "trialing") &&
@@ -1230,7 +1245,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 								</div>
 
 								<div className="flex items-center gap-2">
-									{/* Quick Create Button — desktop only below lg the bottom nav's
+									{/* Quick Create Button: desktop only, below lg the bottom nav's
 										own "+" covers this, reading whatever the current page
 										registered via useSidebar().setMobileQuickAction, with this
 										same dialog as its fallback when a page registers nothing. */}
@@ -1404,13 +1419,13 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 								</div>
 							</nav>
 
-							{/* Quick-action bottom sheet — the drawer a page's registered "menu"
+							{/* Quick-action bottom sheet: the drawer a page's registered "menu"
 								action opens from the "+" notch, styled like the "More" sheet next
 								to it. A single-action page skips this and runs its action directly
 								on tap; a page with no action at all falls back to the global
 								QuickCreateDialog, which is itself a bottom sheet below lg (see that
 								component). Options defer their onSelect by a tick after this sheet
-								closes — opening another dialog synchronously from inside a Radix
+								closes, since opening another dialog synchronously from inside a Radix
 								primitive's own close callback is what caused the "opens multiple
 								modals" bug this replaces. */}
 							<Sheet open={quickActionMenuOpen} onOpenChange={setQuickActionMenuOpen}>
@@ -1459,7 +1474,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 								</SheetContent>
 							</Sheet>
 
-							{/* "More" bottom sheet — mobile only. Same context switcher and the
+							{/* "More" bottom sheet: mobile only. Same context switcher and the
 								same BOTTOM_NAV_PATHS-filtered overflow items as the side drawer,
 								just in a sheet that matches how the rest of the bottom bar behaves. */}
 							<Sheet
@@ -1487,8 +1502,8 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 												c.type === "owner_hub" ? contextValue === "owner_hub" : c.locationId === contextValue,
 											);
 											return (
-												// Shaded as one card — the same surface tone as the "Viewing" row
-												// itself — so this whole switcher reads as its own section,
+												// Shaded as one card, the same surface tone as the "Viewing" row
+												// itself, so this whole switcher reads as its own section,
 												// distinct from the plain overflow list below it.
 												<div className="mb-3 rounded-2xl bg-surface p-2">
 													<p className="mb-1 px-1.5 pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1594,7 +1609,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 													const isOpen = expandedOverflowPath === item.path;
 													// While collapsed, the parent row carries the highlight for
 													// whichever of its pages is current. Once expanded, that same
-													// child row shows its own highlight below — showing both at
+													// child row shows its own highlight below, and showing both at
 													// once would read as two different "active" answers.
 													const parentHighlighted = selfActive || (hasChildren && anyChildActive && !isOpen);
 													return (
@@ -1658,9 +1673,33 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 										</nav>
 									</div>
 
-									{/* Fixed footer — stays put while the overflow list above scrolls,
-										so "Sign out" is always reachable without hunting for it. */}
+									{/* Fixed footer: stays put while the overflow list above scrolls,
+										so Help and "Sign out" are always reachable without hunting for
+										them. Mirrors the desktop sidebar's footer, which renders
+										utilityNavItems (Help) right above Sign out -- the mobile sheet's
+										scrollable nav above only maps filteredMainNavItems, so Help never
+										showed up here otherwise. */}
 									<div className="shrink-0 border-t border-border px-4 py-2">
+										{utilityNavItems.map((item) => (
+											<button
+												key={item.path}
+												type="button"
+												onClick={() => {
+													navigate(item.path);
+													setMoreSheetOpen(false);
+												}}
+												className={cn(
+													"flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+													isActive(item.path)
+														? "bg-primary/10 font-semibold text-primary"
+														: "font-medium text-foreground hover:bg-surface",
+												)}
+											>
+												<item.icon className="h-[18px] w-[18px] shrink-0 text-muted-foreground" />
+												<span className="flex-1 truncate">{item.label}</span>
+												{isActive(item.path) && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+											</button>
+										))}
 										<button
 											type="button"
 											onClick={() => {
@@ -1678,7 +1717,7 @@ export function SalonSidebar({ children }: SalonSidebarProps) {
 						</main>
 					</div>
 
-					{/* Blocking overlay — renders above everything when a blocking banner is active */}
+					{/* Blocking overlay: renders above everything when a blocking banner is active */}
 					<BlockingBannerOverlay />
 
 					<ProductAnnouncementCard

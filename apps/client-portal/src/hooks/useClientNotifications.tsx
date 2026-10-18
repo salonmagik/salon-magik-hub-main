@@ -25,7 +25,7 @@ export function useClientNotifications() {
   // The sidebar's unread badge and the full notifications page both mount
   // this hook at once, each needing its own realtime subscription. A shared,
   // hardcoded channel name meant the second subscriber tried to add a
-  // callback to a channel the first had already called subscribe() on —
+  // callback to a channel the first had already called subscribe() on, and
   // Supabase-js throws rather than allowing that. One channel per instance.
   const channelNameRef = useRef(`client-notifications-${crypto.randomUUID()}`);
 

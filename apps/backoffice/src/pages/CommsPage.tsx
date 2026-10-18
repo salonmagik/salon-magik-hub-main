@@ -54,9 +54,9 @@ const emptyEditorState: TemplateEditorState = {
 
 // Keep this in sync with the `templateValues` object each edge function actually
 // supplies to renderPlatformTemplate(). A placeholder not in this list will render
-// as a literal "{{...}}" in the sent email — see send-staff-invitation's
+// as a literal "{{...}}" in the sent email. See send-staff-invitation's
 // {{staff_name}} incident for why this is enforced, not just documented.
-// Placeholders ending in _button render a ready-made, brand-styled button —
+// Placeholders ending in _button render a ready-made, brand-styled button,
 // use those instead of the raw _link version so custom templates don't need
 // to hand-write button markup to stay on-brand.
 const KNOWN_TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {
@@ -339,7 +339,7 @@ export default function CommsPage() {
                 }
                 return (
                   <p className="text-xs text-muted-foreground">
-                    No registered placeholder list for this template key — double-check the actual edge function
+                    No registered placeholder list for this template key. Double-check the actual edge function
                     before using any <span className="font-mono">{"{{...}}"}</span> placeholders, since an unknown
                     one will show up literally in the sent email instead of being replaced.
                   </p>
@@ -347,9 +347,9 @@ export default function CommsPage() {
               })()}
               <p className="text-xs text-muted-foreground">
                 Brand styling (logo, colors, footer) is applied automatically around this body when the email is
-                sent — only write the message content here, not a full HTML document. For call-to-action links,
+                sent. Only write the message content here, not a full HTML document. For call-to-action links,
                 use the <span className="font-mono font-semibold text-primary">_button</span> placeholder (e.g.{" "}
-                <span className="font-mono">{"{{login_link_button}}"}</span>) to get a real branded button — the
+                <span className="font-mono">{"{{login_link_button}}"}</span>) to get a real branded button, the
                 plain <span className="font-mono">{"{{login_link}}"}</span> version is just the raw URL and won't
                 be styled.
               </p>

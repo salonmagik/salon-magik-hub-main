@@ -91,7 +91,7 @@ export default function WithdrawalsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Withdrawals</h1>
           <p className="text-muted-foreground">
-            Every salon withdrawal request across all tenants. Salons never see the "Awaiting OTP" state below —
+            Every salon withdrawal request across all tenants. Salons never see the "Awaiting OTP" state below:
             it means Paystack needs an OTP finalized on our own account before the transfer can complete.
           </p>
         </div>
@@ -99,7 +99,7 @@ export default function WithdrawalsPage() {
         {awaitingOtpCount > 0 && (
           <div className="flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <AlertTriangle className="h-4 w-4 shrink-0" />
-            {awaitingOtpCount} withdrawal{awaitingOtpCount === 1 ? "" : "s"} stuck awaiting OTP — finalize in the
+            {awaitingOtpCount} withdrawal{awaitingOtpCount === 1 ? "" : "s"} stuck awaiting OTP. Finalize in the
             Paystack dashboard (Transfers) to release funds to the salon.
           </div>
         )}
@@ -152,13 +152,13 @@ export default function WithdrawalsPage() {
                     return (
                       <TableRow key={w.id}>
                         <TableCell className="font-medium">
-                          {w.tenants?.name || "—"}
+                          {w.tenants?.name || "N/A"}
                           <span className="block text-xs font-normal text-muted-foreground">
                             {w.locations?.name || "Salon-wide / unassigned"}
                           </span>
                         </TableCell>
                         <TableCell className="text-xs">
-                          {w.salon_wallets ? formatCurrency(Number(w.salon_wallets.balance), w.salon_wallets.currency) : "—"}
+                          {w.salon_wallets ? formatCurrency(Number(w.salon_wallets.balance), w.salon_wallets.currency) : "N/A"}
                         </TableCell>
                         <TableCell className="font-variant-numeric-tabular">
                           {formatCurrency(Number(w.amount), w.currency)}
@@ -167,14 +167,14 @@ export default function WithdrawalsPage() {
                           {dest
                             ? dest.account_name || dest.momo_provider
                               ? `${dest.account_name || dest.momo_provider} · ${dest.account_number || dest.momo_number || ""}`
-                              : "—"
-                            : "—"}
+                              : "N/A"
+                            : "N/A"}
                         </TableCell>
                         <TableCell>
                           <Badge className={`text-xs ${style.bg} ${style.text}`}>{style.label}</Badge>
                         </TableCell>
                         <TableCell className="max-w-64 truncate text-xs text-muted-foreground" title={w.failure_reason || undefined}>
-                          {w.failure_reason || "—"}
+                          {w.failure_reason || "N/A"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {format(new Date(w.requested_at), "MMM d, yyyy HH:mm")}

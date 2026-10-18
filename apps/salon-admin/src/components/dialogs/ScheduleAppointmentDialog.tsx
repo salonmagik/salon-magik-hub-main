@@ -20,6 +20,10 @@ import { useAppointmentActions } from "@/hooks/useAppointments";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@shared/utils";
 import { formatCurrency } from "@shared/currency";
+import { useCustomerActivePackages } from "@/hooks/useCustomerActivePackages";
+import { PackageRedemptionToggle } from "./PackageRedemptionToggle";
+import { supabase } from "@/lib/supabase";
+import { toast } from "@ui/ui/use-toast";
 
 interface ScheduleAppointmentDialogProps {
   open: boolean;
@@ -34,6 +38,7 @@ interface SelectedService {
   name: string;
   price: number;
   duration: number;
+  packageCovered?: { entitlementItemId: string; packageName: string };
 }
 
 export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess, initialCustomerId }: ScheduleAppointmentDialogProps) {
@@ -66,6 +71,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess, initi
   const selectedLocation = locations.find((location) => location.id === formData.locationId) || defaultLocation;
   const currency = currencyForCountry(selectedLocation?.country, currentTenant?.currency || "NGN");
   const { createAppointment, isSubmitting } = useAppointmentActions();
+  const { creditsByServiceId } = useCustomerActivePackages(formData.customerId);
   const earliestStartTime = getEarliestSelectableTime(stringToDate(formData.date));
   // Owners can book into any branch; everyone else only sees their assigned branches
   const accessibleLocations = currentRole === "owner"
@@ -127,7 +133,27 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess, initi
     }
   };
 
+  const togglePackageCovered = (serviceId: string, covered: boolean) => {
+    setSelectedServices((prev) =>
+      prev.map((s) => {
+        if (s.id !== serviceId) return s;
+        if (!covered) {
+          const { packageCovered, ...rest } = s;
+          return rest;
+        }
+        const credit = creditsByServiceId.get(serviceId);
+        if (!credit) return s;
+        return {
+          ...s,
+          packageCovered: { entitlementItemId: credit.entitlementItemId, packageName: credit.packageName },
+        };
+      })
+    );
+  };
+
   const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
+  const payableTotal = selectedServices.reduce((sum, s) => sum + (s.packageCovered ? 0 : s.price), 0);
+  const coveredCount = selectedServices.filter((s) => s.packageCovered).length;
   const totalDuration = selectedServices.reduce((sum, s) => sum + s.duration, 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -149,6 +175,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess, initi
         serviceName: s.name,
         price: s.price,
         duration: s.duration,
+        packageCovered: !!s.packageCovered,
       })),
       scheduledStart,
       scheduledEnd,
@@ -159,6 +186,40 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess, initi
     });
 
     if (result) {
+      const appointmentServices = (result as typeof result & { appointmentServices?: { id: string; service_id: string }[] }).appointmentServices || [];
+      const failedServices: string[] = [];
+      let refundAmount = 0;
+
+      for (const s of selectedServices) {
+        if (!s.packageCovered) continue;
+        const appointmentService = appointmentServices.find((as) => as.service_id === s.id);
+        if (!appointmentService) {
+          failedServices.push(s.name);
+          refundAmount += s.price;
+          continue;
+        }
+        const { error: rpcError } = await supabase.rpc("reserve_customer_package_credit", {
+          p_appointment_id: result.id,
+          p_service_id: s.id,
+          p_appointment_service_id: appointmentService.id,
+        });
+        if (rpcError) {
+          console.error("Failed to reserve package credit for service", s.id, rpcError);
+          failedServices.push(s.name);
+          refundAmount += s.price;
+        }
+      }
+
+      if (failedServices.length > 0) {
+        toast({
+          title: "Some package credits couldn't be applied",
+          description: `Couldn't redeem package credit for: ${failedServices.join(", ")}. The full price was charged for these instead.`,
+          variant: "destructive",
+        });
+        const correctedTotal = (result.total_amount || 0) + refundAmount;
+        await supabase.from("appointments").update({ total_amount: correctedTotal }).eq("id", result.id);
+      }
+
       onOpenChange(false);
       onSuccess?.();
     }
@@ -206,7 +267,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess, initi
               </div>
             </div>
 
-            {/* Branch Selection — shown when user has access to more than one branch */}
+            {/* Branch Selection: shown when user has access to more than one branch */}
             {accessibleLocations.length > 1 && (
               <div className="space-y-2">
                 <Label>
@@ -263,42 +324,53 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess, initi
                   <div className="space-y-2">
                     {services.map((service) => {
                       const selected = selectedServices.find((s) => s.id === service.id);
+                      const credit = creditsByServiceId.get(service.id);
                       return (
-                        <button
-                          key={service.id}
-                          type="button"
-                          onClick={() => toggleService(service)}
-                          aria-pressed={!!selected}
-                          className={cn(
-                            "w-full flex items-center justify-between p-3 rounded-lg border transition-all text-left",
-                            selected
-                              ? "bg-primary/5 border-primary"
-                              : "hover:bg-muted/50"
+                        <div key={service.id}>
+                          <button
+                            type="button"
+                            onClick={() => toggleService(service)}
+                            aria-pressed={!!selected}
+                            className={cn(
+                              "w-full flex items-center justify-between p-3 rounded-lg border transition-all text-left",
+                              selected
+                                ? "bg-primary/5 border-primary"
+                                : "hover:bg-muted/50"
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                aria-hidden="true"
+                                className={cn(
+                                  "h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background flex items-center justify-center",
+                                  selected
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-background text-transparent"
+                                )}
+                              >
+                                <Check className="h-3 w-3" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">{service.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {service.duration_minutes} mins
+                                </p>
+                              </div>
+                            </div>
+                            <span className="font-semibold text-sm">
+                              {formatCurrency(Number(service.price), currency)}
+                            </span>
+                          </button>
+                          {selected && credit && (
+                            <div className="px-3">
+                              <PackageRedemptionToggle
+                                credit={credit}
+                                checked={!!selected.packageCovered}
+                                onCheckedChange={(v) => togglePackageCovered(service.id, v)}
+                              />
+                            </div>
                           )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div
-                              aria-hidden="true"
-                              className={cn(
-                                "h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background flex items-center justify-center",
-                                selected
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background text-transparent"
-                              )}
-                            >
-                              <Check className="h-3 w-3" />
-                            </div>
-                            <div>
-                              <p className="font-medium text-sm">{service.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {service.duration_minutes} mins
-                              </p>
-                            </div>
-                          </div>
-                          <span className="font-semibold text-sm">
-                            {formatCurrency(Number(service.price), currency)}
-                          </span>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -317,9 +389,22 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess, initi
                   <span className="text-muted-foreground">Total duration</span>
                   <span className="font-medium">{totalDuration} mins</span>
                 </div>
+                {coveredCount > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Covered by package</span>
+                    <span className="font-medium">{coveredCount} service(s)</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm font-semibold border-t pt-1">
-                  <span>Total</span>
-                  <span>{formatCurrency(totalPrice, currency)}</span>
+                  <span>Total due</span>
+                  <span className="flex items-center gap-2">
+                    {coveredCount > 0 && (
+                      <span className="text-xs text-muted-foreground line-through font-normal">
+                        {formatCurrency(totalPrice, currency)}
+                      </span>
+                    )}
+                    {formatCurrency(payableTotal, currency)}
+                  </span>
                 </div>
               </div>
             )}

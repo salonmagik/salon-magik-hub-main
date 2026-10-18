@@ -3,8 +3,8 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import { CancelSubscriptionDialog } from "./CancelSubscriptionDialog";
 import { supabase } from "@/lib/supabase";
 
-// jsdom doesn't implement these, and Radix's Select uses them when opening —
-// without these no-op stubs, selecting an option throws.
+// jsdom doesn't implement these, and Radix's Select uses them when opening.
+// Without these no-op stubs, selecting an option throws.
 beforeAll(() => {
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	(window as any).HTMLElement.prototype.scrollIntoView = vi.fn();

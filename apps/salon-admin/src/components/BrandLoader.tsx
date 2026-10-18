@@ -1,2 +1,2 @@
-// Re-export from shared package — all platforms use the same loader
+// Re-export from shared package, since all platforms use the same loader
 export { BrandLoader } from "@ui/brand-loader";

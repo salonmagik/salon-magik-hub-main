@@ -10,7 +10,7 @@ interface SmsCreditPricingValue {
  * apps/salon-admin/src/hooks/useCreditPurchase.tsx's tier math so the
  * "Starting from" figure on the public Pricing page matches what a salon
  * actually sees once they're a customer. Arkesel only prices NGN/GHS bundles
- * today, so USD (and any other currency) has no tier data — callers should
+ * today. USD (and any other currency) has no tier data, so callers should
  * treat null as "no bundle pricing for this currency" rather than fall back
  * to a fabricated number.
  */

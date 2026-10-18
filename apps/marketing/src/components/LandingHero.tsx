@@ -29,7 +29,7 @@ export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: Land
   const defaultSalonAppUrl = import.meta.env.DEV ? "http://localhost:8080" : "https://app.salonmagik.com";
   const salonAppUrl = (import.meta.env.VITE_SALON_APP_URL || defaultSalonAppUrl).replace(/\/$/, "");
 
-  // Each card cycles independently — different intervals, different starting positions
+  // Each card cycles independently, with different intervals and different starting positions
   const [bookingIdx, setBookingIdx] = useState(0);
   const [revenueIdx, setRevenueIdx] = useState(1);
   const [reminderIdx, setReminderIdx] = useState(2);
@@ -109,9 +109,9 @@ export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: Land
           </div>
         </div>
 
-        {/* Floating card stack — each card cycles independently */}
+        {/* Floating card stack: each card cycles independently */}
         <div className="relative h-[420px] md:h-[460px]">
-          {/* Booking card — white, rotates -7deg */}
+          {/* Booking card: white, rotates -7deg */}
           <div
             className="hero-card-a absolute rounded-[20px] bg-brand-cream p-[22px] text-brand-ink shadow-[0_30px_60px_rgba(0,0,0,0.35)]"
             style={{ width: 280, top: 10, left: 40, zIndex: 2 }}
@@ -124,7 +124,7 @@ export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: Land
             </div>
           </div>
 
-          {/* Revenue card — dark, rotates +5deg */}
+          {/* Revenue card: dark, rotates +5deg */}
           <div
             className="hero-card-b absolute rounded-[20px] bg-brand-ink p-[22px] text-white shadow-[0_30px_60px_rgba(0,0,0,0.35)]"
             style={{ width: 240, top: 120, left: 160, zIndex: 3 }}
@@ -137,7 +137,7 @@ export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: Land
             </div>
           </div>
 
-          {/* Reminder card — gold, rotates -3deg */}
+          {/* Reminder card: gold, rotates -3deg */}
           <div
             className="hero-card-c absolute rounded-[20px] bg-brand-yellow p-[22px] shadow-[0_30px_60px_rgba(0,0,0,0.35)]"
             style={{ width: 250, top: 260, left: 10, zIndex: 1 }}

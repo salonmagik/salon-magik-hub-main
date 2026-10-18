@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +13,7 @@ import { Switch } from "@ui/switch";
 import { Label } from "@ui/label";
 import { Skeleton } from "@ui/skeleton";
 import {
+  Check,
   Clock,
   User,
   Phone,
@@ -25,6 +25,7 @@ import {
   ShoppingBag,
   Loader2,
 } from "lucide-react";
+import { cn } from "@shared/utils";
 import { useAppointmentProducts, type AppointmentProduct } from "@/hooks/useAppointmentProducts";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
@@ -33,7 +34,8 @@ import type { CalendarAppointment } from "@/hooks/useCalendarAppointments";
 import type { Enums, Tables } from "@supabase-client";
 import { CustomerDetailDialog } from "@/components/dialogs/CustomerDetailDialog";
 import { useLocations } from "@/hooks/useLocations";
-import { currencyForCountry } from "@/lib/countryCurrency";
+import { currencyForCountry, countryName } from "@/lib/countryCurrency";
+import { MapPin } from "lucide-react";
 
 type AppointmentStatus = Enums<"appointment_status">;
 
@@ -59,6 +61,11 @@ interface AppointmentDetailsDialogProps {
   appointment: CalendarAppointment | null;
   onRefresh?: () => void;
   onOpenApprovalAction?: (action: "approve" | "decline" | "reschedule" | "review", appointment: CalendarAppointment) => void;
+  // Supplied by the caller only when the current page isn't already the
+  // Appointments page -- when omitted, the "Go to appointments" footer
+  // button doesn't render, matching the pattern used by
+  // ProductOrderDetailDialog/PackagePurchaseDetailDialog/MixedPurchaseDetailDialog.
+  onNavigateToAppointments?: (appointmentId: string) => void;
 }
 
 type AppointmentBookingMetadata = {
@@ -89,8 +96,8 @@ export function AppointmentDetailsDialog({
   appointment,
   onRefresh,
   onOpenApprovalAction,
+  onNavigateToAppointments,
 }: AppointmentDetailsDialogProps) {
-  const navigate = useNavigate();
   const { currentTenant, roles } = useAuth();
   const { locations } = useLocations();
   const [isGifted, setIsGifted] = useState(false);
@@ -159,7 +166,7 @@ export function AppointmentDetailsDialog({
     : "Not scheduled";
   const scheduledTime = appointment.scheduled_start
     ? format(new Date(appointment.scheduled_start), "h:mm a")
-    : "—";
+    : "N/A";
   const bookedOn = format(new Date(appointment.created_at), "MMM d, yyyy 'at' h:mm a");
 
   const totalDuration = appointment.services.reduce(
@@ -248,7 +255,7 @@ export function AppointmentDetailsDialog({
 
   const handleGoToAppointments = () => {
     onOpenChange(false);
-    navigate("/salon/appointments");
+    onNavigateToAppointments?.(appointment.id);
   };
 
   // Mask phone for staff role
@@ -298,47 +305,75 @@ export function AppointmentDetailsDialog({
               </div>
             </div>
 
-            {/* Booking Info */}
-            <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#fff2ce] text-[#8a6510]">
-                <Calendar className="h-5 w-5" />
+            {/* Schedule + Location */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-[14px] border border-border/60 bg-card p-3.5">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Schedule</p>
+                <p className="text-sm font-medium mt-1">{scheduledDate}</p>
+                {appointment.scheduled_start && (
+                  <p className="text-xs text-muted-foreground mt-0.5">at {scheduledTime}</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-1.5">Booked on {bookedOn}</p>
               </div>
-              <div className="space-y-1">
-                <div>
-                  <p className="font-medium">{scheduledDate}</p>
-                  {appointment.scheduled_start && (
-                    <p className="text-sm text-muted-foreground">at {scheduledTime}</p>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Booked on {bookedOn}
+              <div className="rounded-[14px] border border-border/60 bg-card p-3.5">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Location</p>
+                <p className="text-sm font-medium mt-1 flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                  {appointmentLocation?.name || "Main Location"}
                 </p>
+                {appointmentLocation?.country && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{countryName(appointmentLocation.country)}</p>
+                )}
               </div>
             </div>
 
-            <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#e1f3ec] text-[#268766]">
-                <Package className="h-5 w-5" />
-              </div>
-              <div className="space-y-1 text-sm">
-                <p className="font-medium">Confirmation</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="secondary" className={confirmationBadge.className}>
-                    {confirmationBadge.label}
-                  </Badge>
-                  <span className="text-muted-foreground">
-                    {approvalStatus === "pending"
-                      ? "Customer submitted this booking and it still needs salon action."
-                      : approvalStatus === "approved"
-                        ? "This booking was accepted by the salon and is ready for invoice/payment."
-                        : approvalStatus === "reschedule_proposed"
-                          ? "The salon proposed a new time and is waiting for the customer response."
-                          : approvalStatus === "declined"
-                            ? "This booking request was declined."
-                            : "This booking is already confirmed."}
-                  </span>
-                </div>
-              </div>
+            {/* Confirmation banner */}
+            <div
+              className={cn(
+                "flex items-start gap-2.5 rounded-[14px] p-3.5",
+                approvalStatus === "pending"
+                  ? "bg-amber-50"
+                  : approvalStatus === "declined"
+                    ? "bg-rose-50"
+                    : approvalStatus === "reschedule_proposed"
+                      ? "bg-sky-50"
+                      : "bg-emerald-50",
+              )}
+            >
+              <Check
+                className={cn(
+                  "h-4 w-4 mt-0.5 shrink-0",
+                  approvalStatus === "pending"
+                    ? "text-amber-700"
+                    : approvalStatus === "declined"
+                      ? "text-rose-700"
+                      : approvalStatus === "reschedule_proposed"
+                        ? "text-sky-700"
+                        : "text-emerald-700",
+                )}
+              />
+              <span
+                className={cn(
+                  "text-sm",
+                  approvalStatus === "pending"
+                    ? "text-amber-800"
+                    : approvalStatus === "declined"
+                      ? "text-rose-800"
+                      : approvalStatus === "reschedule_proposed"
+                        ? "text-sky-800"
+                        : "text-emerald-800",
+                )}
+              >
+                {approvalStatus === "pending"
+                  ? "Customer submitted this booking and it still needs salon action."
+                  : approvalStatus === "approved"
+                    ? "This booking was accepted by the salon and is ready for invoice/payment."
+                    : approvalStatus === "reschedule_proposed"
+                      ? "The salon proposed a new time and is waiting for the customer response."
+                      : approvalStatus === "declined"
+                        ? "This booking request was declined."
+                        : "This booking is already confirmed."}
+              </span>
             </div>
 
             {(bookingReference || bookingMetadata?.gift || bookingMetadata?.delivery_address || bookingMetadata?.line_item?.schedule_mode === "leave_unscheduled") && (
@@ -390,36 +425,34 @@ export function AppointmentDetailsDialog({
             )}
 
             {/* Services */}
-            <div className="flex items-start gap-3 rounded-[14px] border border-border/60 bg-card p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#f1eafa] text-primary">
-                <Clock className="h-5 w-5" />
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Services</p>
               </div>
-              <div className="flex-1">
-                <p className="font-medium mb-2">Services</p>
-                <div className="space-y-2">
-                  {appointment.services.map((service) => (
-                    <div
-                      key={service.id}
-                      className="flex items-center justify-between text-sm py-1 border-b border-dashed last:border-0"
-                    >
-                      <div>
-                        <p>{service.service_name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {service.duration_minutes} min
-                        </p>
-                      </div>
-                      <p className="font-medium">
-                        {formatCurrency(Number(service.price))}
+              <div className="rounded-[14px] border border-border/60 overflow-hidden">
+                {appointment.services.map((service) => (
+                  <div
+                    key={service.id}
+                    className="flex items-center justify-between px-4 py-3 border-b border-border/60 last:border-0"
+                  >
+                    <div>
+                      <p className="font-medium text-sm">{service.service_name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {service.duration_minutes} min
                       </p>
                     </div>
-                  ))}
-                </div>
-                <div className="flex justify-between text-sm mt-2 pt-2 border-t">
-                  <span className="text-muted-foreground">
-                    {appointment.services.length} service(s) · {totalDuration} min
-                  </span>
-                  <span className="font-medium">{formatCurrency(servicesSubtotal)}</span>
-                </div>
+                    <p className="font-medium text-sm">
+                      {formatCurrency(Number(service.price))}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-between text-sm mt-2 pt-2 border-t">
+                <span className="text-muted-foreground">
+                  {appointment.services.length} service(s) · {totalDuration} min
+                </span>
+                <span className="font-medium">{formatCurrency(servicesSubtotal)}</span>
               </div>
             </div>
 
@@ -587,7 +620,9 @@ export function AppointmentDetailsDialog({
               </Button>
             </>
           )}
-          <Button className="rounded-full px-7" onClick={handleGoToAppointments}>Go to appointments</Button>
+          {onNavigateToAppointments && (
+            <Button className="rounded-full px-7" onClick={handleGoToAppointments}>Go to appointments</Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

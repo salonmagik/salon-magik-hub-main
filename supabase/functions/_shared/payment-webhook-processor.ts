@@ -876,6 +876,31 @@ export async function processWebhook(
                   throw transactionError;
                 }
 
+                // A purse top-up is real cash the salon just received through
+                // Paystack, the same as a booking payment, so it credits the
+                // salon's payout balance the same way a booking does. Without
+                // this, the customer's purse balance grows but the money
+                // never becomes withdrawable for the salon.
+                try {
+                  await validateWalletCurrency(supabase, tenantId, tenant?.currency || "USD", null);
+                  const { error: salonCreditError } = await supabase.rpc("credit_salon_purse", {
+                    p_tenant_id: tenantId,
+                    p_entry_type: "salon_purse_credit_purse_topup",
+                    p_reference_type: "customer_purse_topup",
+                    p_reference_id: paymentIntentId,
+                    p_amount: amount,
+                    p_currency: tenant?.currency || "USD",
+                    p_idempotency_key: `salon_topup_${reference}`,
+                    p_gateway_reference: reference,
+                  });
+                  if (salonCreditError) throw salonCreditError;
+                } catch (salonCreditError) {
+                  // A failure here must never undo the customer's own credit,
+                  // which already committed above, log and move on so the
+                  // top-up still succeeds from the customer's point of view.
+                  console.error("Failed to credit salon payout balance for purse topup:", salonCreditError);
+                }
+
                 await sendTransactionAlerts({
                   tenantId,
                   tenantName: tenant?.name,

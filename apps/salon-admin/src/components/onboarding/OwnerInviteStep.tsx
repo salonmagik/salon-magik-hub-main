@@ -13,7 +13,7 @@ export interface OwnerInviteInfo {
 interface OwnerInviteStepProps {
   ownerInfo: OwnerInviteInfo;
   onChange: (info: OwnerInviteInfo) => void;
-  /** Server-validated error (e.g. "this email already owns another salon") — cleared automatically when the email changes. */
+  /** Server-validated error (e.g. "this email already owns another salon"), cleared automatically when the email changes. */
   serverError?: string | null;
   onClearServerError?: () => void;
 }

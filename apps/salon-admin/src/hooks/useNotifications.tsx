@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { generateUUID } from "@shared/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { toast } from "@ui/ui/use-toast";
 
-// Synthesized rather than an audio file — no asset to host/load, and a
+// Synthesized rather than an audio file, since there's no asset to host/load, and a
 // short two-tone chime is enough to signal "something arrived" without
 // needing a real sound library. Browsers suspend AudioContext until the
 // user has interacted with the page at least once (autoplay policy), so
-// the very first notification of a session may play silently — expected,
+// the very first notification of a session may play silently. That's expected,
 // not a bug, and it plays normally after any click.
 let chimeContext: AudioContext | null = null;
 
@@ -45,7 +46,16 @@ export interface Notification {
   id: string;
   tenant_id: string;
   user_id: string | null;
-  type: "appointment" | "payment" | "customer" | "system" | "staff";
+  type:
+    | "appointment"
+    | "payment"
+    | "customer"
+    | "system"
+    | "staff"
+    | "product_order"
+    | "package_order"
+    | "refund_request"
+    | "mixed_order";
   title: string;
   description: string;
   read: boolean;
@@ -81,11 +91,11 @@ export function useNotifications(enabled = true) {
   const [error, setError] = useState<Error | null>(null);
   const notificationsRef = useRef<Notification[]>([]);
   // This hook mounts more than once at a time (e.g. the sidebar and the
-  // All Notifications page both call it concurrently) — a hardcoded channel
+  // All Notifications page both call it concurrently), so a hardcoded channel
   // name meant a second instance's .on() call landed on the first instance's
   // already-subscribed channel, throwing "cannot add postgres_changes
   // callbacks ... after subscribe()". Each instance needs its own channel.
-  const instanceIdRef = useRef(crypto.randomUUID());
+  const instanceIdRef = useRef(generateUUID());
 
   useEffect(() => {
     notificationsRef.current = notifications;

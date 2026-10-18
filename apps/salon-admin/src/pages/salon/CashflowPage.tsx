@@ -54,7 +54,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
-import { useTransactions } from "@/hooks/useTransactions";
+import { useTransactions, type TransactionWithDetails } from "@/hooks/useTransactions";
 import { useRefunds, type RefundWithDetails } from "@/hooks/useRefunds";
 import { useAuth } from "@/hooks/useAuth";
 import { useSalonsOverview } from "@/hooks/useSalonsOverview";
@@ -63,6 +63,7 @@ import { endOfDay, endOfMonth, format, startOfDay, startOfMonth, subDays } from 
 import { cn } from "@shared/utils";
 import { RequestRefundDialog } from "@/components/dialogs/RequestRefundDialog";
 import { RejectRefundDialog } from "@/components/dialogs/RejectRefundDialog";
+import { TransactionDetailDialog } from "@/components/dialogs/TransactionDetailDialog";
 import { ExportDropdown } from "@/components/ExportDropdown";
 import { RecordPaymentDialog } from "@/components/dialogs/RecordPaymentDialog";
 import { formatCurrency as sharedFormatCurrency } from "@shared/currency";
@@ -118,6 +119,8 @@ export default function CashflowPage() {
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
   const [refundDialogOpen, setRefundDialogOpen] = useState(false);
+  const [detailTransaction, setDetailTransaction] = useState<TransactionWithDetails | null>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedRefund, setSelectedRefund] = useState<RefundWithDetails | null>(null);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -135,13 +138,27 @@ export default function CashflowPage() {
   } = useRefunds();
   const { locations } = useSalonsOverview("today");
 
+  // A fresh object literal on every render (even an unrelated one, like the
+  // refetches onSuccess triggers right after a refund completes) would give
+  // RequestRefundDialog a new `transaction` reference each time, re-firing
+  // its reset effect and wiping the just-set "success" stage back to the
+  // form before the user ever sees it. Memoized so identity only changes
+  // when the underlying refund actually does.
+  const approveDialogTransaction = useMemo(
+    () =>
+      selectedRefund?.transaction
+        ? { ...selectedRefund.transaction, customer: selectedRefund.customer }
+        : null,
+    [selectedRefund],
+  );
+
   const isOwnerHub = activeContextType === "owner_hub";
   const canCompleteRefunds = currentRole === "owner" || currentRole === "manager";
 
   const currency = currentTenant?.currency || "USD";
 
   // Chain tenants can span more than one country. The page always shows
-  // exactly one country's worth of transactions — no combined "all
+  // exactly one country's worth of transactions. There is no combined "all
   // countries" view, since amounts in different currencies can't be
   // summed. Only shown when the tenant actually has branches in more than
   // one country; single-country tenants see no change.
@@ -151,6 +168,18 @@ export default function CashflowPage() {
     ? selectedCountry
     : (currentTenant?.country && availableCountries.includes(currentTenant.country) ? currentTenant.country : availableCountries[0]) || "";
   const locationCountryById = new Map(locations.map((loc) => [loc.id, loc.country]));
+
+  // Business Settings rollup: lets the chain owner narrow the consolidated
+  // list down to one branch. "All branches" (empty string) is the default,
+  // matching the country filter's defaulting pattern above.
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+
+  useEffect(() => {
+    if (selectedLocationId && locationCountryById.get(selectedLocationId) !== effectiveCountry) {
+      setSelectedLocationId("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveCountry]);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -180,7 +209,16 @@ export default function CashflowPage() {
     }
     if (isOwnerHub && effectiveCountry) {
       const locationId = txn.appointment?.location_id;
-      if (!locationId || locationCountryById.get(locationId) !== effectiveCountry) return false;
+      // Only exclude a transaction when it's definitively tied to a
+      // *different* country's branch. Transactions with no appointment
+      // (e.g. store-credit top-ups, which aren't tied to any branch) have
+      // no location to compare, and were wrongly dropped by this filter
+      // whenever a country was selected (including the single-country
+      // default) -- treat "unknown location" as "don't exclude" instead.
+      if (locationId && locationCountryById.get(locationId) !== effectiveCountry) return false;
+    }
+    if (isOwnerHub && selectedLocationId) {
+      if (txn.appointment?.location_id !== selectedLocationId) return false;
     }
     const matchesSearch =
       txn.customer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -194,9 +232,9 @@ export default function CashflowPage() {
     if (activeTab === "purse") return matchesSearch && (txn.type === "purse_topup" || txn.type === "purse_redemption");
     return matchesSearch;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [transactions, dateRange, isOwnerHub, effectiveCountry, searchQuery, activeTab]);
+  }), [transactions, dateRange, isOwnerHub, effectiveCountry, selectedLocationId, searchQuery, activeTab]);
 
-  // "Today's Inflow" and pending-refund totals are money — they must respect
+  // "Today's Inflow" and pending-refund totals are money, so they must respect
   // the country filter and never sum two currencies together, same as
   // Business Overview. Store Credit is intentionally excluded: customer
   // purses/wallets have no country dimension in the schema (one balance per
@@ -247,7 +285,7 @@ export default function CashflowPage() {
   const handleExport = (fileFormat: "csv" | "xlsx") => {
     const data = filteredTransactions.map((txn) => ({
       Date: fileFormat === "csv" ? format(new Date(txn.created_at), "yyyy-MM-dd HH:mm") : new Date(txn.created_at),
-      Branch: txn.appointment?.location?.name || "—",
+      Branch: txn.appointment?.location?.name || "N/A",
       Customer: txn.customer?.full_name || "Guest",
       Type: txn.type,
       Method: txn.method,
@@ -259,7 +297,7 @@ export default function CashflowPage() {
         ["Date", "Branch", "Customer", "Type", "Method", "Amount", "Status"],
         ...filteredTransactions.map((txn) => [
           format(new Date(txn.created_at), "yyyy-MM-dd HH:mm"),
-          txn.appointment?.location?.name || "—",
+          txn.appointment?.location?.name || "N/A",
           txn.customer?.full_name || "Guest",
           txn.type, txn.method,
           Number(txn.amount).toFixed(2),
@@ -396,14 +434,19 @@ export default function CashflowPage() {
 
     return (
       <div key={txn.id} className="md:[&:last-child>div]:border-b-0">
-        <article className="rounded-[14px] border border-border/60 bg-white p-4 shadow-sm md:hidden">
+        <article
+          className="rounded-[14px] border border-border/60 bg-white p-4 shadow-sm md:hidden"
+          onClick={() => { setDetailTransaction(txn); setDetailDialogOpen(true); }}
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate font-medium">{txn.customer?.full_name || "Guest"}</p>
               {showBranch && txn.appointment?.location?.name && (
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {txn.appointment.location.name}
-                </p>
+                <div className="mt-1">
+                  <Badge variant="secondary" className="text-[10px]">
+                    {txn.appointment.location.name}
+                  </Badge>
+                </div>
               )}
             </div>
             <p className={cn("shrink-0 font-serif text-base font-semibold", amountColorClass)}>
@@ -444,14 +487,17 @@ export default function CashflowPage() {
             <p className="text-xs text-muted-foreground">
               {format(new Date(txn.created_at), "MMM d, yyyy")}
             </p>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
               <Badge className={cn("rounded-full px-3 text-xs capitalize", style.bg, style.text)}>{txn.status}</Badge>
               {refundAction}
             </div>
           </div>
         </article>
 
-        <div className="hidden gap-3 border-b px-5 py-4 md:grid md:grid-cols-[100px_minmax(105px,.85fr)_minmax(150px,1.2fr)_minmax(90px,.65fr)_minmax(110px,.75fr)_minmax(125px,.9fr)] md:items-center">
+        <div
+          className="hidden cursor-pointer gap-3 border-b px-5 py-4 md:grid md:grid-cols-[100px_minmax(105px,.85fr)_minmax(150px,1.2fr)_minmax(90px,.65fr)_minmax(110px,.75fr)_minmax(125px,.9fr)_28px] md:items-center md:hover:bg-muted/20"
+          onClick={() => { setDetailTransaction(txn); setDetailDialogOpen(true); }}
+        >
           <p className="text-sm text-muted-foreground">
             {format(new Date(txn.created_at), "MMM d, yyyy")}
           </p>
@@ -484,9 +530,11 @@ export default function CashflowPage() {
                 )}
               </div>
               {showBranch && txn.appointment?.location?.name && (
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {txn.appointment.location.name}
-                </p>
+                <div className="mt-1">
+                  <Badge variant="secondary" className="text-[10px]">
+                    {txn.appointment.location.name}
+                  </Badge>
+                </div>
               )}
             </div>
           </div>
@@ -494,28 +542,30 @@ export default function CashflowPage() {
           <p className={cn("font-serif text-base font-semibold", amountColorClass)}>
               {isIncoming ? "+" : "-"}{sharedFormatCurrency(Number(txn.amount), txn.currency)}
           </p>
-          <div className="flex items-center justify-start gap-2">
+          <div className="flex items-center justify-start gap-2" onClick={(e) => e.stopPropagation()}>
             <Badge className={cn("rounded-full px-4 text-xs capitalize", style.bg, style.text)}>{txn.status}</Badge>
             {refundAction}
           </div>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
         </div>
       </div>
     );
   };
 
   const transactionTableHeader = (
-    <div className="hidden grid-cols-[100px_minmax(105px,.85fr)_minmax(150px,1.2fr)_minmax(90px,.65fr)_minmax(110px,.75fr)_minmax(125px,.9fr)] gap-3 border-b bg-muted/20 px-5 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground md:grid">
+    <div className="hidden grid-cols-[100px_minmax(105px,.85fr)_minmax(150px,1.2fr)_minmax(90px,.65fr)_minmax(110px,.75fr)_minmax(125px,.9fr)_28px] gap-3 border-b bg-muted/20 px-5 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground md:grid">
       <span>Date</span>
       <span>Customer</span>
       <span>Type</span>
       <span>Method</span>
       <span>Amount</span>
       <span>Status</span>
+      <span></span>
     </div>
   );
 
-  // ─── Stats + pending-refunds banner — same for Business Hub and branch
-  // context, just sourced from country-scoped vs plain totals. ──────────────
+  // Stats + pending-refunds banner: same for Business Hub and branch
+  // context, just sourced from country-scoped vs plain totals.
   const statCards = [
     {
       title: "Today's Inflow",
@@ -545,15 +595,15 @@ export default function CashflowPage() {
       color: "text-primary",
       bg: "bg-primary/10",
       description: isOwnerHub
-        ? "Every customer's combined salon balance — paid funds plus salon-issued credit, added together. Not split by country: customer balances are tracked per tenant, not per branch."
-        : "Every customer's combined salon balance — paid funds plus salon-issued credit, added together.",
+        ? "Every customer's combined salon balance, paid funds plus salon-issued credit, added together. Not split by country: customer balances are tracked per tenant, not per branch."
+        : "Every customer's combined salon balance, paid funds plus salon-issued credit, added together.",
       subtitle: isOwnerHub && availableCountries.length > 1 ? "All branches" : undefined,
     },
   ];
 
   const renderStatsAndBanner = () => (
     <>
-      {/* Stats — md: breakpoint (not sm:) so a card's label never wraps to
+      {/* Stats: md: breakpoint (not sm:) so a card's label never wraps to
           two lines in the 640-767px range, where a 3-col grid would otherwise
           squeeze "Pending Refunds" into a column too narrow for one line. */}
       <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start md:grid md:grid-cols-3 md:gap-4 md:overflow-visible md:pb-0 md:[&>*]:min-w-0">
@@ -616,9 +666,9 @@ export default function CashflowPage() {
     </>
   );
 
-  // ─── Tabs + content — one shared row (All / Inflow / Refunds / Store
+  // Tabs + content: one shared row (All / Inflow / Refunds / Store
   // credit / Cash / Customer balances) for both Business Hub and branch
-  // context, instead of Business Hub's old separate two-level tabs. ────────
+  // context, instead of Business Hub's old separate two-level tabs.
   const renderTabsAndContent = () => (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <TabsList
@@ -708,6 +758,26 @@ export default function CashflowPage() {
                 </SelectContent>
               </Select>
             )}
+            {isOwnerHub && locations.length > 1 && (
+              <Select
+                value={selectedLocationId || "all"}
+                onValueChange={(value) => setSelectedLocationId(value === "all" ? "" : value)}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All branches</SelectItem>
+                  {locations
+                    .filter((loc) => !effectiveCountry || loc.country === effectiveCountry)
+                    .map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
             <Button onClick={() => setRecordCashOpen(true)} className="hidden h-12 rounded-full px-7 lg:flex">
               <Banknote className="mr-2 h-4 w-4" />
               Record cash payment
@@ -739,16 +809,37 @@ export default function CashflowPage() {
         onOpenChange={setApproveDialogOpen}
         mode="complete"
         request={selectedRefund}
-        transaction={selectedRefund?.transaction ? {
-          ...selectedRefund.transaction,
-          customer: selectedRefund.customer,
-        } : null}
+        transaction={approveDialogTransaction}
         onSuccess={() => {
           if (selectedRefund?.id) {
             updateRefundStatusLocally(selectedRefund.id, "completed");
           }
           void refetchRefunds();
           void refetchTransactions();
+        }}
+      />
+
+      <TransactionDetailDialog
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+        transaction={detailTransaction}
+        refunds={refunds}
+        fallbackCurrency={currency}
+        canCompleteRefunds={canCompleteRefunds}
+        onIssueRefund={(txn) => {
+          setDetailDialogOpen(false);
+          setSelectedTransaction(txn);
+          setRefundDialogOpen(true);
+        }}
+        onApproveRefund={(refund) => {
+          setDetailDialogOpen(false);
+          setSelectedRefund(refund);
+          setApproveDialogOpen(true);
+        }}
+        onDeclineRefund={(refund) => {
+          setDetailDialogOpen(false);
+          setSelectedRefund(refund);
+          setRejectDialogOpen(true);
         }}
       />
 

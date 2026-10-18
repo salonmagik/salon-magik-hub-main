@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
+import { classifyOrderKind, orderKindNounCap } from "@shared/order-kind";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { startClientBookingPayment } from "@/lib/bookingPayments";
 import { useToast } from "@ui/ui/use-toast";
@@ -190,8 +191,8 @@ export default function ClientBookingDetailPage() {
   // customer lands straight in Paystack checkout instead of needing a second
   // tap on this page. Mirrors handleCompletePayment's own eligibility logic
   // (defined further down, after this component's early-return guards, so
-  // it isn't safely referenceable from an effect declared this early) —
-  // duplicated rather than shared for that reason.
+  // it isn't safely referenceable from an effect declared this early),
+  // so it's duplicated rather than shared for that reason.
   useEffect(() => {
     if (autoPayTriggeredRef.current || !booking) return;
     const params = new URLSearchParams(location.search);
@@ -351,7 +352,7 @@ export default function ClientBookingDetailPage() {
         setPendingReference(null);
         await refetchBookingAndSiblings();
       } else if (["abandoned", "failed"].includes(data?.paystackStatus)) {
-        // Terminal non-success on Paystack's side — the earlier attempt is
+        // Terminal non-success on Paystack's side: the earlier attempt is
         // dead, not still in flight. Drop it so "Complete Payment" comes
         // back instead of leaving the customer stuck on a check-status
         // button that can never succeed.
@@ -364,7 +365,7 @@ export default function ClientBookingDetailPage() {
       } else {
         toast({
           title: "Still processing",
-          description: "This payment hasn't cleared yet — check again in a moment.",
+          description: "This payment hasn't cleared yet, check again in a moment.",
         });
       }
     } catch (err) {
@@ -424,6 +425,7 @@ export default function ClientBookingDetailPage() {
 
   const services = booking.services || [];
   const products = (booking as { products?: AppointmentProduct[] }).products || [];
+  const orderKind = classifyOrderKind({ services, products });
   const servicesTotalDuration = services.reduce((sum, s) => sum + (s.duration_minutes || 0), 0);
   const bookingReference = approvalBooking.booking_reference || null;
   const bookingMetadata = (approvalBooking.booking_metadata || null) as BookingLineMetadata;
@@ -591,8 +593,12 @@ export default function ClientBookingDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1">
-            <p className="text-xs uppercase tracking-[0.12em] text-primary/65">Appointment</p>
-            <h1 className="font-serif text-3xl font-medium tracking-[-0.5px]">Booking details</h1>
+            <p className="text-xs uppercase tracking-[0.12em] text-primary/65">
+              {orderKind === "order" ? "Product order" : orderKind === "package" ? "Package purchase" : "Appointment"}
+            </p>
+            <h1 className="font-serif text-3xl font-medium tracking-[-0.5px]">
+              {orderKindNounCap(orderKind)} details
+            </h1>
             <p className="mt-0.5 text-sm text-muted-foreground">
               {booking.tenant?.name || "Salon"}
             </p>
@@ -610,7 +616,7 @@ export default function ClientBookingDetailPage() {
           <Card className="border-primary/30 bg-primary/5">
             <CardContent className="pt-4 flex items-center gap-3">
               <LoadingState variant="inline" className="flex-shrink-0 text-primary" />
-              <p className="text-sm font-medium text-primary">Verifying your payment — please wait…</p>
+              <p className="text-sm font-medium text-primary">Verifying your payment, please wait…</p>
             </CardContent>
           </Card>
         )}
@@ -629,7 +635,7 @@ export default function ClientBookingDetailPage() {
               <Badge className={`cursor-default ${status.className}`}>{status.label}</Badge>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-56 text-xs">
-              Where the appointment is in its lifecycle — scheduled, in progress, or completed.
+              Where the {orderKind === "booking" ? "appointment" : orderKindNounCap(orderKind).toLowerCase()} is in its lifecycle: scheduled, in progress, or completed.
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -790,7 +796,7 @@ export default function ClientBookingDetailPage() {
           </Card>
         )}
 
-        {/* Mixed outcome card — some approved, some declined/rescheduled */}
+        {/* Mixed outcome card: some approved, some declined/rescheduled */}
         {hasMixedOutcomes && (
           <Card className="border-amber-300 bg-amber-50/60">
             <CardContent className="pt-5 space-y-4">
@@ -807,11 +813,11 @@ export default function ClientBookingDetailPage() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span className="text-emerald-900 font-medium">{groupApprovedItems.length} item{groupApprovedItems.length !== 1 ? "s" : ""} approved — ready to pay</span>
+                  <span className="text-emerald-900 font-medium">{groupApprovedItems.length} item{groupApprovedItems.length !== 1 ? "s" : ""} approved, ready to pay</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <XCircle className="h-4 w-4 text-destructive shrink-0" />
-                  <span className="text-destructive/90 font-medium">{groupContactItems.length} item{groupContactItems.length !== 1 ? "s" : ""} declined or rescheduled — contact branch</span>
+                  <span className="text-destructive/90 font-medium">{groupContactItems.length} item{groupContactItems.length !== 1 ? "s" : ""} declined or rescheduled, contact branch</span>
                 </div>
               </div>
 
@@ -870,7 +876,9 @@ export default function ClientBookingDetailPage() {
                 )}
               </>
             ) : (
-              <p className="text-muted-foreground">Unscheduled appointment</p>
+              <p className="text-muted-foreground">
+                {orderKind === "order" ? "No pickup/delivery time scheduled" : "Unscheduled appointment"}
+              </p>
             )}
           </CardContent>
         </Card>
@@ -900,7 +908,7 @@ export default function ClientBookingDetailPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Store className="h-4 w-4 text-primary" />
-                Services
+                {orderKind === "package" ? "Package includes" : "Services"}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -999,13 +1007,22 @@ export default function ClientBookingDetailPage() {
               <span className="font-medium">{formatCurrency(booking.amount_paid, currency)}</span>
             </div>
             
-            {booking.amount_paid < booking.total_amount && (
+            {["refunded_full", "refunded_partial"].includes(booking.payment_status) ? (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Balance Due</span>
-                <span className="font-medium text-destructive">
-                  {formatCurrency(outstandingAmount || (booking.total_amount - booking.amount_paid), currency)}
+                <span className="text-muted-foreground">Refund status</span>
+                <span className="font-medium text-green-600">
+                  {booking.payment_status === "refunded_full" ? "Fully refunded" : "Partially refunded"}
                 </span>
               </div>
+            ) : (
+              booking.amount_paid < booking.total_amount && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Balance Due</span>
+                  <span className="font-medium text-destructive">
+                    {formatCurrency(outstandingAmount || (booking.total_amount - booking.amount_paid), currency)}
+                  </span>
+                </div>
+              )
             )}
 
             {booking.amount_paid > 0 && (

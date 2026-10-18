@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 const TICKET_STATUS_TOOLTIPS: Record<string, string> = {
   open: "We've received your request and it's waiting to be picked up.",
   in_progress: "Someone on our team is actively working on this.",
-  resolved: "We consider this resolved — reply if it isn't.",
+  resolved: "We consider this resolved, reply if it isn't.",
   closed: "This ticket is closed and no longer being tracked.",
 };
 import { supabase } from "@/lib/supabase";
@@ -41,11 +41,6 @@ const faqs = [
     question: "How do I contact a salon about a booking issue?",
     answer:
       "Use the support form below, choose the relevant salon, and select a booking-related issue type. Salon Magik will notify the salon inside their admin app and by email.",
-  },
-  {
-    question: "Why did I stop receiving booking updates?",
-    answer:
-      "Check your communication preferences in Profile & Security. If SMS or email updates are disabled, salons may not be able to send booking reminders through Salon Magik.",
   },
 ];
 

@@ -177,11 +177,11 @@ export function WelcomeModal({
           },
         },
       );
-      if (checkoutErr || !checkoutData?.authorization_url) {
+      if (checkoutErr || !checkoutData?.url) {
         throw new Error(checkoutData?.error || "Failed to create checkout session");
       }
 
-      window.location.href = checkoutData.authorization_url;
+      window.location.href = checkoutData.url;
     } catch (err) {
       console.error("WelcomeModal checkout error:", err);
       toast.error(err instanceof Error ? err.message : "Could not start checkout. Please try again.");
@@ -221,7 +221,7 @@ export function WelcomeModal({
                 <Clock className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium text-sm text-amber-700 dark:text-amber-400">
-                    Promo code active — expires in {countdown}
+                    Promo code active, expires in {countdown}
                   </p>
                   <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
                     {promoPreview.campaignName} ·{" "}
@@ -234,7 +234,7 @@ export function WelcomeModal({
               </div>
             )}
 
-            {/* CTA row — only the owner can reach billing, so only the owner sees Subscribe now */}
+            {/* CTA row: only the owner can reach billing, so only the owner sees Subscribe now */}
             <div className="flex flex-col gap-3 pt-2">
               {currentRole === "owner" && (
                 <Button className="w-full gap-2" onClick={() => setScreen("subscribe")}>
@@ -350,7 +350,7 @@ export function WelcomeModal({
                   </p>
                   <p className="text-xs text-orange-600 dark:text-orange-500 mt-0.5">
                     {PLAN_NAMES[selectedPlan]} supports {maxLocationsForPlan === 1 ? "1 branch" : `up to ${maxLocationsForPlan} branches`}.
-                    Select which to pause — all data is kept and branches can be revived later.
+                    Select which to pause. All data is kept and branches can be revived later.
                   </p>
                 </div>
               </div>
@@ -406,7 +406,7 @@ export function WelcomeModal({
             Back
           </Button>
           <Button variant="link" className="w-full text-muted-foreground text-xs" onClick={handleExplore} disabled={isProcessing}>
-            Skip for now — I'll subscribe later
+            Skip for now, I'll subscribe later
           </Button>
         </div>
       </div>

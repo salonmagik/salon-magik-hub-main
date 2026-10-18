@@ -24,7 +24,7 @@ export function BlockingBannerOverlay() {
   const [isSigningOut, setIsSigningOut] = useState(false);
 
   // A blocking overlay (trial expired, payment failed, kill switch, paused
-  // branch) sits at z-[200], above the product tour's own tooltip — so an
+  // branch) sits at z-[200], above the product tour's own tooltip, so an
   // in-progress tour keeps running invisibly underneath it, and reappears
   // stacked on top the moment the overlay clears. Cancel it outright instead;
   // it isn't marked "seen", so it resumes naturally next time this page

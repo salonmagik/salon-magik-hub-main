@@ -685,7 +685,7 @@ export default function StaffPage() {
 										<Info className="h-3 w-3 cursor-default" />
 									</TooltipTrigger>
 									<TooltipContent side="top" className="max-w-56 text-xs">
-										Everyone who isn't an owner or manager — supervisors,
+										Everyone who isn't an owner or manager: supervisors,
 										receptionists, and stylists combined.
 									</TooltipContent>
 								</Tooltip>
@@ -707,6 +707,7 @@ export default function StaffPage() {
 				</div>
 
 				<div
+					data-tour-id="tour-staff-operations"
 					className={cn(
 						"flex flex-col gap-4 rounded-[18px] border px-5 py-4 sm:flex-row sm:items-center sm:justify-between",
 						staffOperationsEnabled
@@ -960,7 +961,7 @@ export default function StaffPage() {
 																<div className="flex items-center gap-2 text-muted-foreground">
 																	<Mail className="w-3.5 h-3.5 flex-shrink-0" />
 																	<span className="truncate text-sm">
-																		{member.email || "—"}
+																		{member.email || "N/A"}
 																	</span>
 																</div>
 															</TableCell>
@@ -1457,7 +1458,7 @@ export default function StaffPage() {
 									Locations
 								</TabsTrigger>
 							)}
-							{/* Role changes assign permission tiers — owner-only, enforced server-side in update_staff_role. */}
+							{/* Role changes assign permission tiers: owner-only, enforced server-side in update_staff_role. */}
 							{!isEditingOwner && currentUserIsOwner && (
 								<TabsTrigger
 									value="permissions"
@@ -1531,7 +1532,7 @@ export default function StaffPage() {
 									<Input
 										id="staff-email"
 										className="h-12 rounded-lg border-black/10 disabled:bg-[#f1ece3] disabled:text-muted-foreground disabled:opacity-100"
-										value={staffToEdit?.email || "—"}
+										value={staffToEdit?.email || "N/A"}
 										disabled
 									/>
 								</div>
@@ -1548,7 +1549,7 @@ export default function StaffPage() {
 										value={
 											staffToEdit?.joinedAt
 												? format(new Date(staffToEdit.joinedAt), "MMM d, yyyy")
-												: "—"
+												: "N/A"
 										}
 										disabled
 									/>

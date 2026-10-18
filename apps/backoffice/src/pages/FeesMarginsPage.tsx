@@ -167,7 +167,7 @@ export default function FeesMarginsPage() {
             <CardTitle>Booking Payment Fees</CardTitle>
             <CardDescription>
               Applied to every Paystack-split booking and invoice payment. Paystack's own card-processing fee is separate
-              and always billed to the customer automatically — nothing to configure here for that part.
+              and always billed to the customer automatically. Nothing to configure here for that part.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -181,7 +181,7 @@ export default function FeesMarginsPage() {
                     Default Platform Service Charge
                   </div>
                   <p className="text-2xl font-semibold">
-                    {settings?.default_platform_service_charge_percentage ?? "—"}%
+                    {settings?.default_platform_service_charge_percentage ?? "N/A"}%
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Used for checkout when the salon has no custom platform rate. Normally deducted from the salon's share; a
@@ -193,7 +193,7 @@ export default function FeesMarginsPage() {
                     <Percent className="h-4 w-4" />
                     Customer-Facing Fee
                   </div>
-                  <p className="text-2xl font-semibold">{settings?.customer_facing_fee_percentage ?? "—"}%</p>
+                  <p className="text-2xl font-semibold">{settings?.customer_facing_fee_percentage ?? "N/A"}%</p>
                   <p className="text-xs text-muted-foreground">
                     Charged to every customer on every booking payment, regardless of the salon's service-charge choice.
                     Goes entirely to Salon Magik.

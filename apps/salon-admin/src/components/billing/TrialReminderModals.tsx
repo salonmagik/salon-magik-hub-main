@@ -22,11 +22,11 @@ function seenKey(tenantId: string, threshold: Threshold) {
 }
 
 /**
- * Auto-triggers, once per threshold per tenant (tracked in localStorage —
- * this is a client-side "have I nagged this browser about it" nudge, not a
+ * Auto-triggers, once per threshold per tenant (tracked in localStorage,
+ * since this is a client-side "have I nagged this browser about it" nudge, not a
  * billing record), a reminder modal at 7 days / 3 days / 24 hours before
  * trial end. Only the 7-day modal mentions the promo bonus, and only while
- * still eligible for it — by the 3-day mark the apply-window has typically
+ * still eligible for it: by the 3-day mark the apply-window has typically
  * already closed.
  */
 export function TrialReminderModals() {
@@ -45,7 +45,7 @@ export function TrialReminderModals() {
   useEffect(() => {
     if (!currentTenant?.id || hoursRemaining === null || hoursRemaining < 0) return;
 
-    // Furthest-out unmet threshold first — if the tenant hasn't been seen in
+    // Furthest-out unmet threshold first: if the tenant hasn't been seen in
     // a while, they get the oldest-due reminder rather than skipping to the
     // most urgent one.
     const due = (["7d", "3d", "24h"] as Threshold[]).find(
@@ -68,7 +68,7 @@ export function TrialReminderModals() {
     if (result.success && result.checkoutUrl) {
       window.location.href = result.checkoutUrl;
     }
-    // On failure the tenant just stays on this modal — the header/full-page
+    // On failure the tenant just stays on this modal; the header/full-page
     // trial banner (TrialBanner) already surfaces a toast with the reason if
     // they try again from there.
   };
@@ -78,7 +78,7 @@ export function TrialReminderModals() {
       icon: Clock,
       iconBg: "bg-primary/10 text-primary",
       title: "Your trial wraps up in 7 days",
-      body: "Whenever you're ready, upgrading takes about 2 minutes and everything stays exactly as it is — your bookings, your customers, your setup.",
+      body: "Whenever you're ready, upgrading takes about 2 minutes and everything stays exactly as it is: your bookings, your customers, your setup.",
     },
     "3d": {
       icon: Calendar,

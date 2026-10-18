@@ -76,7 +76,7 @@ export function ActiveSessionsTab() {
       if (!sessionRows || sessionRows.length === 0) return [];
 
       // Fetch profiles for unique user_ids separately (no direct FK between
-      // staff_sessions and profiles — both reference auth.users).
+      // staff_sessions and profiles: both reference auth.users).
       const userIds = [...new Set(sessionRows.map((s) => s.user_id))];
       const { data: profileRows } = await supabase
         .from("profiles")
@@ -203,7 +203,7 @@ export function ActiveSessionsTab() {
                             </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {session.browser_name ?? "—"}
+                            {session.browser_name ?? "N/A"}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
@@ -284,7 +284,7 @@ export function ActiveSessionsTab() {
                           </div>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {session.browser_name ?? "—"}
+                          {session.browser_name ?? "N/A"}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                           <div className="flex items-center gap-1.5">

@@ -210,8 +210,8 @@ export default function PrivacyPage() {
             <Section title="15. Contact Us">
               <Prose>
                 For privacy questions, data requests, or legal notices relating to Salon Magik,
-                contact <strong className="text-brand-ink">The Gray Avenue LTD</strong> — operating
-                in Nigeria and Ghana — at{" "}
+                contact <strong className="text-brand-ink">The Gray Avenue LTD</strong> (operating
+                in Nigeria and Ghana) at{" "}
                 <a href="mailto:privacy@salonmagik.com" className="text-brand-purple hover:underline">
                   privacy@salonmagik.com
                 </a>

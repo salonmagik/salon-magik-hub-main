@@ -17,9 +17,9 @@ import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { cn } from "@shared/utils";
 
 const BALANCE_STAT_COPY: Record<string, string> = {
-  "Customer balances": "Total available balance across all customers — paid funds plus salon-issued store credit, minus anything reserved for upcoming bookings.",
+  "Customer balances": "Total available balance across all customers: paid funds plus salon-issued store credit, minus anything reserved for upcoming bookings.",
   "Paid funds": "Money customers have paid into their salon wallet themselves, e.g. prepaid packages or top-ups.",
-  "Store credit": "Credit your salon has issued — refunds, goodwill, or loyalty rewards. Not money the customer paid in.",
+  "Store credit": "Credit your salon has issued: refunds, goodwill, or loyalty rewards. Not money the customer paid in.",
 };
 
 export function CustomerBalancesPanel({ canAdjust }: { canAdjust: boolean }) {

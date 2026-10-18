@@ -182,7 +182,7 @@ const handler = async (req: Request): Promise<Response> => {
       .select(`
         *,
         customer:customers!appointments_customer_id_fkey(id, full_name, email),
-        services:appointment_services(service_name, price),
+        services:appointment_services(id, service_name, price),
         location:locations(name, address, city),
         tenant:tenants!tenant_id(name, currency, logo_url, banner_urls, plan)
       `)
@@ -230,7 +230,83 @@ const handler = async (req: Request): Promise<Response> => {
       ? { subject: customTemplate.subject, body: customTemplate.body_html }
       : defaultTemplates[action];
 
-    const servicesList = appointment.services?.map((s: { service_name: string }) => s.service_name).join(", ") || "N/A";
+    // Look up package-credit reservations for this appointment so a service
+    // covered by a package reads as "covered" instead of listing a price
+    // that was never actually charged.
+    const packageNameByAppointmentServiceId = new Map<string, string>();
+    try {
+      const { data: reservations, error: reservationsError } = await supabase
+        .from("package_entitlement_reservations")
+        .select(
+          "appointment_service_id, entitlement_item:customer_package_entitlement_items(entitlement:customer_package_entitlements(package:packages(name)))",
+        )
+        .eq("appointment_id", appointmentId)
+        .in("status", ["reserved", "consumed"]);
+
+      if (reservationsError) throw reservationsError;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((reservations || []) as any[]).forEach((r) => {
+        if (!r.appointment_service_id) return;
+        const packageName = r.entitlement_item?.entitlement?.package?.name;
+        if (packageName) {
+          packageNameByAppointmentServiceId.set(r.appointment_service_id, packageName);
+        }
+      });
+    } catch (reservationErr) {
+      console.warn("Nested reservation embed failed, falling back to split queries:", reservationErr);
+      const { data: reservations } = await supabase
+        .from("package_entitlement_reservations")
+        .select("appointment_service_id, entitlement_item_id")
+        .eq("appointment_id", appointmentId)
+        .in("status", ["reserved", "consumed"]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawReservations = (reservations || []) as any[];
+      const itemIds = [...new Set(rawReservations.map((r) => r.entitlement_item_id))];
+
+      if (itemIds.length > 0) {
+        const { data: items2 } = await supabase
+          .from("customer_package_entitlement_items")
+          .select("id, entitlement_id")
+          .in("id", itemIds);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const entitlementIdByItemId = new Map(((items2 || []) as any[]).map((i) => [i.id, i.entitlement_id]));
+        const entitlementIds = [...new Set([...entitlementIdByItemId.values()])];
+
+        const { data: entitlements2 } = await supabase
+          .from("customer_package_entitlements")
+          .select("id, package:packages(name)")
+          .in("id", entitlementIds as string[]);
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const packageNameByEntitlementId = new Map(((entitlements2 || []) as any[]).map((e) => [e.id, e.package?.name]));
+
+        rawReservations.forEach((r) => {
+          if (!r.appointment_service_id) return;
+          const entitlementId = entitlementIdByItemId.get(r.entitlement_item_id);
+          const packageName = entitlementId ? packageNameByEntitlementId.get(entitlementId) : undefined;
+          if (packageName) {
+            packageNameByAppointmentServiceId.set(r.appointment_service_id, packageName);
+          }
+        });
+      }
+    }
+
+    const hasAnyCoveredService = (appointment.services || []).some(
+      (s: { id: string }) => packageNameByAppointmentServiceId.has(s.id),
+    );
+    const servicesList = !hasAnyCoveredService
+      ? appointment.services?.map((s: { service_name: string }) => s.service_name).join(", ") || "N/A"
+      : (appointment.services || [])
+          .map((s: { id: string; service_name: string; price: number }) => {
+            const packageName = packageNameByAppointmentServiceId.get(s.id);
+            return packageName
+              ? `${s.service_name} (covered by package: ${packageName})`
+              : `${s.service_name} (${tenant?.currency || "GHS"} ${Number(s.price).toFixed(2)})`;
+          })
+          .join("; ") || "N/A";
     const totalAmount = `${tenant?.currency || "GHS"} ${Number(appointment.total_amount).toFixed(2)}`;
     const outstandingAmount = Math.max(
       Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0),

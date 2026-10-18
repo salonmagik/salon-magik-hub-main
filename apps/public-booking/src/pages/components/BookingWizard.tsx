@@ -9,6 +9,8 @@ import {
 } from "@ui/dialog";
 import { Button } from "@ui/button";
 import { Separator } from "@ui/separator";
+import { hexToHsl } from "@shared/color";
+import { validateE164Phone } from "@shared/validation";
 import {
   useBookingCart,
   useDepositCalculation,
@@ -23,7 +25,7 @@ import {
 import { CartStep } from "./CartStep";
 import { SchedulingStep } from "./SchedulingStep";
 import { BookerInfoStep, type BookerInfo } from "./BookerInfoStep";
-import { GiftRecipientsStep } from "./GiftRecipientsStep";
+import { GiftRecipientsStep, type RecipientIdentityStatus } from "./GiftRecipientsStep";
 import { ReviewStep, type PaymentOption } from "./ReviewStep";
 import { PaymentStep, type PaymentGateway, type PaymentMode } from "./PaymentStep";
 import { type AppliedVoucher } from "@/components/VoucherInput";
@@ -190,7 +192,16 @@ export function BookingWizard({
     deliveryAddress: emptyDeliveryAddress,
   });
   const [bookerPhoneEmailConflict, setBookerPhoneEmailConflict] = useState(false);
+  // True while the booker's email is unlocked for an in-place edit and
+  // hasn't been re-confirmed yet -- blocks "Continue" so a half-typed or
+  // not-yet-checked email can't be carried forward.
+  const [bookerEmailEditPending, setBookerEmailEditPending] = useState(false);
   const [giftRecipients, setGiftRecipients] = useState<Record<string, GiftRecipient>>({});
+  // Per gift item: "pending" until that recipient's email has been checked
+  // (and stays "pending" again while it's being re-checked), then "exists"
+  // or "new" -- drives both which fields isGiftStepComplete requires and
+  // whether "Continue" is blocked.
+  const [giftRecipientStatuses, setGiftRecipientStatuses] = useState<Record<string, RecipientIdentityStatus>>({});
   const [paymentOption, setPaymentOption] = useState<PaymentOption>("pay_now");
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
   const [selectedGateway, setSelectedGateway] = useState<PaymentGateway>("paystack"); // default is paystack
@@ -475,30 +486,38 @@ export function BookingWizard({
 
   const isBookerInfoComplete = useMemo(() => {
     if (bookerEmailStage !== "details") return false;
-    const baseValid =
-      Boolean(bookerInfo.firstName.trim()) &&
-      Boolean(bookerInfo.lastName.trim()) &&
-      Boolean(bookerInfo.email.trim()) &&
-      /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bookerInfo.email);
+    if (bookerEmailEditPending) return false;
+    const emailValid = Boolean(bookerInfo.email.trim()) && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bookerInfo.email);
+    // An existing account's name/phone are never collected here (shown
+    // instead of asked for would just invite phone-number phishing) — the
+    // account on file covers them.
+    const baseValid = bookerHasExistingAccount
+      ? emailValid
+      : emailValid && Boolean(bookerInfo.firstName.trim()) && Boolean(bookerInfo.lastName.trim());
 
     if (!baseValid) return false;
+    if (!bookerHasExistingAccount && !validateE164Phone(bookerInfo.phone).isValid) return false;
     if (bookerPhoneEmailConflict) return false;
     if (deliveredNonGiftProducts.length === 0) return true;
     return isDeliveryAddressComplete(bookerInfo.deliveryAddress);
-  }, [bookerEmailStage, bookerInfo, bookerPhoneEmailConflict, deliveredNonGiftProducts.length]);
+  }, [bookerEmailStage, bookerEmailEditPending, bookerHasExistingAccount, bookerInfo, bookerPhoneEmailConflict, deliveredNonGiftProducts.length]);
 
   const isGiftStepComplete = useMemo(() => {
     return giftItems.every((item) => {
+      const status = giftRecipientStatuses[item.id] ?? "pending";
+      if (status === "pending") return false;
       const recipient = giftRecipients[item.id];
-      if (!recipient?.firstName?.trim() || !recipient?.lastName?.trim() || !recipient?.email?.trim() || !recipient?.phone?.trim()) {
-        return false;
+      if (!recipient?.email?.trim()) return false;
+      if (status === "new") {
+        if (!recipient.firstName?.trim() || !recipient.lastName?.trim() || !recipient.phone?.trim()) return false;
+        if (!validateE164Phone(recipient.phone).isValid) return false;
       }
       if (item.type === "product" && item.fulfillmentType === "delivery") {
         return isDeliveryAddressComplete(recipient.address);
       }
       return true;
     });
-  }, [giftItems, giftRecipients]);
+  }, [giftItems, giftRecipients, giftRecipientStatuses]);
 
   const isCurrentStepComplete = (() => {
     switch (step) {
@@ -989,6 +1008,28 @@ export function BookingWizard({
   }, [open]);
 
   const brandColor = salon.brand_color || "#2E1F4E";
+  // The shared Dialog's header deliberately renders as a fixed Salon-Magik-
+  // purple "brand-plum" fill (see dialog-brand.ts) -- correct for
+  // salon-admin's own internal dialogs, wrong for this customer-facing
+  // checkout, which should read as the tenant's own brand. Re-hue the same
+  // background/card/border progression BRAND_DIALOG_STYLE already defines,
+  // keeping its saturation/lightness "shape", just shifted to the tenant's
+  // hue instead of the hardcoded default.
+  const brandHue = hexToHsl(brandColor)?.h ?? 262;
+  const dialogHeaderStyle = {
+    "--background": `${brandHue} 43% 21%`,
+    "--foreground": "0 0% 100%",
+    "--card": `${brandHue} 38% 26%`,
+    "--card-foreground": "0 0% 100%",
+    "--popover": `${brandHue} 38% 26%`,
+    "--popover-foreground": "0 0% 100%",
+    "--secondary": `${brandHue} 30% 28%`,
+    "--secondary-foreground": "0 0% 100%",
+    "--muted": `${brandHue} 30% 28%`,
+    "--muted-foreground": `${((brandHue - 4) % 360 + 360) % 360} 24% 81%`,
+    "--border": `${brandHue} 28% 34%`,
+    "--input": `${brandHue} 28% 34%`,
+  } as React.CSSProperties;
   const showSidebar = step !== "confirmation";
   const onReviewOrPayment = step === "review" || step === "payment";
 
@@ -1000,7 +1041,7 @@ export function BookingWizard({
       >
         <div className={`grid flex-1 min-h-0 ${showSidebar ? "lg:grid-cols-[1fr_300px]" : "lg:grid-cols-1"}`}>
         <div className="flex flex-col min-h-0 min-w-0">
-        <DialogHeader className="px-6 pt-6 pb-1 shrink-0">
+        <DialogHeader className="px-6 pt-6 pb-1 shrink-0" style={dialogHeaderStyle}>
           <DialogDescription className="sr-only">
             Complete your booking by reviewing your cart, schedule, and payment details.
           </DialogDescription>
@@ -1082,6 +1123,7 @@ export function BookingWizard({
                 onOtpChange={setBookerOtp}
                 onOtpSubmit={handleBookerOtpSubmit}
                 onOtpResend={handleBookerOtpResend}
+                onEmailEditPendingChange={setBookerEmailEditPending}
               />
             )}
 
@@ -1090,9 +1132,11 @@ export function BookingWizard({
                 giftItems={giftItems}
                 recipients={giftRecipients}
                 onRecipientsChange={setGiftRecipients}
+                onRecipientStatusChange={(itemId, status) =>
+                  setGiftRecipientStatuses((prev) => (prev[itemId] === status ? prev : { ...prev, [itemId]: status }))
+                }
                 sameRecipient={meta.giftsBelongToSamePerson}
                 onSameRecipientChange={(value) => updateMeta({ giftsBelongToSamePerson: value })}
-                tenantId={salon.id}
                 bookerInfo={{ firstName: bookerInfo.firstName, email: bookerInfo.email, phone: bookerInfo.phone }}
               />
             )}

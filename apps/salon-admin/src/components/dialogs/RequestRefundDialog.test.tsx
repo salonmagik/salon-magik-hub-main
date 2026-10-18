@@ -13,9 +13,7 @@ const transaction = { id: "transaction-1", tenant_id: "tenant-1", customer_id: "
   customer: { id: "customer-1", full_name: "Ama Mensah" } };
 
 beforeEach(() => {
-  rpcMock.mockImplementation((name: string) => name === "check_refund_recoverability"
-    ? Promise.resolve({ data: { requires_wallet_debit: true, wallet_balance: 1000, currency: "GHS" }, error: null })
-    : Promise.resolve({ data: null, error: null }));
+  rpcMock.mockImplementation(() => Promise.resolve({ data: null, error: null }));
   invokeMock.mockResolvedValue({ data: { success: true, refundId: "refund-1" }, error: null });
 });
 
@@ -39,14 +37,12 @@ describe("RequestRefundDialog", () => {
     expect(await screen.findByText("Refund recorded")).toBeInTheDocument();
   });
 
-  it("keeps direct transfer available when the salon balance cannot fund store credit", async () => {
-    rpcMock.mockImplementation((name: string) => name === "check_refund_recoverability"
-      ? Promise.resolve({ data: { requires_wallet_debit: true, wallet_balance: 0, currency: "GHS" }, error: null })
-      : Promise.resolve({ data: null, error: null }));
+  it("keeps salon balance selectable regardless of the salon's current wallet balance", async () => {
     render(<RequestRefundDialog open onOpenChange={vi.fn()} transaction={transaction} mode="complete" />);
     await waitFor(() => expect(screen.getByText("₵150.00")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "All" }));
-    await waitFor(() => expect(screen.getByText(/store credit is funded from your salon balance/i)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /Salon balance/i })).not.toBeDisabled();
+    expect(screen.getByText(/available in the customer's salon balance for future appointments/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Cash \/ transfer/i })).not.toBeDisabled();
   });
 

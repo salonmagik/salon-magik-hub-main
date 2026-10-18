@@ -258,7 +258,7 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
     setPhoneOtpCode("");
   }
 
-  // Removing a phone number entirely doesn't need OTP verification — there's
+  // Removing a phone number entirely doesn't need OTP verification, since there's
   // nothing to prove ownership of. Setting a new number does: it's gated by a
   // code sent to that new number, and checked for uniqueness against every
   // other account first.
@@ -458,7 +458,7 @@ export function MyProfileModal({ open, onClose }: MyProfileModalProps) {
                     </div>
                   )}
 
-                  {/* Phone — editable */}
+                  {/* Phone (editable) */}
                   <div className="px-4 py-3">
                     <p className="text-xs text-muted-foreground mb-0.5 flex items-center gap-1">
                       <Phone className="h-3 w-3" /> Phone

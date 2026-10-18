@@ -58,10 +58,10 @@
   animation: loadingTextFade 0.35s ease forwards;
 }
 
-/* Smooth scroll — native CSS, zero JS cost */
+/* Smooth scroll: native CSS, zero JS cost */
 html { scroll-behavior: smooth; }
 
-/* Scrollbar — grain only, no visible track */
+/* Scrollbar: grain only, no visible track */
 ::-webkit-scrollbar { width: 3px; height: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }

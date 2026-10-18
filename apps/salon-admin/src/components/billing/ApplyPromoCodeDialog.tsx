@@ -50,8 +50,8 @@ export function ApplyPromoCodeDialog({ open, onOpenChange }: ApplyPromoCodeDialo
         return;
       }
 
-      // Bonus trial days on top, only if still within the eligibility window
-      // — apply_promo_trial_bonus itself decides based on live config.
+      // Bonus trial days on top, only if still within the eligibility window.
+      // apply_promo_trial_bonus itself decides based on live config.
       const { data: bonusData } = await (supabase.rpc as any)("apply_promo_trial_bonus", {
         p_tenant_id: currentTenant.id,
       });
@@ -63,9 +63,9 @@ export function ApplyPromoCodeDialog({ open, onOpenChange }: ApplyPromoCodeDialo
       if (bonusData?.granted) {
         toast({
           title: "Promo applied!",
-          description: `Nice — your trial just got ${bonusData.bonus_days} extra day${bonusData.bonus_days === 1 ? "" : "s"}.`,
+          description: `Nice, your trial just got ${bonusData.bonus_days} extra day${bonusData.bonus_days === 1 ? "" : "s"}.`,
         });
-        // Best-effort — billing admins should hear about the extension, but
+        // Best-effort: billing admins should hear about the extension, but
         // a notify failure shouldn't undo the bonus that already landed.
         supabase.functions
           .invoke("send-trial-extension-notice", {

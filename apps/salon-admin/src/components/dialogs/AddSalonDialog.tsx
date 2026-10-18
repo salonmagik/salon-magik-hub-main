@@ -128,7 +128,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess, compact = false 
     !hasPendingChainUnlock && (locationGate?.can_add ?? currentLocationCount < allowedLocations);
   const crossesSelfServeLimit = isChainPlan && nextRequestedLocationCount > SELF_SERVE_CHAIN_LOCATION_LIMIT;
   // Past the self-serve ceiling (11+ chain locations) needs a human in the
-  // loop — everything else that's blocked is self-serve payable from the
+  // loop. Everything else that's blocked is self-serve payable from the
   // Subscription tab now, so it gets the "limit reached" redirect instead.
   const needsCustomUnlock =
     isChainPlan &&
@@ -184,7 +184,7 @@ export function AddSalonDialog({ open, onOpenChange, onSuccess, compact = false 
     toast({ title: "Success", description: "New branch added" });
 
     // The location-gate query has its own staleTime, so a plain refetch isn't
-    // guaranteed to pick up the new count immediately — invalidate it so the
+    // guaranteed to pick up the new count immediately. Invalidate it so the
     // dialog shows the right used/allowed numbers next time it opens.
     await Promise.all([
       refreshTenants(),

@@ -150,7 +150,7 @@ export default function BackofficeDashboardPage() {
       title: "Total Tenants",
       value: tenants?.length || 0,
       description: "All salons",
-      tooltip: "Every tenant record, regardless of subscription status — including trialing, past due, and canceled.",
+      tooltip: "Every tenant record, regardless of subscription status. Includes trialing, past due, and canceled.",
       icon: Users,
       href: "/customers/tenants",
       tone: "info" as const,
@@ -159,7 +159,7 @@ export default function BackofficeDashboardPage() {
       title: "Active Tenants",
       value: activeCount,
       description: "Currently active",
-      tooltip: "Subscription status is exactly \"active\" — trialing tenants are counted separately below, not included here.",
+      tooltip: "Subscription status is exactly \"active\". Trialing tenants are counted separately below, not included here.",
       icon: Building2,
       href: "/customers/tenants",
       tone: "success" as const,
@@ -168,7 +168,7 @@ export default function BackofficeDashboardPage() {
       title: "Trialing",
       value: trialingCount,
       description: "In free trial",
-      tooltip: "Subscription status is \"trialing\" — hasn't converted to a paid plan yet.",
+      tooltip: "Subscription status is \"trialing\" and hasn't converted to a paid plan yet.",
       icon: Sparkles,
       href: "/customers/tenants",
       tone: "default" as const,
@@ -177,7 +177,7 @@ export default function BackofficeDashboardPage() {
       title: "Pending Leads",
       value: pendingCount,
       description: "Awaiting review",
-      tooltip: "Waitlist signups with status \"pending\" — not yet invited.",
+      tooltip: "Waitlist signups with status \"pending\". Still awaiting approval and an invite from the backoffice team.",
       icon: Clock,
       href: "/customers/waitlists",
       tone: "warning" as const,
@@ -195,7 +195,7 @@ export default function BackofficeDashboardPage() {
       title: "New This Month",
       value: newThisMonth,
       description: "Signed up in the last 30 days",
-      tooltip: "A rolling 30-day window from today — not the current calendar month.",
+      tooltip: "A rolling 30-day window from today. Not the current calendar month.",
       icon: Globe2,
       href: "/customers/tenants",
       tone: "info" as const,
@@ -271,7 +271,7 @@ export default function BackofficeDashboardPage() {
                                 <Info className="h-3 w-3 text-muted-foreground cursor-default" />
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-56 text-xs">
-                                Active and trialing tenants combined — note this is broader than the "Active Tenants" stat above, which excludes trialing.
+                                Active and trialing tenants combined. Note this is broader than the "Active Tenants" stat above, which excludes trialing.
                               </TooltipContent>
                             </Tooltip>
                           </div>

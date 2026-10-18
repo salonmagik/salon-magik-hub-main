@@ -75,7 +75,7 @@ describe("BillingStateBanner", () => {
 		expect(screen.queryByRole("button", { name: "Settle now" })).not.toBeInTheDocument();
 	});
 
-	it("carries state via icon and text, not colour alone — an accessible role/name is present for both states", () => {
+	it("carries state via icon and text, not colour alone: an accessible role/name is present for both states", () => {
 		const graceEndsAt = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString();
 		setup({ id: "t1", subscription_status: "past_due", billing_grace_ends_at: graceEndsAt }, true);
 		renderBanner();

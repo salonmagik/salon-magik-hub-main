@@ -32,7 +32,7 @@ interface PreviewResult {
 /**
  * Moves one tenant off Paystack's native Subscription engine and onto the
  * self-managed billing cron. Deliberately one tenant at a time, previewed
- * before it touches anything real — see backoffice-migrate-tenant-billing
+ * before it touches anything real. See backoffice-migrate-tenant-billing
  * for why this isn't automated.
  */
 export function MigrateTenantBillingDialog({ tenant, onOpenChange, onSuccess }: MigrateTenantBillingDialogProps) {
@@ -136,14 +136,14 @@ export function MigrateTenantBillingDialog({ tenant, onOpenChange, onSuccess }: 
               </p>
               {preview.activeSubscriptionsFound.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Nothing to disable — this tenant may already be off Paystack's subscription engine, or never
+                  Nothing to disable. This tenant may already be off Paystack's subscription engine, or never
                   had one. Confirming will still schedule them into the self-managed cron.
                 </p>
               ) : (
                 <ul className="space-y-1 text-sm text-muted-foreground">
                   {preview.activeSubscriptionsFound.map((sub) => (
                     <li key={sub.code} className="rounded-md border px-3 py-1.5">
-                      {sub.plan || "Unnamed plan"} — <span className="font-mono text-xs">{sub.code}</span>
+                      {sub.plan || "Unnamed plan"} · <span className="font-mono text-xs">{sub.code}</span>
                     </li>
                   ))}
                 </ul>

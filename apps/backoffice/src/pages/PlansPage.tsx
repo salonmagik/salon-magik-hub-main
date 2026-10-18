@@ -432,7 +432,7 @@ export default function PlansPage() {
   const [themePricingDrafts, setThemePricingDrafts] = useState<Record<string, ThemePricingDraft>>({});
   const [themePricingDirty, setThemePricingDirty] = useState(false);
 
-  // Paystack plan codes — per pricing-row drafts (NGN/GHS only)
+  // Paystack plan codes: per pricing-row drafts (NGN/GHS only)
   interface PaystackCodeDraft { monthly: string; annual: string; dirty: boolean; }
   const [paystackCodeDrafts, setPaystackCodeDrafts] = useState<Record<string, PaystackCodeDraft>>({});
   const [paystackCodeRevealedRows, setPaystackCodeRevealedRows] = useState<Set<string>>(new Set());
@@ -1061,7 +1061,7 @@ export default function PlansPage() {
         if (item.price === null || !Number.isFinite(item.price) || item.price < 0) {
           errors.push(`${currency}: non-custom tiers require price >= 0.`);
         }
-        // Annual price is optional per tier — leaving it blank just means
+        // Annual price is optional per tier. Leaving it blank just means
         // annual Chain pricing isn't configured for that tier yet (AD-8),
         // not a validation error.
         if (item.annualPrice !== null && (!Number.isFinite(item.annualPrice) || item.annualPrice < 0)) {
@@ -1475,7 +1475,7 @@ export default function PlansPage() {
     }) => {
       // The actual plan_pricing write (closing the old row, inserting the new one)
       // happens inside backoffice_create_plan_change_batch / backoffice_apply_plan_change_batch.
-      // We only compute the target values here — writing them directly first would make
+      // We only compute the target values here, since writing them directly first would make
       // scheduled rollouts take effect immediately, defeating the rollout date.
       const changedRows = rows.map((row) => {
         const monthly = parseNumericInput(row.monthly_price);
@@ -2175,7 +2175,7 @@ export default function PlansPage() {
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-56 text-xs">
-                  The platform enforces a hard cap of {MAX_PLANS} plans — you can't create more until one is removed.
+                  The platform enforces a hard cap of {MAX_PLANS} plans. You can't create more until one is removed.
                 </TooltipContent>
               </Tooltip>
               <Tooltip>
@@ -2195,7 +2195,7 @@ export default function PlansPage() {
                   </Badge>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-56 text-xs">
-                  Plans with no active pricing row — currently unsellable until pricing is added.
+                  Plans with no active pricing row, currently unsellable until pricing is added.
                 </TooltipContent>
               </Tooltip>
               {recommendedPlanId ? (
@@ -2384,7 +2384,7 @@ export default function PlansPage() {
                                     </p>
                                   </div>
                                 ) : (
-                                  <span className="text-muted-foreground">—</span>
+                                  <span className="text-muted-foreground">N/A</span>
                                 )}
                               </TableCell>
                             );
@@ -2446,7 +2446,7 @@ export default function PlansPage() {
                                     <TableRow key={plan.id}>
                                       <TableCell className="font-medium">{plan.name}</TableCell>
                                       <TableCell colSpan={3} className="text-xs text-muted-foreground">
-                                        No {currency} pricing row — add pricing first
+                                        No {currency} pricing row, add pricing first
                                       </TableCell>
                                     </TableRow>
                                   );

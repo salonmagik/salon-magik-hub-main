@@ -22,7 +22,7 @@ export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: Landi
   return (
     <nav className="sticky top-0 z-50 bg-brand-cream">
       <div className="mx-auto flex max-w-[1180px] items-center justify-between px-8 py-[18px]">
-        {/* Logo — clickable, routes to home */}
+        {/* Logo: clickable, routes to home */}
         <Link to="/" className="flex items-center gap-2">
           <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-[7px] bg-brand-purple">
             <svg width="15" height="15" viewBox="0 0 32 32" fill="none">
@@ -40,7 +40,7 @@ export function LandingNav({ isWaitlistMode, isLoading, onWaitlistClick }: Landi
           </span>
         </Link>
 
-        {/* Nav links — hidden on mobile */}
+        {/* Nav links: hidden on mobile */}
         <div className="hidden items-center gap-9 md:flex">
           {NAV_LINKS.map(({ to, label }) => {
             const isActive = pathname === to;

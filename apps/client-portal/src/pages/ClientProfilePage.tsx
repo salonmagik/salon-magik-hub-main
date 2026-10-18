@@ -6,10 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
-import { Switch } from "@ui/switch";
 import { Separator } from "@ui/separator";
 import { Avatar, AvatarFallback } from "@ui/avatar";
-import { User, Shield, Bell, Mail, Phone, LogOut, KeyRound, BadgeCheck, Pencil, X, Check, Loader2, Info } from "lucide-react";
+import { User, Shield, Mail, Phone, LogOut, KeyRound, BadgeCheck, Pencil, X, Check, Loader2, Info } from "lucide-react";
 import { PhoneInput } from "@ui/phone-input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
@@ -20,21 +19,17 @@ import { validatePasswordStrength } from "@shared/validation";
 import { getFunctionErrorMessage } from "@shared/function-errors";
 
 export default function ClientProfilePage() {
-  const { user, customers, profile, preferences, signOut, refreshAccount } = useClientAuth();
+  const { user, customers, profile, signOut, refreshAccount } = useClientAuth();
   const { requestOpen: requestConfirmDetails } = useConfirmDetailsPrompt();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [isSavingPreferences, setIsSavingPreferences] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const [fullName, setFullName] = useState(profile?.full_name || customers[0]?.full_name || "");
-  const [emailBookingUpdates, setEmailBookingUpdates] = useState(preferences?.email_booking_updates ?? true);
-  const [smsBookingUpdates, setSmsBookingUpdates] = useState(preferences?.sms_booking_updates ?? false);
-  const [marketingOptIn, setMarketingOptIn] = useState(preferences?.marketing_opt_in ?? false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
-  // Phone number is never edited directly — changing it (or re-verifying the
+  // Phone number is never edited directly: changing it (or re-verifying the
   // current one) always goes through request-phone-change-otp /
   // confirm-phone-change so it's proven before it's saved.
   const [editingPhone, setEditingPhone] = useState(false);
@@ -47,7 +42,7 @@ export default function ClientProfilePage() {
   // Same pattern as phone: email is never edited directly. Also, a
   // phone-only account gets an internal, non-deliverable placeholder email
   // assigned under the hood (see verify-phone-otp) purely so Supabase's
-  // session-minting primitive has an email to key off — that's never a real
+  // session-minting primitive has an email to key off, and that's never a real
   // address the user owns, so treat it as "no email set" everywhere here.
   const [editingEmail, setEditingEmail] = useState(false);
   const [emailInput, setEmailInput] = useState("");
@@ -99,29 +94,6 @@ export default function ClientProfilePage() {
       toast({ title: "Profile updated" });
     } finally {
       setIsSavingProfile(false);
-    }
-  };
-
-  const savePreferences = async () => {
-    setIsSavingPreferences(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("update-client-account", {
-        body: {
-          preferences: {
-            email_booking_updates: emailBookingUpdates,
-            sms_booking_updates: smsBookingUpdates,
-            marketing_opt_in: marketingOptIn,
-          },
-        },
-      });
-      if (error || data?.error) {
-        toast({ title: "Failed to update preferences", description: data?.error || error?.message, variant: "destructive" });
-        return;
-      }
-      await refreshAccount();
-      toast({ title: "Preferences updated" });
-    } finally {
-      setIsSavingPreferences(false);
     }
   };
 
@@ -290,7 +262,7 @@ export default function ClientProfilePage() {
             <div className="flex items-center gap-3">
               <Info className="h-5 w-5 shrink-0 text-primary" />
               <p className="text-sm text-foreground">
-                You skipped confirming your name, birthday and gender earlier — want to do that now?
+                You skipped confirming your name, birthday and gender earlier. Want to do that now?
               </p>
             </div>
             <Button size="sm" variant="outline" className="shrink-0" onClick={requestConfirmDetails}>
@@ -308,10 +280,6 @@ export default function ClientProfilePage() {
             <TabsTrigger value="security" className="gap-2">
               <Shield className="h-4 w-4" />
               Security
-            </TabsTrigger>
-            <TabsTrigger value="preferences" className="gap-2">
-              <Bell className="h-4 w-4" />
-              Preferences
             </TabsTrigger>
           </TabsList>
 
@@ -601,48 +569,6 @@ export default function ClientProfilePage() {
                 </CardContent>
               </Card>
             </div>
-          </TabsContent>
-
-          <TabsContent value="preferences">
-            <Card>
-              <CardHeader>
-                <CardTitle>Communication Preferences</CardTitle>
-                <CardDescription>Control how Salon Magik and your salons contact you about bookings and offers.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="space-y-1">
-                      <Label>Email Booking Updates</Label>
-                      <p className="text-sm text-muted-foreground">Booking confirmations, changes, reminders, and refund updates.</p>
-                    </div>
-                    <Switch checked={emailBookingUpdates} onCheckedChange={setEmailBookingUpdates} />
-                  </div>
-
-                  <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="space-y-1">
-                      <Label>SMS Booking Updates</Label>
-                      <p className="text-sm text-muted-foreground">Time-sensitive reminders and appointment change alerts by SMS.</p>
-                    </div>
-                    <Switch checked={smsBookingUpdates} onCheckedChange={setSmsBookingUpdates} />
-                  </div>
-
-                  <div className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="space-y-1">
-                      <Label>Marketing Messages</Label>
-                      <p className="text-sm text-muted-foreground">Promotions, campaigns, and special offers from Salon Magik and participating salons.</p>
-                    </div>
-                    <Switch checked={marketingOptIn} onCheckedChange={setMarketingOptIn} />
-                  </div>
-                </div>
-
-                <div className="flex justify-stretch sm:justify-end">
-                  <Button onClick={savePreferences} disabled={isSavingPreferences}>
-                    {isSavingPreferences ? "Saving..." : "Save preferences"}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
         </Tabs>
       </div>

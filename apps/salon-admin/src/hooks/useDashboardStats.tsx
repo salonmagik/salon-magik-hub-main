@@ -164,13 +164,27 @@ export function useDashboardStats() {
         .eq("tenant_id", currentTenant.id)
         .eq("status", "completed");
 
+      // Setup checklist's "Book your first appointment" needs to know if the
+      // tenant has EVER booked anything, any status, any date, regardless of
+      // reports permission -- not just whether one happens to fall today or
+      // show up in the reports-gated completed-appointments query below,
+      // which is what made this item stay unchecked for salons with only
+      // future/non-completed bookings.
+      let anyAppointmentEverQuery = supabase
+        .from("appointments")
+        .select("id")
+        .eq("tenant_id", currentTenant.id)
+        .limit(1);
+
       if (hasScope) {
         todayAptsQuery = todayAptsQuery.in("location_id", scopedLocationIds);
         completedAptsQuery = completedAptsQuery.in("location_id", scopedLocationIds);
+        anyAppointmentEverQuery = anyAppointmentEverQuery.in("location_id", scopedLocationIds);
       }
 
       const [
         todayAptsResult,
+        anyAppointmentEverResult,
         customerCountResult,
         outstandingFeesResult,
         purseUsageResult,
@@ -193,6 +207,7 @@ export function useDashboardStats() {
         prevWeekClientsResult,
       ] = await Promise.all([
         todayAptsQuery,
+        anyAppointmentEverQuery,
 
         canViewCustomers
           ? supabase.from("customers").select("*", { count: "exact", head: true }).eq("tenant_id", currentTenant.id)
@@ -358,7 +373,7 @@ export function useDashboardStats() {
           const servicesData = a.services as { service_name: string }[] | null;
           return {
             id: a.id,
-            time: a.scheduled_start ? formatTime(a.scheduled_start) : "—",
+            time: a.scheduled_start ? formatTime(a.scheduled_start) : "N/A",
             customer: customerData?.full_name || "Unknown",
             service: servicesData?.[0]?.service_name || "Service",
             staffFirstName: a.assigned_staff_id ? (staffMap[a.assigned_staff_id] || null) : null,
@@ -374,9 +389,9 @@ export function useDashboardStats() {
       const checklist: ChecklistItem[] = [
         { id: "payments", label: "Set up payouts", completed: currentTenant.payment_setup_status === "ready", href: "/salon/payouts?tab=accounts" },
         { id: "booking", label: "Enable online booking", completed: currentTenant.online_booking_enabled || false, href: "/salon/business-settings?tab=booking" },
-        { id: "products", label: "Add products", completed: (productsCountResult.count || 0) > 0, href: "/salon/services?tab=products" },
-        { id: "appointment", label: "Book your first appointment", completed: apts.length > 0 || (completedAptsResult.data?.length || 0) > 0, href: "/salon/appointments" },
-        { id: "services", label: "Add services", completed: (servicesCountResult.count || 0) > 0, href: "/salon/services?tab=services" },
+        { id: "products", label: "Add products", completed: (productsCountResult.count || 0) > 0, href: "/salon/products" },
+        { id: "appointment", label: "Book your first appointment", completed: (anyAppointmentEverResult.data?.length || 0) > 0, href: "/salon/appointments" },
+        { id: "services", label: "Add services", completed: (servicesCountResult.count || 0) > 0, href: "/salon/services" },
         ...(canViewCustomers ? [{ id: "customer", label: "Add first customer", completed: (customerCountResult.count || 0) > 0, href: "/salon/customers" }] : []),
       ];
       setChecklistItems(checklist);
@@ -450,7 +465,7 @@ export function useDashboardStats() {
             id: customer?.id || a.customer_id,
             name: customer?.full_name || "Customer",
             daysSinceVisit: daysDiff,
-            usualService: services?.[0]?.service_name || "—",
+            usualService: services?.[0]?.service_name || "N/A",
             clientStatus: daysDiff >= 75 ? "inactive" as const : "going_quiet" as const,
           };
         });

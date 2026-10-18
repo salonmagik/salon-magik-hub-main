@@ -4,7 +4,7 @@ import { Textarea } from "@ui/textarea";
 import { Label } from "@ui/label";
 import { DrawingCanvas } from "./DrawingCanvas";
 import { Paperclip, Pencil, X, Image as ImageIcon, FileText, Loader2 } from "lucide-react";
-import { cn } from "@shared/utils";
+import { cn, generateUUID } from "@shared/utils";
 
 interface Attachment {
   id: string;
@@ -56,7 +56,7 @@ export function AppointmentNotesInput({
       // Read file as data URL
       const dataUrl = await readFileAsDataUrl(file);
       newAttachments.push({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         fileName: file.name,
         fileType: file.type,
         dataUrl,
@@ -84,7 +84,7 @@ export function AppointmentNotesInput({
 
   const handleDrawingSave = (dataUrl: string) => {
     const newAttachment: Attachment = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       fileName: `drawing-${Date.now()}.png`,
       fileType: "image/png",
       dataUrl,

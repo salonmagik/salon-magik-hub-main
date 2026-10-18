@@ -258,7 +258,7 @@ export function ReviewStep({
               {locations.locations.map((loc, idx) => (
                 <div key={loc.id} className="flex items-center gap-2 text-[13.5px]">
                   <span className="font-medium text-gray-800">{loc.name || `Branch ${idx + 1}`}</span>
-                  <span className="text-black/40">— {loc.city}</span>
+                  <span className="text-black/40">: {loc.city}</span>
                   {loc.isDefault && (
                     <span className="rounded-full bg-[#2E1F4E]/8 px-2 py-0.5 text-[11px] text-[#2E1F4E]">
                       HQ

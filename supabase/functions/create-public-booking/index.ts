@@ -64,6 +64,8 @@ interface CartItem {
   locationId?: string;
   locationName?: string;
   serviceIds?: string[];
+  /** Sum of package_items.quantity for this package; used as "sessions included" in confirmation emails. */
+  packageSessionCount?: number;
 }
 
 interface BookingRequest {
@@ -168,6 +170,116 @@ function buildActionButton(url: string, label: string, variant: "primary" | "sec
         : `background:#ffffff;color:${EMAIL_STYLES.textColor};border:1px solid ${EMAIL_STYLES.borderColor};`;
 
   return `<a href="${url}" style="display:inline-block;padding:12px 20px;border-radius:999px;text-decoration:none;font-weight:700;font-size:14px;margin:0 8px 8px 0;font-family:${EMAIL_STYLES.fontFamily};${styles}">${label}</a>`;
+}
+
+// ── Purchase confirmation email content, branched by orderKind ──────────────
+// The notification routing above already classifies a purchase as "order"
+// (product only), "package" (package only) or "booking" (everything else,
+// which includes both appointment-only carts and mixed carts). The email
+// content reuses that same classification rather than computing its own.
+
+function buildGiftChipHtml(): string {
+  return `<span style="display:inline-block;margin-left:8px;font-size:11px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:${EMAIL_STYLES.primaryColor};background:${EMAIL_STYLES.accentColor};padding:3px 9px;border-radius:999px;">Gift</span>`;
+}
+
+function buildTypeBadgeHtml(label: string, color: string, background: string): string {
+  return `<span style="font-size:11px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:${color};background:${background};padding:3px 9px;border-radius:999px;">${label}</span>`;
+}
+
+function buildProductItemCardHtml(item: CartItem, currency: string): string {
+  const amount = `${currency} ${(item.price * item.quantity).toFixed(2)}`;
+  const branchName = item.locationName || "Main branch";
+  const fulfillment = item.fulfillmentType === "delivery" ? "Delivery" : "Pickup at salon";
+  return `
+    <div style="border:1px solid ${EMAIL_STYLES.borderColor};border-radius:10px;padding:18px 20px;margin:0 0 10px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        ${buildTypeBadgeHtml("Product", "#8A6510", "#FFF2CE")}
+        <span style="font-size:16px;font-weight:600;color:${EMAIL_STYLES.textColor};">${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""}</span>
+      </div>
+      <div style="font-size:13px;color:${EMAIL_STYLES.textMuted};display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
+        <div><strong style="color:${EMAIL_STYLES.textColor}">Branch:</strong> ${branchName}</div>
+        <div><strong style="color:${EMAIL_STYLES.textColor}">Fulfillment:</strong> ${fulfillment}</div>
+        <div><strong style="color:${EMAIL_STYLES.textColor}">Amount:</strong> ${amount}</div>
+      </div>
+    </div>
+  `;
+}
+
+function buildPackageItemCardHtml(item: CartItem, currency: string): string {
+  const amount = `${currency} ${(item.price * item.quantity).toFixed(2)}`;
+  const branchName = item.locationName || "Main branch";
+  const sessionCount = item.packageSessionCount;
+  return `
+    <div style="border:1px solid ${EMAIL_STYLES.borderColor};border-radius:10px;padding:18px 20px;margin:0 0 10px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        ${buildTypeBadgeHtml("Package", "#268766", "#E1F3EC")}
+        <span style="font-size:16px;font-weight:600;color:${EMAIL_STYLES.textColor};">${item.name}</span>
+      </div>
+      <div style="font-size:13px;color:${EMAIL_STYLES.textMuted};display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;">
+        ${sessionCount ? `<div><strong style="color:${EMAIL_STYLES.textColor}">Sessions included:</strong> ${sessionCount}</div>` : ""}
+        <div><strong style="color:${EMAIL_STYLES.textColor}">Branch:</strong> ${branchName}</div>
+        <div><strong style="color:${EMAIL_STYLES.textColor}">Amount:</strong> ${amount}</div>
+      </div>
+    </div>
+  `;
+}
+
+function buildSectionLabelHtml(label: string): string {
+  return `<div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:${EMAIL_STYLES.textLight};margin:18px 0 8px;">${label}</div>`;
+}
+
+function buildMixedSectionRowHtml(
+  item: CartItem,
+  currency: string,
+  badgeLabel: string,
+  badgeColor: string,
+  badgeBackground: string,
+): string {
+  const amount = `${currency} ${(item.price * item.quantity).toFixed(2)}`;
+  const detail = item.type === "product"
+    ? (item.fulfillmentType === "delivery" ? "Delivery" : "Pickup at salon")
+    : formatLineSchedule(item);
+  return `
+    <div style="border:1px solid ${EMAIL_STYLES.borderColor};border-radius:10px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        ${buildTypeBadgeHtml(badgeLabel, badgeColor, badgeBackground)}
+        <span style="font-size:14px;color:${EMAIL_STYLES.textColor};font-weight:600;">${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ""} &middot; ${detail}</span>
+      </div>
+      <span style="font-size:13px;color:${EMAIL_STYLES.textColor};font-weight:600;white-space:nowrap;">${amount}</span>
+    </div>
+  `;
+}
+
+function buildMixedItemsHtml(items: CartItem[], currency: string): string {
+  const serviceItems = items.filter((item) => item.type === "service");
+  const productItems = items.filter((item) => item.type === "product");
+  const packageItems = items.filter((item) => item.type === "package");
+
+  let html = "";
+  if (serviceItems.length > 0) {
+    html += buildSectionLabelHtml("Services");
+    html += serviceItems
+      .map((item) => buildMixedSectionRowHtml(item, currency, "Service", EMAIL_STYLES.primaryColor, EMAIL_STYLES.primaryLight))
+      .join("");
+  }
+  if (productItems.length > 0) {
+    html += buildSectionLabelHtml("Products");
+    html += productItems
+      .map((item) => buildMixedSectionRowHtml(item, currency, "Product", "#8A6510", "#FFF2CE"))
+      .join("");
+  }
+  if (packageItems.length > 0) {
+    html += buildSectionLabelHtml("Packages");
+    html += packageItems
+      .map((item) => buildMixedSectionRowHtml(item, currency, "Package", "#268766", "#E1F3EC"))
+      .join("");
+  }
+  return html;
+}
+
+function buildVoucherLineHtml(voucherCode: string | null | undefined, discount: number, currency: string): string {
+  if (!discount || discount <= 0 || !voucherCode) return "";
+  return paragraph(`<strong style="color:#15834B">Voucher applied:</strong> ${voucherCode} (${currency} ${discount.toFixed(2)} off)`);
 }
 
 serve(async (req) => {
@@ -398,9 +510,16 @@ serve(async (req) => {
       } else if (item.type === "package") {
         const { data: packageItems } = await supabase
           .from("package_items")
-          .select("service_id")
+          .select("service_id, quantity")
           .eq("package_id", item.itemId);
         item.serviceIds = (packageItems || []).map((entry) => entry.service_id);
+        // "Sessions included" for the package confirmation email: packages have
+        // no separate session-credit table, so this is the sum of each bundled
+        // service's quantity (e.g. one service_id at quantity 5 = a 5-session package).
+        item.packageSessionCount = (packageItems || []).reduce(
+          (sum, entry) => sum + Number(entry.quantity || 1),
+          0,
+        );
         item.durationMinutes = Number(catalogItem.duration_minutes || item.durationMinutes || 60);
       }
     }
@@ -972,12 +1091,67 @@ serve(async (req) => {
     const primaryAppointmentId = createdAppointmentIds[0] ?? null;
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
     const bookingSummaryHtml = renderBookingSummary(items, settlementCurrency);
-    const paymentLine = approvalRequired
-      ? paragraph("This booking requires salon approval before payment. If accepted, we will send an invoice to your email and client portal.")
-      : paragraph("Payment status: pending checkout completion.");
     const hasServiceLikeItems = items.some((item) => item.type === "service" || item.type === "package");
     const hasProductOnlyItems = items.every((item) => item.type === "product");
+    const hasPackageOnlyItems = items.every((item) => item.type === "package");
     const isSingleReviewItem = items.length === 1;
+
+    // A cart that mixes two or more of service/package/product is its own
+    // case -- previously it fell through to "booking"/"appointment" below,
+    // with the notification's entityId pointing at whichever line item's
+    // appointment row happened to be created first in the cart. If that
+    // first-created row was a product or package (no services attached),
+    // clicking the notification opened the Appointment Details modal
+    // empty ("0 service(s), Not scheduled"). The email/approval-link copy
+    // below (orderKind/orderNoun) is unaffected by this -- a mixed cart
+    // still reads as a "booking" there, same as before -- only the
+    // *notification* gets its own "mixed_order" type and wording so the
+    // salon-admin panel knows to open the consolidated Mixed Purchase
+    // modal (which looks up every line item by booking_reference) instead
+    // of routing to a single appointment.
+    const distinctItemTypes = new Set(items.map((item) => item.type));
+    const isMixedCart = distinctItemTypes.size > 1;
+
+    // What to call this order everywhere it's mentioned (notification,
+    // in-app routing, customer email, salon email) -- a pure product cart
+    // is an "order", a pure package cart is a "package purchase", anything
+    // with a service in it (including mixed carts) stays a "booking", since
+    // that's the dominant, most time-sensitive part of a mixed order.
+    const orderKind: "order" | "package" | "booking" = hasProductOnlyItems
+      ? "order"
+      : hasPackageOnlyItems
+        ? "package"
+        : "booking";
+    const notificationType = isMixedCart
+      ? "mixed_order"
+      : orderKind === "order"
+        ? "product_order"
+        : orderKind === "package"
+          ? "package_order"
+          : "appointment";
+    const notificationEntityType = isMixedCart
+      ? "mixed_order"
+      : orderKind === "booking"
+        ? "appointment"
+        : orderKind === "order"
+          ? "product_order"
+          : "package_order";
+    const orderNoun = orderKind === "order" ? "order" : orderKind === "package" ? "package purchase" : "booking";
+    const orderNounCap = orderKind === "order" ? "Order" : orderKind === "package" ? "Package purchase" : "Booking";
+    const orderArticle = orderKind === "order" ? "an" : "a";
+    const notificationNounCap = isMixedCart ? "Mixed order" : orderNounCap;
+    const notificationNoun = isMixedCart ? "mixed order" : orderNoun;
+    const notificationArticle = isMixedCart ? "a" : orderArticle;
+    // The "booking" bucket above covers both an appointment-only cart and any
+    // heterogeneous (mixed) cart that isn't purely products or purely
+    // packages. The confirmation email needs to tell those two apart, so this
+    // refines that same "booking" bucket rather than adding a parallel
+    // classifier: nothing here changes notification routing.
+    const isAppointmentOnly = orderKind === "booking" && items.every((item) => item.type === "service");
+    const isMixedOrder = orderKind === "booking" && !isAppointmentOnly;
+    const paymentLine = approvalRequired
+      ? paragraph(`This ${orderNoun} requires salon approval before payment. If accepted, we will send an invoice to your email and client portal.`)
+      : paragraph("Payment status: pending checkout completion.");
     const reviewBaseUrl = `${salonAdminBaseUrl.replace(/\/$/, "")}/appointments?tab=unconfirmed&bookingRef=${encodeURIComponent(reference)}`;
     const reviewActionsHtml = approvalRequired
       ? isSingleReviewItem && hasServiceLikeItems
@@ -1004,31 +1178,99 @@ serve(async (req) => {
 
     await createTenantNotification(supabase, {
       tenantId,
-      title: approvalRequired ? "Booking requires confirmation" : "New Booking",
-      description: `${customerFullName} placed a booking for ${itemCount} ${itemCount === 1 ? "item" : "items"} (${reference}).`,
+      type: notificationType,
+      title: approvalRequired ? `${notificationNounCap} requires confirmation` : `New ${notificationNounCap}`,
+      description: `${customerFullName} placed ${notificationArticle} ${notificationNoun} for ${itemCount} ${itemCount === 1 ? "item" : "items"} (${reference}).`,
       entityId: primaryAppointmentId,
+      entityType: notificationEntityType,
       urgent: approvalRequired,
       isGifted: items.some((item) => item.isGift),
     });
 
     if (customer.email) {
+      // Email copy, unlike the notifications above, does split "booking" into
+      // an appointment-only variant and a mixed-cart variant, per the
+      // approved email design: a mixed cart should never read "your booking
+      // is in" when it also contains products or packages.
+      const emailOrderNoun = isMixedOrder ? "order" : orderNoun;
+      const emailOrderNounCap = isMixedOrder ? "Order" : orderNounCap;
+
+      const emailHeading = approvalRequired
+        ? `Your ${emailOrderNoun} is awaiting review`
+        : orderKind === "order"
+          ? "Your order is in"
+          : orderKind === "package"
+            ? "Your package is in"
+            : isMixedOrder
+              ? "Your order is in"
+              : "Your booking is in";
+
+      const referenceLabel = orderKind === "order"
+        ? "Order reference"
+        : orderKind === "package"
+          ? "Purchase reference"
+          : isMixedOrder
+            ? "Order reference"
+            : "Booking reference";
+
+      const subject = approvalRequired
+        ? `${emailOrderNounCap} review started at ${tenant.name}`
+        : isAppointmentOnly
+          ? `${orderNounCap} received at ${tenant.name}`
+          : `Your ${emailOrderNoun} is confirmed at ${tenant.name}`;
+
+      const giftItems = items.filter((item) => item.isGift);
+      const giftChipHtml = giftItems.length > 0 ? buildGiftChipHtml() : "";
+      const giftRecipientNames = Array.from(
+        new Set(
+          giftItems
+            .map((item) =>
+              item.giftRecipient
+                ? `${item.giftRecipient.firstName} ${item.giftRecipient.lastName}`.trim()
+                : "",
+            )
+            .filter(Boolean),
+        ),
+      );
+
+      const introLine = isMixedOrder
+        ? `We've received your order with <strong>${tenant.name}</strong>. Here's what's included.`
+        : giftRecipientNames.length === 1
+          ? `We've received your ${emailOrderNoun} with <strong>${tenant.name}</strong>, sent as a gift to <strong>${giftRecipientNames[0]}</strong>.`
+          : `We've received your ${emailOrderNoun} with <strong>${tenant.name}</strong>.`;
+
+      const voucherLineHtml = buildVoucherLineHtml(voucherCode, promotionalDiscount, settlementCurrency);
+
+      const itemsHtml = orderKind === "order"
+        ? items.map((item) => buildProductItemCardHtml(item, settlementCurrency)).join("")
+        : orderKind === "package"
+          ? items.map((item) => buildPackageItemCardHtml(item, settlementCurrency)).join("")
+          : isMixedOrder
+            ? buildMixedItemsHtml(items, settlementCurrency)
+            : bookingSummaryHtml;
+
+      const totalsHtml = isMixedOrder
+        ? `<div style="margin-top:18px;padding-top:14px;border-top:1px solid ${EMAIL_STYLES.borderColor};">` +
+            paragraph(`<strong>Subtotal:</strong> ${settlementCurrency} ${totalAmount.toFixed(2)}`) +
+            voucherLineHtml +
+            paragraph(`<strong>Total:</strong> ${settlementCurrency} ${chargeableTotal.toFixed(2)}`) +
+          `</div>`
+        : voucherLineHtml + paragraph(`<strong>Total:</strong> ${settlementCurrency} ${chargeableTotal.toFixed(2)}`);
+
       const result = await sendResendEmail({
         resendApiKey,
         fromEmail: resendFromEmail,
         to: [customer.email],
-        subject: approvalRequired ? `Booking review started at ${tenant.name}` : `Booking received at ${tenant.name}`,
+        subject,
         salonName: tenant.name,
         htmlContent:
-          heading(approvalRequired ? "Your booking is awaiting review" : "Your booking is in") +
+          heading(emailHeading) +
           paragraph(`Hi ${customer.firstName},`) +
-          paragraph(`We’ve received your booking with <strong>${tenant.name}</strong>.`) +
-          paragraph(`<strong>Booking reference:</strong> ${reference}`) +
+          paragraph(introLine) +
+          paragraph(`<strong>${referenceLabel}:</strong> ${reference}${giftChipHtml}`) +
           paymentLine +
-          `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
-          (promotionalDiscount > 0
-            ? paragraph(`<strong>Voucher discount:</strong> -${settlementCurrency} ${promotionalDiscount.toFixed(2)}`)
-            : "") +
-          paragraph(`<strong>Total:</strong> ${settlementCurrency} ${chargeableTotal.toFixed(2)}`),
+          `<div style="margin: 24px 0;">${itemsHtml}</div>` +
+          totalsHtml,
         log: {
           supabase,
           tenantId,
@@ -1095,10 +1337,10 @@ serve(async (req) => {
           resendApiKey,
           fromEmail: resendFromEmail,
           to: recipients.map((recipient) => recipient.email),
-          subject: approvalRequired ? `Booking approval required at ${tenant.name}` : `New booking at ${tenant.name}`,
+          subject: approvalRequired ? `${orderNounCap} approval required at ${tenant.name}` : `New ${orderNoun} at ${tenant.name}`,
           salonName: tenant.name,
           htmlContent:
-            heading(approvalRequired ? "Booking approval required" : "New booking received") +
+            heading(approvalRequired ? `${orderNounCap} approval required` : `New ${orderNoun} received`) +
             paragraph(`<strong>Customer:</strong> ${customerFullName}`) +
             paragraph(`<strong>Booking reference:</strong> ${reference}`) +
             (promotionalDiscount > 0

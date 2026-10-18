@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays, addWeeks, addMonths, subWeeks, subMonths } from "date-fns";
 import { supabase } from "@/lib/supabase";
@@ -170,6 +170,16 @@ const getReviewActionLabel = (appointment: AppointmentWithDetails | CalendarAppo
 export default function AppointmentsPage() {
   useWalkthroughAutoTrigger("appointments");
   const [searchParams, setSearchParams] = useSearchParams();
+  // Guards the two URL-driven "open this appointment" effects below against
+  // firing twice for the same appointment. The Scheduled-tab view/period/date
+  // sync effect (further down) re-commits searchParams on every render while
+  // on that tab, using a snapshot that can still include appointmentId/open
+  // before the deep-link effect's own async cleanup has deleted them -- that
+  // re-commit re-triggers the deep-link effect a second time before the
+  // first run finishes, reopening the modal. A ref keyed by the exact param
+  // combo already processed makes a second trigger for the same link a
+  // no-op regardless of how many times these effects re-fire.
+  const processedDeepLinkRef = useRef<string | null>(null);
   const { roles, currentTenant } = useAuth();
   const { createFromAppointment } = useInvoices();
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
@@ -209,7 +219,7 @@ export default function AppointmentsPage() {
   const [proposedEndTime, setProposedEndTime] = useState("");
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
 
-  // Date range state — initialize immediately so the first query is always filtered.
+  // Date range state: initialize immediately so the first query is always filtered.
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("this_week");
   const [startDate, setStartDate] = useState<string>(() =>
     format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd")
@@ -511,6 +521,9 @@ export default function AppointmentsPage() {
     if (!approvalAction || !["approve", "decline", "reschedule", "review"].includes(approvalAction)) return;
 
     if (appointmentId) {
+      const dedupeKey = `approvalAction:${appointmentId}:${approvalAction}`;
+      if (processedDeepLinkRef.current === dedupeKey) return;
+      processedDeepLinkRef.current = dedupeKey;
       let isCancelled = false;
 
       const run = async () => {
@@ -584,6 +597,10 @@ export default function AppointmentsPage() {
     const appointmentId = searchParams.get("appointmentId");
     const openMode = searchParams.get("open");
     if (!appointmentId || openMode !== "details") return;
+
+    const dedupeKey = `details:${appointmentId}`;
+    if (processedDeepLinkRef.current === dedupeKey) return;
+    processedDeepLinkRef.current = dedupeKey;
 
     let isCancelled = false;
 
@@ -687,7 +704,7 @@ export default function AppointmentsPage() {
       const cancelledRows = approvalGroupAppointments.filter((r) => approvalDecisionMap[r.id] === "cancel");
       const rescheduledRows = approvalGroupAppointments.filter((r) => approvalDecisionMap[r.id] === "reschedule");
 
-      // Legacy single-appointment reschedule mode (from footer "Reschedule instead" path — still supported)
+      // Legacy single-appointment reschedule mode (from footer "Reschedule instead" path, still supported)
       if (approvalDialogAction === "reschedule" && rescheduledRows.length === 0) {
         if (!proposedStartDate || !proposedStartTime || !proposedEndDate || !proposedEndTime) {
           throw new Error("Choose the proposed date and time range first.");
@@ -724,7 +741,7 @@ export default function AppointmentsPage() {
           "Reschedule requested",
           "The salon has proposed a new date and time for your booking. Review the request in your booking details.",
         );
-        // Email sending is best-effort — if it fails the DB record is already saved
+        // Email sending is best-effort: if it fails the DB record is already saved
         try {
           await sendApprovalEmail("reschedule_proposed", [selectedAppointment.id], approvalMessage || undefined);
         } catch (emailErr) {
@@ -780,7 +797,7 @@ export default function AppointmentsPage() {
             await supabase.from("appointments").update({ approval_reason: approvalReasonMap[row.id] } as any).eq("id", row.id).eq("tenant_id", currentTenant.id);
             await createCustomerNotification(row, "Booking item declined", approvalReasonMap[row.id]);
           }
-          // Email is best-effort — the decline itself is already saved above,
+          // Email is best-effort: the decline itself is already saved above,
           // so a failed notification shouldn't surface as a failed decline.
           try {
             await sendApprovalEmail(approvedRows.length > 0 ? "partially_declined" : "declined", declinedRows.map((r) => r.id), approvalMessage || undefined);
@@ -845,7 +862,7 @@ export default function AppointmentsPage() {
       if (notificationFailures.length > 0) {
         toast({
           title: "Saved, but a notification email failed",
-          description: "Your decision was recorded — the customer's in-app notification went out, but the email couldn't be sent. Consider reaching out directly.",
+          description: "Your decision was recorded. The customer's in-app notification went out, but the email couldn't be sent. Consider reaching out directly.",
           variant: "destructive",
         });
       }
@@ -919,7 +936,7 @@ export default function AppointmentsPage() {
   };
 
   const formatTime = (dateString: string | null) => {
-    if (!dateString) return "—";
+    if (!dateString) return "N/A";
     return new Date(dateString).toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
@@ -1024,7 +1041,7 @@ export default function AppointmentsPage() {
         case "week": {
           const wStart = startOfWeek(calendarDate, { weekStartsOn: 1 });
           const wEnd = endOfWeek(calendarDate, { weekStartsOn: 1 });
-          return `${format(wStart, "MMM d")} – ${format(wEnd, "MMM d, yyyy")}`;
+          return `${format(wStart, "MMM d")} to ${format(wEnd, "MMM d, yyyy")}`;
         }
         case "month": return format(calendarDate, "MMMM yyyy");
       }
@@ -1048,7 +1065,7 @@ export default function AppointmentsPage() {
             </p>
           </div>
           {/* The header's own copy-booking-link icon (TenantSwitcher) already covers
-              this on every page — this page doesn't need a second copy. */}
+              this on every page, so this page doesn't need a second copy. */}
           <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
             {/* Desktop actions (mobile/tablet use the floating + button) */}
             <div className="hidden lg:flex gap-2">
@@ -1093,81 +1110,86 @@ export default function AppointmentsPage() {
 
         {/* Tab-Specific Stats Grid */}
         {activeTab === "scheduled" ? (
-          <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">{getPresetLabel(dateRangePreset)}</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.rangeCount}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
-                <Calendar className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Amount due</p>
-                {statsLoading ? <Skeleton className="h-6 w-16 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{formatCurrency(scheduledStats.amountDue, currency)}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
-                <Clock className="h-5 w-5 text-amber-600" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Gifted</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.giftedCount}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
-                <Gift className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Cancelled</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.cancelledCount}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-destructive/10">
-                <XCircle className="h-5 w-5 text-destructive" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Rescheduled</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{scheduledStats.rescheduledCount}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
-                <RotateCcw className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Confirmed</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{Math.max(0, scheduledStats.rangeCount - scheduledStats.unconfirmedCount)}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-success/10">
-                <Check className="h-5 w-5 text-success" />
-              </div>
-            </div>
+          <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0 xl:grid-cols-4">
+            <Card className="rounded-[14px] border-border/60 bg-white shadow-sm">
+              <CardContent className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">{getPresetLabel(dateRangePreset)}</p>
+                  {statsLoading ? <Skeleton className="h-8 w-8 mt-1" /> : (
+                    <>
+                      <p className="mt-1 font-serif text-2xl font-semibold">{scheduledStats.rangeCount}</p>
+                      {scheduledStats.giftedCount > 0 && (
+                        <p className="mt-0.5 text-xs font-medium text-muted-foreground">{scheduledStats.giftedCount} gifted</p>
+                      )}
+                    </>
+                  )}
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
+                  <Calendar className="h-5 w-5 text-primary" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-[14px] border-border/60 bg-white shadow-sm">
+              <CardContent className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Amount due</p>
+                  {statsLoading ? <Skeleton className="h-8 w-16 mt-1" /> : (
+                    <p className="mt-1 font-serif text-2xl font-semibold">{formatCurrency(scheduledStats.amountDue, currency)}</p>
+                  )}
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
+                  <Clock className="h-5 w-5 text-amber-600" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-[14px] border-border/60 bg-white shadow-sm">
+              <CardContent className="flex items-center justify-between px-5 py-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">Confirmed</p>
+                  {statsLoading ? <Skeleton className="h-8 w-8 mt-1" /> : (
+                    <p className="mt-1 font-serif text-2xl font-semibold">{Math.max(0, scheduledStats.rangeCount - scheduledStats.unconfirmedCount)}</p>
+                  )}
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-success/10">
+                  <Check className="h-5 w-5 text-success" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="rounded-[14px] border-border/60 bg-white shadow-sm">
+              <CardContent className="flex items-center justify-between gap-4 px-5 py-4">
+                <div className="flex flex-1 items-center gap-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Cancelled</p>
+                    {statsLoading ? <Skeleton className="h-6 w-6 mt-1" /> : (
+                      <p className="mt-1 font-serif text-xl font-semibold">{scheduledStats.cancelledCount}</p>
+                    )}
+                  </div>
+                  <div className="h-8 w-px bg-border/60" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Rescheduled</p>
+                    {statsLoading ? <Skeleton className="h-6 w-6 mt-1" /> : (
+                      <p className="mt-1 font-serif text-xl font-semibold">{scheduledStats.rescheduledCount}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-destructive/10">
+                  <RotateCcw className="h-5 w-5 text-destructive" />
+                </div>
+              </CardContent>
+            </Card>
           </div>
         ) : activeTab === "unscheduled" ? (
-          <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
+          <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-4 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
             <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
                 <p className="text-xs text-muted-foreground sm:text-sm">Total</p>
                 {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.totalCount}</p>
+                  <>
+                    <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.totalCount}</p>
+                    {unscheduledStats.giftedCount > 0 && (
+                      <p className="mt-0.5 text-xs font-semibold text-muted-foreground">{unscheduledStats.giftedCount} gifted</p>
+                    )}
+                  </>
                 )}
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
@@ -1205,26 +1227,6 @@ export default function AppointmentsPage() {
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
                 <Coins className="h-5 w-5 text-amber-600" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Gifted</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.giftedCount}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
-                <Gift className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Refunded</p>
-                <p className="mt-1 font-serif text-xl font-semibold text-muted-foreground sm:text-2xl">—</p>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-muted">
-                <RotateCcw className="h-5 w-5 text-muted-foreground" />
               </div>
             </div>
           </div>
@@ -1385,7 +1387,7 @@ export default function AppointmentsPage() {
         {/* Filters */}
         {!(activeTab === "scheduled" && scheduledView === "calendar") && (
         <div className="flex flex-wrap items-center gap-3 sm:gap-3">
-          {/* Search — full width on mobile, half on desktop */}
+          {/* Search: full width on mobile, half on desktop */}
           <div className="relative flex-1 sm:flex-none sm:w-1/2">
             <Input
               placeholder="Search customer or recipient…"
@@ -1419,7 +1421,7 @@ export default function AppointmentsPage() {
             <SlidersHorizontal className="w-4 h-4" />
           </button>
 
-          {/* Status + refresh — pushed to the far right on desktop, collapsible on mobile */}
+          {/* Status + refresh: pushed to the far right on desktop, collapsible on mobile */}
           <div className={cn(
             "items-center gap-2 sm:gap-3 sm:ml-auto",
             filtersExpanded ? "flex w-full sm:w-auto" : "hidden sm:flex"
@@ -1654,7 +1656,7 @@ export default function AppointmentsPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-muted-foreground">—</span>
+                            <span className="text-muted-foreground">N/A</span>
                           )}
                         </TableCell>
                         <TableCell>

@@ -72,8 +72,8 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
   const { currentTenant, activeLocationId } = useAuth();
   const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } = useManageableLocations();
   const fallbackCurrency = currentTenant?.currency || "USD";
-  const { services, isLoading: servicesLoading } = useServices();
-  const { products, isLoading: productsLoading } = useProducts();
+  const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
+  const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
   const { createPackage } = usePackages();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<"services" | "products">("services");
@@ -122,6 +122,17 @@ export function AddPackageDialog({ open, onOpenChange, onSuccess, preSelectedIte
   const originalPrice = 
     selectedServices.reduce((sum, s) => sum + s.price * s.quantity, 0) +
     selectedProducts.reduce((sum, p) => sum + p.price * p.quantity, 0);
+
+  // The dialog stays mounted between opens, so its services/products hooks
+  // only ever fetched once on first mount -- items added elsewhere since
+  // then (e.g. on the Services & Products page) wouldn't show up here until
+  // a full page refresh. Refetch both every time the dialog opens.
+  useEffect(() => {
+    if (open) {
+      refetchServices();
+      refetchProducts();
+    }
+  }, [open, refetchServices, refetchProducts]);
 
   // Initialize with pre-selected items when dialog opens
   useEffect(() => {

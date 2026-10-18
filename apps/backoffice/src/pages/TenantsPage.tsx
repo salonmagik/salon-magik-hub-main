@@ -135,10 +135,10 @@ export default function TenantsPage() {
  
   const STATUS_BADGE_TOOLTIPS: Record<string, string> = {
     active: "Paying subscriber in good standing.",
-    trialing: "In their free trial — hasn't been charged yet.",
+    trialing: "In their free trial, hasn't been charged yet.",
     past_due: "A charge failed; still active but at risk of losing access.",
-    canceled: "Subscription was canceled — can typically resubscribe.",
-    permanently_deactivated: "Manually deactivated by the platform team — cannot resubscribe without intervention.",
+    canceled: "Subscription was canceled, can typically resubscribe.",
+    permanently_deactivated: "Manually deactivated by the platform team, cannot resubscribe without intervention.",
     inactive: "No active or trialing subscription, and not explicitly canceled or deactivated.",
   };
 
@@ -186,9 +186,9 @@ export default function TenantsPage() {
 
          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
            {[
-             { label: "Active salons", value: activeCount, icon: Building2, tone: "text-emerald-700 bg-emerald-50", description: "Subscription status is exactly \"active\" — trialing salons aren't counted here." },
+             { label: "Active salons", value: activeCount, icon: Building2, tone: "text-emerald-700 bg-emerald-50", description: "Subscription status is exactly \"active\": trialing salons aren't counted here." },
              { label: "Trial accounts", value: trialCount, icon: Users, tone: "text-violet-700 bg-violet-50", description: "Subscription status is \"trialing\"." },
-             { label: "Past due accounts", value: pastDueCount, icon: TriangleAlert, tone: "text-red-700 bg-red-50", description: "A charge failed — still active but at risk of losing access." },
+             { label: "Past due accounts", value: pastDueCount, icon: TriangleAlert, tone: "text-red-700 bg-red-50", description: "A charge failed, still active but at risk of losing access." },
              { label: "Open unlock requests", value: chainUnlockRequests.length, icon: CircleDollarSign, tone: "text-amber-700 bg-amber-50", description: "Chain-plan salons asking to exceed their default location cap, awaiting your approval." },
            ].map((metric) => (
              <Card key={metric.label} className="backoffice-panel">

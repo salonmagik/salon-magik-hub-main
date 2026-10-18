@@ -20,7 +20,7 @@ import { format } from "date-fns";
 
 /**
  * Persistent banner shown on every authenticated screen while a tenant is
- * past_due or suspended (requirement 10) — never colour-only, an icon and
+ * past_due or suspended (requirement 10): never colour-only, an icon and
  * text carry the state so it isn't lost to accessibility tooling. Non-owners
  * see the same information but no settle action (edge case 14), matching
  * TrialBanner's contact-admin pattern.

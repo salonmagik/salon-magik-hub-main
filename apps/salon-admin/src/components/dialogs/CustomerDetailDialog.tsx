@@ -25,7 +25,6 @@ import {
   Calendar,
   CreditCard,
   Clock,
-  Plus,
   FileText,
   Pencil,
   Image as ImageIcon,
@@ -459,7 +458,7 @@ export function CustomerDetailDialog({
                           <Info className="h-3 w-3 text-muted-foreground cursor-default" />
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-56 text-xs">
-                          This customer's combined salon balance — paid funds plus salon-issued credit, added together.
+                          This customer's combined salon balance: paid funds plus salon-issued credit, added together.
                         </TooltipContent>
                       </Tooltip>
                     </div>
@@ -598,7 +597,7 @@ export function CustomerDetailDialog({
 
             <TabsContent value="invoices" className="mt-4">
               <div className="space-y-4">
-                {/* Book Appointment Button — invoices are generated from an
+                {/* Book Appointment Button: invoices are generated from an
                     appointment (Appointments page), not created standalone
                     here; this is the shortcut to get one on the books. */}
                 <div className="flex justify-end">
@@ -618,7 +617,7 @@ export function CustomerDetailDialog({
                 ) : customerInvoices.length === 0 ? (
                   <div className="text-center py-8">
                     <FileText className="w-12 h-12 mx-auto text-muted-foreground/50 mb-2" />
-                    <p className="text-muted-foreground mb-4">No invoices yet — invoices are created from a completed appointment</p>
+                    <p className="text-muted-foreground mb-4">No invoices yet. Invoices are created from a completed appointment</p>
                     <Button onClick={() => setBookAppointmentDialogOpen(true)}>
                       <Calendar className="w-4 h-4 mr-2" />
                       Book Appointment
@@ -933,27 +932,21 @@ export function CustomerDetailDialog({
 
             <TabsContent value="purse" className="mt-4">
               <Card className="mb-4">
-                <CardContent className="p-4 flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-1">
-                      <p className="text-sm text-muted-foreground">Current Balance</p>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3 w-3 text-muted-foreground cursor-default" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-56 text-xs">
-                          Combined balance — paid funds plus salon-issued credit, added together.
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <p className="text-2xl font-semibold">
-                      {currency} {Number(purse?.balance || 0).toFixed(2)}
-                    </p>
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-1">
+                    <p className="text-sm text-muted-foreground">Current Balance</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-56 text-xs">
+                        Combined balance: paid funds plus salon-issued credit, added together.
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
-                  <Button size="sm">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Top Up
-                  </Button>
+                  <p className="text-2xl font-semibold">
+                    {currency} {Number(purse?.balance || 0).toFixed(2)}
+                  </p>
                 </CardContent>
               </Card>
 

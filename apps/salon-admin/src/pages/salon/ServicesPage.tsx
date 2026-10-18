@@ -1,144 +1,57 @@
-import { useState, useMemo, useRef, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useState, useMemo, useRef } from "react";
 import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
 import { Card, CardContent } from "@ui/card";
 import { Input } from "@ui/input";
-import { Badge } from "@ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Skeleton } from "@ui/skeleton";
-import { Checkbox } from "@ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
 import {
   Scissors,
-  Package,
-  ShoppingBag,
-  Gift,
   Plus,
   Download,
   Search,
-  Clock,
-  Truck,
-  MoreVertical,
-  Eye,
-  Edit,
-  Flag,
-  Archive,
+  MoreHorizontal,
   Trash2,
   Undo2,
-  Loader2,
   AlertTriangle,
-  Copy,
 } from "lucide-react";
 import { AddServiceDialog } from "@/components/dialogs/AddServiceDialog";
 import { AddPackageDialog } from "@/components/dialogs/AddPackageDialog";
-import { AddProductDialog } from "@/components/dialogs/AddProductDialog";
-import { AddVoucherDialog } from "@/components/dialogs/AddVoucherDialog";
 import { EditServiceDialog } from "@/components/dialogs/EditServiceDialog";
-import { EditProductDialog } from "@/components/dialogs/EditProductDialog";
-import { EditPackageDialog } from "@/components/dialogs/EditPackageDialog";
-import { EditVoucherDialog } from "@/components/dialogs/EditVoucherDialog";
 import { ServiceDetailDialog } from "@/components/dialogs/ServiceDetailDialog";
-import { ProductDetailDialog } from "@/components/dialogs/ProductDetailDialog";
-import { PackageDetailDialog } from "@/components/dialogs/PackageDetailDialog";
-import { VoucherDetailDialog } from "@/components/dialogs/VoucherDetailDialog";
-import { ProductFulfillmentTab } from "@/components/catalog/ProductFulfillmentTab";
-import { AddItemPopover } from "@/components/catalog/AddItemPopover";
-import { BulkActionsBar } from "@/components/catalog/BulkActionsBar";
 import { ReasonConfirmDialog } from "@/components/dialogs/ReasonConfirmDialog";
 import { DeleteConfirmDialog } from "@/components/dialogs/DeleteConfirmDialog";
 import { RequestDeleteDialog } from "@/components/dialogs/RequestDeleteDialog";
 import { ImportDialog, type TemplateColumn } from "@/components/dialogs/ImportDialog";
+import { BulkActionsBar } from "@/components/catalog/BulkActionsBar";
+import { CatalogBinDialog } from "@/components/catalog/CatalogBinDialog";
+import { EmptyState, SelectableItemCard, type CatalogItem } from "@/components/catalog/CatalogItemCard";
 import { useServices } from "@/hooks/useServices";
-import { usePackages } from "@/hooks/usePackages";
-import { useProducts } from "@/hooks/useProducts";
-import { useVouchers } from "@/hooks/useVouchers";
 import { useBinItems } from "@/hooks/useBinItems";
 import { useDeletionRequests } from "@/hooks/useDeletionRequests";
-import {
-  useCatalogIntegrityIssues,
-  type CatalogIntegrityIssue,
-  type CatalogIntegrityItemType,
-} from "@/hooks/useCatalogIntegrityIssues";
+import { useCatalogIntegrityIssues } from "@/hooks/useCatalogIntegrityIssues";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { useActiveBranchCurrency } from "@/hooks/useActiveBranchCurrency";
 import { usePlanBySlug } from "@/hooks/usePlans";
 import { supabase } from "@/lib/supabase";
-import { format } from "date-fns";
 import { toast } from "@ui/ui/use-toast";
-import { cn } from "@shared/utils";
-import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
-import { LocationScopePicker } from "@/components/catalog/LocationScopePicker";
-import { getCurrenciesForLocations } from "@/lib/locationCurrency";
-import * as XLSX from "xlsx";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
-
-type TabValue = "all" | "services" | "products" | "packages" | "vouchers";
-const TAB_VALUES: TabValue[] = ["all", "services", "products", "packages", "vouchers"];
-type ProductSubTab = "inventory" | "fulfillment";
-type ItemType = "service" | "product" | "package" | "voucher";
-type CatalogImportType = "services" | "products";
-
-interface CatalogItem {
-  id: string;
-  type: ItemType;
-  name: string;
-  description: string;
-  price: number;
-  duration?: number;
-  originalPrice?: number;
-  stock?: number;
-  images?: string[];
-  status?: string;
-  is_flagged?: boolean;
-}
-
-interface IntegrityFixTarget {
-  itemId: string;
-  itemType: CatalogIntegrityItemType;
-  itemName: string;
-  issueCodes: string[];
-  locationIds: string[];
-}
 
 export default function ServicesPage() {
   useWalkthroughAutoTrigger("services");
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
-  const [productDialogOpen, setProductDialogOpen] = useState(false);
-  const [voucherDialogOpen, setVoucherDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [importType, setImportType] = useState<CatalogImportType>("services");
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<TabValue>(() => {
-    const tabFromUrl = searchParams.get("tab");
-    return tabFromUrl && (TAB_VALUES as string[]).includes(tabFromUrl) ? (tabFromUrl as TabValue) : "all";
-  });
-  const [productSubTab, setProductSubTab] = useState<ProductSubTab>("inventory");
 
-  // Multi-select state - supports mixed selection in "All" tab
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const [selectedTypes, setSelectedTypes] = useState<Set<ItemType>>(new Set());
 
-  // Dialog states
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -146,40 +59,23 @@ export default function ServicesPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [binOpen, setBinOpen] = useState(false);
-  const [binProcessingItemId, setBinProcessingItemId] = useState<string | null>(null);
-  const [binSelectMode, setBinSelectMode] = useState(false);
-  const [selectedBinItemKeys, setSelectedBinItemKeys] = useState<Set<string>>(new Set());
-  const [binDeleteTargets, setBinDeleteTargets] = useState<Array<{ id: string; name: string; type: ItemType }>>([]);
-  const [fixDialogOpen, setFixDialogOpen] = useState(false);
-  const [fixTarget, setFixTarget] = useState<IntegrityFixTarget | null>(null);
-  const [fixLocationIds, setFixLocationIds] = useState<string[]>([]);
-  const [isApplyingFix, setIsApplyingFix] = useState(false);
 
-  // View/Edit dialog states
   const [viewDetailItem, setViewDetailItem] = useState<CatalogItem | null>(null);
   const [editItem, setEditItem] = useState<CatalogItem | null>(null);
 
-  // Pending deletion with undo
   const undoRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
   const undoToastRef = useRef<Map<string, { dismiss: () => void; update: (props: any) => void }>>(new Map());
 
   const { currentTenant, user } = useAuth();
-  const { isOwner, currentRole, hasPermission } = usePermissions();
-  const { locations: manageableLocations, defaultLocationId, isLoading: locationsLoading } =
-    useManageableLocations();
+  const { hasPermission } = usePermissions();
   const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices();
-  const { packages, isLoading: packagesLoading, refetch: refetchPackages } = usePackages();
-  const { products, isLoading: productsLoading, refetch: refetchProducts } = useProducts();
-  const { vouchers, isLoading: vouchersLoading, refetch: refetchVouchers } = useVouchers();
   const { data: currentPlan } = usePlanBySlug(String(currentTenant?.plan || ""));
   const { issuesByItemKey, refetch: refetchIssues } = useCatalogIntegrityIssues();
   const { binItems, isLoading: binLoading, restoreItem, permanentlyDeleteItem, refetch: refetchBinItems } = useBinItems();
   const { createRequest } = useDeletionRequests();
 
   const { currency } = useActiveBranchCurrency("USD");
-  const isLoading = servicesLoading || packagesLoading || productsLoading || vouchersLoading;
 
-  // Permission checks
   const canEdit = hasPermission("catalog:edit");
   const canDelete = hasPermission("catalog:delete");
   const canRequestDelete = hasPermission("catalog:request_delete");
@@ -187,252 +83,74 @@ export default function ServicesPage() {
   const canFlag = hasPermission("catalog:flag");
   const canRestoreBinItems = hasPermission("catalog:edit");
   const canDeleteBinItems = hasPermission("catalog:delete");
-  const canApplyIntegrityFix = currentRole === "owner" || currentRole === "manager";
-  const isChainTier = String(currentTenant?.plan || "").toLowerCase() === "chain";
-  const isBinBusy = binProcessingItemId !== null;
-  const makeBinKey = (item: { id: string; type: ItemType | "voucher" }) => `${item.type}:${item.id}`;
+  const isBinBusy = false;
 
   const formatCurrency = (amount: number) => {
-    const symbols: Record<string, string> = {
-      GHS: "₵",
-      NGN: "₦",
-      USD: "$",
-      EUR: "€",
-      GBP: "£",
-    };
+    const symbols: Record<string, string> = { GHS: "₵", NGN: "₦", USD: "$", EUR: "€", GBP: "£" };
     return `${symbols[currency] || `${currency} `}${Number(amount).toLocaleString(undefined, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
   };
 
-  const getItemIssues = (itemType: CatalogIntegrityItemType, itemId: string): CatalogIntegrityIssue[] =>
-    issuesByItemKey.get(`${itemType}:${itemId}`) || [];
+  const getItemIssues = (itemId: string) => issuesByItemKey.get(`service:${itemId}`) || [];
 
-  const hasBlockingIssue = (itemType: CatalogIntegrityItemType, itemId: string) =>
-    getItemIssues(itemType, itemId).some((issue) => issue.severity === "blocking");
+  const filteredServices = services.filter(
+    (s) =>
+      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.description || "").toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
-  const hasWarningIssue = (itemType: CatalogIntegrityItemType, itemId: string) =>
-    getItemIssues(itemType, itemId).some((issue) => issue.severity === "warning");
-
-  const shouldShowItem = (_itemType: CatalogIntegrityItemType, _itemId: string) => true;
-
-  const IMPORT_TEMPLATES: Record<CatalogImportType, TemplateColumn[]> = {
-    services: [
-      { header: "name", example: "Silk Press", required: true },
-      { header: "duration_minutes", example: "60", required: false },
-      { header: "price", example: "15000", required: true },
-      { header: "description", example: "Includes wash and finish", required: false },
-      { header: "is_active", example: "true", required: false },
-    ],
-    products: [
-      { header: "name", example: "Shampoo 500ml", required: true },
-      { header: "stock_quantity", example: "24", required: false },
-      { header: "price", example: "8500", required: true },
-      { header: "description", example: "Sulphate free formula", required: false },
-      { header: "is_active", example: "true", required: false },
-    ],
-  };
-
-  // Build unified items list with status
-  const allItems = useMemo(() => [
-    ...services.map((s) => ({
-      id: s.id,
-      type: "service" as const,
-      name: s.name,
-      description: s.description || "",
-      price: Number(s.price),
-      duration: s.duration_minutes,
-      images: s.image_urls || [],
-      status: s.status,
-      is_flagged: s.is_flagged,
-    })),
-    ...packages.map((p) => ({
-      id: p.id,
-      type: "package" as const,
-      name: p.name,
-      description: p.description || "",
-      price: Number(p.price),
-      originalPrice: p.original_price ? Number(p.original_price) : undefined,
-      images: p.image_urls || [],
-      status: p.status,
-      is_flagged: (p as any).is_flagged || false,
-    })),
-    ...products.map((p) => ({
-      id: p.id,
-      type: "product" as const,
-      name: p.name,
-      description: p.description || "",
-      price: Number(p.price),
-      stock: p.stock_quantity,
-      images: p.image_urls || [],
-      status: p.status,
-      is_flagged: (p as any).is_flagged,
-    })),
-    ...vouchers.map((voucher) => ({
-      id: voucher.id,
-      type: "voucher" as const,
-      name: voucher.code,
-      description: [
-        voucher.access_type ? `${voucher.access_type} voucher` : "Gift voucher",
-        voucher.expires_at ? `expires ${format(new Date(voucher.expires_at), "MMM d, yyyy")}` : null,
-      ].filter(Boolean).join(" · "),
-      price: Number(voucher.amount),
-      status: voucher.status,
-      is_flagged: false,
-    })),
-  ], [services, packages, products, vouchers]);
-
-  const filteredItems = allItems.filter((item) => {
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
+  const toCatalogItem = (s: (typeof services)[number]): CatalogItem => ({
+    id: s.id,
+    type: "service",
+    name: s.name,
+    description: s.description || "",
+    price: Number(s.price),
+    duration: s.duration_minutes,
+    images: s.image_urls || [],
+    status: s.status,
+    is_flagged: s.is_flagged,
   });
 
-  // Get item info by id
-  const getItemInfo = (id: string): { name: string; type: ItemType } | null => {
-    const service = services.find((s) => s.id === id);
-    if (service) return { name: service.name, type: "service" };
-    const pkg = packages.find((p) => p.id === id);
-    if (pkg) return { name: pkg.name, type: "package" };
-    const product = products.find((p) => p.id === id);
-    if (product) return { name: product.name, type: "product" };
-    const voucher = vouchers.find((v) => v.id === id);
-    if (voucher) return { name: voucher.code, type: "voucher" };
-    return null;
+  const selectedItemsInfo = useMemo(() => {
+    return Array.from(selectedItems)
+      .map((id) => {
+        const service = services.find((s) => s.id === id);
+        return service ? { id, name: service.name, type: "service" as const } : null;
+      })
+      .filter(Boolean) as Array<{ id: string; name: string; type: "service" }>;
+  }, [selectedItems, services]);
+
+  const preSelectedPackageItems = useMemo(() => {
+    return Array.from(selectedItems)
+      .map((id) => {
+        const service = services.find((s) => s.id === id);
+        return service ? { id, type: "service" as const, name: service.name, price: Number(service.price) } : null;
+      })
+      .filter(Boolean) as Array<{ id: string; type: "service"; name: string; price: number }>;
+  }, [selectedItems, services]);
+
+  const clearSelection = () => setSelectedItems(new Set());
+
+  const refetchAll = async () => {
+    await Promise.all([refetchServices(), refetchIssues()]);
   };
 
-  // Handle selection - allows mixed service+product in All tab
-  const handleSelectItem = (id: string, type: ItemType) => {
+  const handleSelectItem = (id: string) => {
     setSelectedItems((prev) => {
-      const newSet = new Set(prev);
-
-      if (newSet.has(id)) {
-        newSet.delete(id);
-        // Recalculate selected types
-        const remainingTypes = new Set<ItemType>();
-        newSet.forEach((itemId) => {
-          const info = getItemInfo(itemId);
-          if (info) remainingTypes.add(info.type);
-        });
-        setSelectedTypes(remainingTypes);
-      } else {
-        // In "All" tab, allow mixed service+product selection
-        if (activeTab === "all") {
-          if (type === "package" || type === "voucher") {
-            // Selecting package/voucher clears service/product selection
-            if (selectedTypes.has("service") || selectedTypes.has("product")) {
-              newSet.clear();
-            }
-          } else if (selectedTypes.has("package") || selectedTypes.has("voucher")) {
-            // Selecting service/product clears package/voucher selection
-            newSet.clear();
-          }
-        } else {
-          // In specific tabs, only same-type selection
-          if (selectedTypes.size > 0 && !selectedTypes.has(type)) {
-            newSet.clear();
-          }
-        }
-        newSet.add(id);
-        setSelectedTypes((prev) => new Set([...prev, type]));
-      }
-      return newSet;
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   };
 
-  const clearSelection = () => {
-    setSelectedItems(new Set());
-    setSelectedTypes(new Set());
-  };
-
-  // Clear selection on tab change. Also keeps the URL's ?tab= in sync —
-  // otherwise a tour/deep-link that landed with ?tab=services in the URL
-  // would leave that param stale after a manual click, and the sync effect
-  // below would keep snapping activeTab back to it on every render.
-  const handleTabChange = (tab: TabValue) => {
-    setActiveTab(tab);
-    clearSelection();
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        next.set("tab", tab);
-        return next;
-      },
-      { replace: true },
-    );
-  };
-
-  // Sync tab with URL params (e.g. links from the dashboard checklist or the product tour)
-  useEffect(() => {
-    const tabFromUrl = searchParams.get("tab");
-    if (tabFromUrl && (TAB_VALUES as string[]).includes(tabFromUrl) && tabFromUrl !== activeTab) {
-      setActiveTab(tabFromUrl as TabValue);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams]);
-
-  // Determine bulk action availability
-  const canCreatePackage =
-    (selectedTypes.has("service") || selectedTypes.has("product")) &&
-    !selectedTypes.has("package") &&
-    !selectedTypes.has("voucher");
-
-  const showCreatePackage = activeTab === "all" || activeTab === "services" || activeTab === "products";
-  const showDeleteOption = (canDelete || canRequestDelete) && activeTab !== "packages" && activeTab !== "vouchers";
-
-  // Refetch all data
-  const refetchAll = async () => {
-    await Promise.all([
-      refetchServices(),
-      refetchPackages(),
-      refetchProducts(),
-      refetchVouchers(),
-      refetchIssues(),
-    ]);
-  };
-
-  // Get selected items info for dialogs
-  const selectedItemsInfo = useMemo(() => {
-    return Array.from(selectedItems).map((id) => {
-      const info = getItemInfo(id);
-      return info ? { id, name: info.name, type: info.type } : null;
-    }).filter(Boolean) as Array<{ id: string; name: string; type: ItemType }>;
-  }, [selectedItems, services, packages, products, vouchers]);
-
-  // Get selected items with prices for package creation
-  const preSelectedPackageItems = useMemo(() => {
-    return Array.from(selectedItems).map((id) => {
-      const service = services.find((s) => s.id === id);
-      if (service) {
-        return { id, type: "service" as const, name: service.name, price: Number(service.price) };
-      }
-      const product = products.find((p) => p.id === id);
-      if (product) {
-        return { id, type: "product" as const, name: product.name, price: Number(product.price) };
-      }
-      return null;
-    }).filter(Boolean) as Array<{ id: string; type: "service" | "product"; name: string; price: number }>;
-  }, [selectedItems, services, products]);
-
-  // Handle Flag
   const handleFlag = async (reason: string) => {
     setIsProcessing(true);
     try {
       for (const item of selectedItemsInfo) {
-        const updateData = { is_flagged: true, flag_reason: reason };
-        switch (item.type) {
-          case "service":
-            await supabase.from("services").update(updateData).eq("id", item.id);
-            break;
-          case "product":
-            await supabase.from("products").update(updateData).eq("id", item.id);
-            break;
-          case "package":
-            await supabase.from("packages").update(updateData).eq("id", item.id);
-            break;
-        }
+        await supabase.from("services").update({ is_flagged: true, flag_reason: reason }).eq("id", item.id);
       }
       toast({ title: "Items Flagged", description: `${selectedItems.size} item(s) flagged for review` });
       clearSelection();
@@ -446,23 +164,11 @@ export default function ServicesPage() {
     }
   };
 
-  // Handle Archive
   const handleArchive = async (reason: string) => {
     setIsProcessing(true);
     try {
       for (const item of selectedItemsInfo) {
-        const updateData = { status: "archived" as const, archive_reason: reason };
-        switch (item.type) {
-          case "service":
-            await supabase.from("services").update(updateData).eq("id", item.id);
-            break;
-          case "product":
-            await supabase.from("products").update(updateData).eq("id", item.id);
-            break;
-          case "package":
-            await supabase.from("packages").update(updateData).eq("id", item.id);
-            break;
-        }
+        await supabase.from("services").update({ status: "archived" as const, archive_reason: reason }).eq("id", item.id);
       }
       toast({ title: "Items Archived", description: `${selectedItems.size} item(s) archived` });
       clearSelection();
@@ -476,35 +182,52 @@ export default function ServicesPage() {
     }
   };
 
-  // Handle Delete (Owner only - soft delete with 5-sec undo)
+  const handleUndo = (batchId: string) => {
+    const interval = undoRef.current.get(batchId);
+    if (interval) {
+      clearInterval(interval);
+      undoRef.current.delete(batchId);
+      undoToastRef.current.get(batchId)?.dismiss();
+      undoToastRef.current.delete(batchId);
+      toast({ title: "Deletion Cancelled", description: "Items were not deleted" });
+    }
+  };
+
+  const executeSoftDelete = async (items: Array<{ id: string; name: string }>) => {
+    try {
+      for (const item of items) {
+        await supabase
+          .from("services")
+          .update({ deleted_at: new Date().toISOString(), deleted_by_id: user?.id, deletion_reason: "Direct deletion by owner" })
+          .eq("id", item.id);
+      }
+      toast({ title: "Sent to Bin", description: `${items.length} item(s) moved to bin. Can be restored within 7 days.` });
+      await Promise.all([refetchAll(), refetchBinItems()]);
+    } catch (err) {
+      console.error("Error deleting items:", err);
+      toast({ title: "Error", description: "Failed to delete items", variant: "destructive" });
+    }
+  };
+
   const handleDelete = () => {
     if (!user?.id) return;
-
     const itemsToDelete = Array.from(selectedItemsInfo);
-
-    // Close dialog and clear selection
     setDeleteDialogOpen(false);
     clearSelection();
 
-    // Start countdown for batch
     let countdown = 5;
     const batchId = Date.now().toString();
-
     const undoToast = toast({
-        title: `Deleting ${itemsToDelete.length} item(s)...`,
-        description: `Click Undo to cancel (${countdown}s)`,
-        duration: 6000,
-        action: (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleUndo(batchId)}
-          >
-            <Undo2 className="w-4 h-4 mr-1" />
-            Undo
-          </Button>
-        ),
-      });
+      title: `Deleting ${itemsToDelete.length} item(s)...`,
+      description: `Click Undo to cancel (${countdown}s)`,
+      duration: 6000,
+      action: (
+        <Button variant="outline" size="sm" onClick={() => handleUndo(batchId)}>
+          <Undo2 className="w-4 h-4 mr-1" />
+          Undo
+        </Button>
+      ),
+    });
     undoToastRef.current.set(batchId, { dismiss: undoToast.dismiss, update: undoToast.update });
 
     const interval = setInterval(() => {
@@ -522,58 +245,9 @@ export default function ServicesPage() {
         });
       }
     }, 1000);
-
     undoRef.current.set(batchId, interval);
   };
 
-  const handleUndo = (batchId: string) => {
-    const interval = undoRef.current.get(batchId);
-    if (interval) {
-      clearInterval(interval);
-      undoRef.current.delete(batchId);
-      undoToastRef.current.get(batchId)?.dismiss();
-      undoToastRef.current.delete(batchId);
-      toast({ title: "Deletion Cancelled", description: "Items were not deleted" });
-    }
-  };
-
-  const executeSoftDelete = async (items: Array<{ id: string; name: string; type: ItemType }>) => {
-    try {
-      for (const item of items) {
-        const updateData = {
-          deleted_at: new Date().toISOString(),
-          deleted_by_id: user?.id,
-          deletion_reason: "Direct deletion by owner",
-        };
-
-        switch (item.type) {
-          case "service":
-            await supabase.from("services").update(updateData).eq("id", item.id);
-            break;
-          case "product":
-            await supabase.from("products").update(updateData).eq("id", item.id);
-            break;
-          case "package":
-            await supabase.from("packages").update(updateData).eq("id", item.id);
-            break;
-          case "voucher":
-            await supabase.from("vouchers").update(updateData).eq("id", item.id);
-            break;
-        }
-      }
-
-      toast({
-        title: "Sent to Bin",
-        description: `${items.length} item(s) moved to bin. Can be restored within 7 days.`
-      });
-      await Promise.all([refetchAll(), refetchBinItems()]);
-    } catch (err) {
-      console.error("Error deleting items:", err);
-      toast({ title: "Error", description: "Failed to delete items", variant: "destructive" });
-    }
-  };
-
-  // Handle deletion request (non-owners)
   const handleRequestDelete = async (reason: string) => {
     setIsProcessing(true);
     try {
@@ -589,177 +263,9 @@ export default function ServicesPage() {
     }
   };
 
-  // Handle bulk action button clicks
   const handleBulkDelete = () => {
-    if (canDelete) {
-      setDeleteDialogOpen(true);
-    } else if (canRequestDelete) {
-      setRequestDeleteDialogOpen(true);
-    }
-  };
-
-  const handleAddFromPopover = (type: ItemType) => {
-    switch (type) {
-      case "service":
-        setServiceDialogOpen(true);
-        break;
-      case "product":
-        setProductDialogOpen(true);
-        break;
-      case "package":
-        setPackageDialogOpen(true);
-        break;
-      case "voucher":
-        setVoucherDialogOpen(true);
-        break;
-    }
-  };
-
-  const handleAddClick = () => {
-    switch (activeTab) {
-      case "services":
-        setServiceDialogOpen(true);
-        break;
-      case "packages":
-        setPackageDialogOpen(true);
-        break;
-      case "products":
-        setProductDialogOpen(true);
-        break;
-      case "vouchers":
-        setVoucherDialogOpen(true);
-        break;
-    }
-  };
-
-  const openFixConfigDialog = (item: CatalogItem) => {
-    const itemIssues = getItemIssues(item.type, item.id);
-    if (itemIssues.length === 0) return;
-    const inferredLocationIds = Array.from(
-      new Set(itemIssues.flatMap((issue) => issue.branch_location_ids || [])),
-    );
-    setFixTarget({
-      itemId: item.id,
-      itemType: item.type,
-      itemName: item.name,
-      issueCodes: Array.from(new Set(itemIssues.map((issue) => issue.issue_code))),
-      locationIds: inferredLocationIds,
-    });
-    setFixLocationIds(
-      inferredLocationIds.length > 0
-        ? inferredLocationIds
-        : defaultLocationId
-          ? [defaultLocationId]
-          : [],
-    );
-    setFixDialogOpen(true);
-  };
-
-  const applyIntegrityFix = async () => {
-    if (!currentTenant?.id || !fixTarget) return;
-    if (hasFixMixedCurrencies) {
-      toast({
-        title: "Mixed currency mapping",
-        description: "Select branches that share the same currency.",
-        variant: "destructive",
-      });
-      return;
-    }
-    if (isChainTier && fixLocationIds.length === 0) {
-      toast({
-        title: "Select branches",
-        description: "Choose at least one branch before applying this fix.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsApplyingFix(true);
-    try {
-      if (isChainTier) {
-        const tableMap = {
-          service: { table: "service_locations", column: "service_id" },
-          product: { table: "product_locations", column: "product_id" },
-          package: { table: "package_locations", column: "package_id" },
-          voucher: { table: "voucher_locations", column: "voucher_id" },
-        } as const;
-        const mappingMeta = tableMap[fixTarget.itemType];
-
-        const { error: deleteError } = await (supabase.from as any)(mappingMeta.table)
-          .delete()
-          .eq("tenant_id", currentTenant.id)
-          .eq(mappingMeta.column, fixTarget.itemId);
-        if (deleteError) throw deleteError;
-
-        const mappingRows = fixLocationIds.map((locationId) => ({
-          tenant_id: currentTenant.id,
-          location_id: locationId,
-          is_enabled: true,
-          [mappingMeta.column]: fixTarget.itemId,
-        }));
-        if (mappingRows.length > 0) {
-          const { error: upsertError } = await (supabase.from as any)(mappingMeta.table).upsert(
-            mappingRows,
-            { onConflict: `${mappingMeta.column},location_id` },
-          );
-          if (upsertError) throw upsertError;
-        }
-      }
-
-      const { data: revalidationIssues, error: validateError } = await (supabase.rpc as any)(
-        "validate_catalog_item_integrity",
-        {
-        p_tenant_id: currentTenant.id,
-        p_item_type: fixTarget.itemType,
-        p_item_id: fixTarget.itemId,
-      });
-      if (validateError) throw validateError;
-
-      const activeIssues = ((revalidationIssues ?? []) as CatalogIntegrityIssue[]).filter(
-        (issue) => !issue.resolved_at,
-      );
-      if (activeIssues.length > 0) {
-        const issueLabel = activeIssues.map((issue) => issue.issue_code).join(", ");
-        toast({
-          title: "Fix still incomplete",
-          description: `Remaining issue(s): ${issueLabel}.`,
-          variant: "destructive",
-        });
-        await refetchAll();
-        return;
-      }
-
-      await (supabase.rpc as any)("log_audit_event", {
-        _tenant_id: currentTenant.id,
-        _action: "catalog.integrity_fix_applied",
-        _target_type: fixTarget.itemType,
-        _target_id: fixTarget.itemId,
-        _summary: `Integrity fix applied to ${fixTarget.itemType}`,
-        _details: {
-          issue_codes: fixTarget.issueCodes,
-          fixed_location_ids: fixLocationIds,
-        },
-        _branch_location_id: fixLocationIds[0] || null,
-      });
-
-      toast({
-        title: "Config fixed",
-        description: `${fixTarget.itemName} has been revalidated.`,
-      });
-      setFixDialogOpen(false);
-      setFixTarget(null);
-      setFixLocationIds([]);
-      await refetchAll();
-    } catch (error) {
-      console.error("Error applying integrity fix:", error);
-      toast({
-        title: "Failed to apply fix",
-        description: "Please review branch mappings and try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsApplyingFix(false);
-    }
+    if (canDelete) setDeleteDialogOpen(true);
+    else if (canRequestDelete) setRequestDeleteDialogOpen(true);
   };
 
   const parseBoolean = (value: unknown): boolean | undefined => {
@@ -772,6 +278,7 @@ export default function ServicesPage() {
   };
 
   const parseImportRows = async (file: File) => {
+    const XLSX = await import("xlsx");
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, { type: "array" });
     const firstSheet = workbook.SheetNames[0];
@@ -782,18 +289,24 @@ export default function ServicesPage() {
       name: row.name,
       description: row.description || null,
       price: row.price,
-      stock_quantity: row.stock_quantity,
       duration_minutes: row.duration_minutes,
       is_active: parseBoolean(row.is_active),
     }));
   };
+
+  const IMPORT_TEMPLATE: TemplateColumn[] = [
+    { header: "name", example: "Silk Press", required: true },
+    { header: "duration_minutes", example: "60", required: false },
+    { header: "price", example: "15000", required: true },
+    { header: "description", example: "Includes wash and finish", required: false },
+    { header: "is_active", example: "true", required: false },
+  ];
 
   const handleImportCatalog = async (file: File) => {
     if (!currentTenant?.id) {
       toast({ title: "No tenant selected", description: "Please select a tenant first.", variant: "destructive" });
       return;
     }
-
     setIsImporting(true);
     try {
       const rows = await parseImportRows(file);
@@ -801,42 +314,18 @@ export default function ServicesPage() {
         toast({ title: "No data found", description: "The uploaded file has no importable rows.", variant: "destructive" });
         return;
       }
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
+      const { data: { session } } = await supabase.auth.getSession();
       if (!session?.access_token) {
-        toast({
-          title: "Session expired",
-          description: "Please sign in again before importing.",
-          variant: "destructive",
-        });
+        toast({ title: "Session expired", description: "Please sign in again before importing.", variant: "destructive" });
         return;
       }
-
       const { data, error } = await supabase.functions.invoke("bulk-import-catalog", {
-        body: {
-          tenant_id: currentTenant.id,
-          import_type: importType,
-          rows,
-          dry_run: false,
-        },
+        body: { tenant_id: currentTenant.id, import_type: "services", rows, dry_run: false },
       });
-
       if (error) throw error;
-
       const summary = data?.summary || {};
-      toast({
-        title: `${importType === "services" ? "Service" : "Product"} import completed`,
-        description: `Imported ${summary.imported_rows ?? 0}/${summary.total_rows ?? rows.length} rows.`,
-      });
-
-      if (importType === "services") {
-        refetchServices();
-      } else {
-        refetchProducts();
-      }
+      toast({ title: "Service import completed", description: `Imported ${summary.imported_rows ?? 0}/${summary.total_rows ?? rows.length} rows.` });
+      refetchServices();
     } catch (error) {
       console.error("Catalog import failed:", error);
       const status = Number((error as any)?.context?.status || 0);
@@ -856,144 +345,32 @@ export default function ServicesPage() {
     }
   };
 
-  const getAddButtonLabel = () => {
-    switch (activeTab) {
-      case "services":
-        return "Add Service";
-      case "packages":
-        return "Add Package";
-      case "products":
-        return "Add Product";
-      case "vouchers":
-        return "Add Voucher";
-      default:
-        return null;
-    }
-  };
-
-  const addButtonLabel = getAddButtonLabel();
-
-  const addButtonTourId: string | undefined = (() => {
-    switch (activeTab) {
-      case "services":
-        return "tour-add-service";
-      case "products":
-        return "tour-add-product";
-      case "vouchers":
-        return "tour-add-voucher";
-      case "packages":
-        return "tour-add-package";
-      default:
-        return undefined;
-    }
-  })();
-
-  const resourceLimits = useMemo(() => {
-    const limits = currentPlan?.limits;
-    return {
-      service: {
-        count: services.filter((s: any) => s.status === "active").length,
-        max: limits?.max_services ?? null,
-        label: "service",
-        pluralLabel: "services",
-      },
-      product: {
-        count: products.filter((p: any) => p.status === "active").length,
-        max: limits?.max_products ?? null,
-        label: "product",
-        pluralLabel: "products",
-      },
-      package: {
-        count: packages.filter((p: any) => p.status === "active").length,
-        max: limits?.max_packages ?? null,
-        label: "package",
-        pluralLabel: "packages",
-      },
-      voucher: {
-        count: vouchers.filter((v: any) => v.status === "active").length,
-        max: limits?.max_vouchers ?? null,
-        label: "voucher",
-        pluralLabel: "vouchers",
-      },
-    } as const;
-  }, [currentPlan?.limits, services, products, packages, vouchers]);
-
-  const activeTabResourceType: ItemType | null =
-    activeTab === "services"
-      ? "service"
-      : activeTab === "products"
-        ? "product"
-        : activeTab === "packages"
-          ? "package"
-          : activeTab === "vouchers"
-            ? "voucher"
-            : null;
-
-  const activeResourceLimit = activeTabResourceType ? resourceLimits[activeTabResourceType] : null;
-  const isActiveResourceFull =
-    activeResourceLimit?.max != null && activeResourceLimit.count >= activeResourceLimit.max;
+  const resourceLimit = useMemo(() => {
+    const max = currentPlan?.limits?.max_services ?? null;
+    const count = services.filter((s) => s.status === "active").length;
+    return { count, max, label: "service", pluralLabel: "services" };
+  }, [currentPlan?.limits, services]);
+  const isResourceFull = resourceLimit.max != null && resourceLimit.count >= resourceLimit.max;
 
   const mobileQuickAction = useMemo<MobileQuickAction | null>(() => {
-    // Bulk-selection mode has its own action bar — no quick-add action to
-    // register while items are selected, same as the FAB used to just not
-    // render then.
     if (selectedItems.size > 0) return null;
     return {
       kind: "menu",
-      ariaLabel: "Add a catalog item",
+      ariaLabel: "Add a service",
       options: [
         {
           key: "service",
           label: "Add service",
           icon: Scissors,
-          disabled: resourceLimits.service.max != null && resourceLimits.service.count >= resourceLimits.service.max,
-          badge:
-            resourceLimits.service.max != null && resourceLimits.service.count >= resourceLimits.service.max
-              ? "Limit reached"
-              : undefined,
+          disabled: isResourceFull,
+          badge: isResourceFull ? "Limit reached" : undefined,
           onSelect: () => setServiceDialogOpen(true),
         },
         {
-          key: "product",
-          label: "Add product",
-          icon: ShoppingBag,
-          disabled: resourceLimits.product.max != null && resourceLimits.product.count >= resourceLimits.product.max,
-          badge:
-            resourceLimits.product.max != null && resourceLimits.product.count >= resourceLimits.product.max
-              ? "Limit reached"
-              : undefined,
-          onSelect: () => setProductDialogOpen(true),
-        },
-        {
-          key: "package",
-          label: "Create package",
-          icon: Package,
-          disabled: resourceLimits.package.max != null && resourceLimits.package.count >= resourceLimits.package.max,
-          badge:
-            resourceLimits.package.max != null && resourceLimits.package.count >= resourceLimits.package.max
-              ? "Limit reached"
-              : undefined,
-          onSelect: () => setPackageDialogOpen(true),
-        },
-        {
-          key: "voucher",
-          label: "Create voucher",
-          icon: Gift,
-          disabled: resourceLimits.voucher.max != null && resourceLimits.voucher.count >= resourceLimits.voucher.max,
-          badge:
-            resourceLimits.voucher.max != null && resourceLimits.voucher.count >= resourceLimits.voucher.max
-              ? "Limit reached"
-              : undefined,
-          onSelect: () => setVoucherDialogOpen(true),
-        },
-        {
           key: "import",
-          label: "Import catalog",
+          label: "Import services",
           icon: Download,
-          onSelect: () => {
-            setImportType("services");
-            setImportDialogOpen(true);
-          },
+          onSelect: () => setImportDialogOpen(true),
         },
         {
           key: "bin",
@@ -1005,491 +382,113 @@ export default function ServicesPage() {
         },
       ],
     };
-  }, [
-    selectedItems.size,
-    resourceLimits.service.max,
-    resourceLimits.service.count,
-    resourceLimits.product.max,
-    resourceLimits.product.count,
-    resourceLimits.package.max,
-    resourceLimits.package.count,
-    resourceLimits.voucher.max,
-    resourceLimits.voucher.count,
-    binItems.length,
-  ]);
-
-  // Cleanup intervals on unmount
-  useEffect(() => {
-    return () => {
-      undoRef.current.forEach((interval) => clearInterval(interval));
-      undoToastRef.current.forEach((toastController) => toastController.dismiss());
-    };
-  }, []);
-
-  const fixCurrencies = useMemo(
-    () => getCurrenciesForLocations(manageableLocations, fixLocationIds, currency),
-    [currency, fixLocationIds, manageableLocations],
-  );
-  const hasFixMixedCurrencies = fixCurrencies.length > 1;
-
-  const confirmPermanentBinDelete = async () => {
-    if (binDeleteTargets.length === 0) return;
-    setBinProcessingItemId(binDeleteTargets.length === 1 ? binDeleteTargets[0].id : "__bulk_delete__");
-    let deletedCount = 0;
-    for (const item of binDeleteTargets) {
-      const deleted = await permanentlyDeleteItem(item.id, item.type, { silent: true, skipRefetch: true });
-      if (deleted) deletedCount++;
-    }
-    await Promise.all([refetchBinItems(), refetchAll()]);
-    setBinProcessingItemId(null);
-    setBinDeleteTargets([]);
-    setSelectedBinItemKeys(new Set());
-    setBinSelectMode(false);
-    toast({
-      title: "Delete complete",
-      description: deletedCount > 0 ? `${deletedCount} item(s) permanently deleted.` : "No selected items were deleted.",
-    });
-  };
+  }, [selectedItems.size, isResourceFull, binItems.length]);
 
   return (
     <SalonSidebar>
       <MobileQuickActionEffect action={mobileQuickAction} />
       <div className="mx-auto w-full max-w-[1500px] space-y-5 sm:space-y-7">
-        {/* Page Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Services and Products</h1>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Catalog</p>
+            <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Services</h1>
             <p className="mt-1.5 text-sm text-muted-foreground sm:text-base">
-              Manage your service catalog, packages, products, and vouchers.
+              Manage your services, including pricing, duration, and availability. 
             </p>
           </div>
           <div className="hidden flex-wrap items-center gap-2 lg:flex">
-            {(activeTab === "all" || activeTab === "services" || activeTab === "products") && (
-              <>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" className="h-12 rounded-full px-6">
-                      <Download className="w-4 h-4 mr-2" />
-                      Import
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setImportType("services");
-                        setImportDialogOpen(true);
-                      }}
-                    >
-                      Import Services
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setImportType("products");
-                        setImportDialogOpen(true);
-                      }}
-                    >
-                      Import Products
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            )}
-
-            {activeResourceLimit?.max != null && (
+            <Button variant="outline" className="h-12 rounded-full px-6" onClick={() => setImportDialogOpen(true)}>
+              <Download className="w-4 h-4 mr-2" />
+              Import
+            </Button>
+            {resourceLimit.max != null && (
               <span
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium",
-                  isActiveResourceFull ? "bg-warning-bg text-warning-foreground" : "bg-primary/10 text-primary",
-                )}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium ${
+                  isResourceFull ? "bg-warning-bg text-warning-foreground" : "bg-primary/10 text-primary"
+                }`}
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-current" />
-                {activeResourceLimit.count} of {activeResourceLimit.max} used
+                {resourceLimit.count} of {resourceLimit.max} used
               </span>
             )}
-
-            {activeTab === "all" ? (
-              <AddItemPopover
-                onSelect={handleAddFromPopover}
-                disabledTypes={{
-                  service: resourceLimits.service.max != null && resourceLimits.service.count >= resourceLimits.service.max,
-                  product: resourceLimits.product.max != null && resourceLimits.product.count >= resourceLimits.product.max,
-                  package: resourceLimits.package.max != null && resourceLimits.package.count >= resourceLimits.package.max,
-                  voucher: resourceLimits.voucher.max != null && resourceLimits.voucher.count >= resourceLimits.voucher.max,
-                }}
-              />
-            ) : (
-              addButtonLabel &&
-              (isActiveResourceFull ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span data-tour-id={addButtonTourId}>
-                      <Button disabled className="h-12 rounded-full px-7">
-                        <Plus className="w-4 h-4 mr-2" />
-                        {addButtonLabel}
-                      </Button>
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-56 text-xs">
-                    Your plan allows up to {activeResourceLimit?.max} active {activeResourceLimit?.pluralLabel}.
-                    Archive one, or upgrade your plan for unlimited {activeResourceLimit?.pluralLabel}.
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button
-                  onClick={handleAddClick}
-                  className="h-12 rounded-full px-7"
-                  data-tour-id={addButtonTourId}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  {addButtonLabel}
-                </Button>
-              ))
-            )}
+            <Button onClick={() => setServiceDialogOpen(true)} className="h-12 rounded-full px-7" data-tour-id="tour-add-service">
+              <Plus className="w-4 h-4 mr-2" />
+              Add Service
+            </Button>
           </div>
         </div>
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => handleTabChange(v as TabValue)}>
-          <TabsList className="scrollbar-hide h-auto w-full justify-start overflow-x-auto overscroll-x-contain rounded-full bg-[#eee9e1] p-1 lg:w-fit">
-            <TabsTrigger value="all" className="h-10 shrink-0 rounded-full px-5 sm:px-6">All</TabsTrigger>
-            <TabsTrigger value="services" className="h-10 flex shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
-              <Scissors className="w-4 h-4" />
-              Services
-            </TabsTrigger>
-            <TabsTrigger value="products" className="h-10 flex shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
-              <ShoppingBag className="w-4 h-4" />
-              Products
-            </TabsTrigger>
-            <TabsTrigger value="packages" className="h-10 flex shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
-              <Package className="w-4 h-4" />
-              Packages
-            </TabsTrigger>
-            <TabsTrigger value="vouchers" className="h-10 flex shrink-0 items-center gap-2 rounded-full px-5 sm:px-6">
-              <Gift className="w-4 h-4" />
-              Vouchers
-            </TabsTrigger>
-          </TabsList>
-
-          {isActiveResourceFull && activeResourceLimit && (
-            <div className="mt-4 flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning-bg/50 px-4 py-3 text-sm text-warning-foreground">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <p>
-                <span className="font-medium">
-                  You've reached your plan's {activeResourceLimit.label} limit.
-                </span>{" "}
-                Archive an existing {activeResourceLimit.label} to free up a slot, or upgrade your plan for
-                unlimited {activeResourceLimit.pluralLabel}.
-              </p>
-            </div>
-          )}
-
-          <div className="mt-5">
-            {/* Search */}
-            <div className="mb-5 flex flex-wrap items-center gap-4">
-              <div className="relative min-w-0 flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search services, products, packages..."
-                  className="h-12 rounded-[12px] bg-white pl-11 text-sm shadow-sm sm:text-base"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Loading State */}
-            {isLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[1, 2, 3, 4].map((i) => (
-                  <Card key={i}>
-                    <CardContent className="p-4">
-                      <Skeleton className="h-4 w-16 mb-2" />
-                      <Skeleton className="h-5 w-32 mb-1" />
-                      <Skeleton className="h-4 w-48" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            ) : (
-              <>
-                {/* All Tab */}
-                <TabsContent value="all" className="mt-0">
-                  {filteredItems.filter((item) => shouldShowItem(item.type, item.id)).length === 0 ? (
-                    <EmptyState message="No items yet. Add services, products, or packages to get started." />
-                  ) : (
-                    <div className="space-y-3">
-                      {filteredItems
-                        .filter((item) => shouldShowItem(item.type, item.id))
-                        .map((item) => (
-                        <SelectableItemCard
-                          key={item.id}
-                          item={item}
-                          currency={currency}
-                          formatCurrency={formatCurrency}
-                          isSelected={selectedItems.has(item.id)}
-                          onSelect={handleSelectItem}
-                          canEdit={canEdit}
-                          onViewDetails={() => setViewDetailItem(item)}
-                          onEdit={() => setEditItem(item)}
-                          integrityIssues={getItemIssues(item.type, item.id)}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* Services Tab */}
-                <TabsContent value="services" className="mt-0">
-                  {services
-                    .filter(
-                      (s) =>
-                        (s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
-                        shouldShowItem("service", s.id),
-                    ).length === 0 ? (
-                    <EmptyState message="No services yet. Add your first service." />
-                  ) : (
-                    <div className="space-y-3">
-                      {services
-                        .filter(
-                          (s) =>
-                            (s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                              (s.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
-                            shouldShowItem("service", s.id)
-                        )
-                        .map((s) => (
-                          <SelectableItemCard
-                            key={s.id}
-                            item={{
-                              id: s.id,
-                              type: "service",
-                              name: s.name,
-                              description: s.description || "",
-                              price: Number(s.price),
-                              duration: s.duration_minutes,
-                              images: s.image_urls || [],
-                              status: s.status,
-                              is_flagged: s.is_flagged,
-                            }}
-                            currency={currency}
-                            formatCurrency={formatCurrency}
-                            isSelected={selectedItems.has(s.id)}
-                            onSelect={handleSelectItem}
-                            canEdit={canEdit}
-                            onViewDetails={() => setViewDetailItem({ id: s.id, type: "service", name: s.name, description: s.description || "", price: Number(s.price), duration: s.duration_minutes, images: s.image_urls || [], status: s.status, is_flagged: s.is_flagged })}
-                            onEdit={() => setEditItem({ id: s.id, type: "service", name: s.name, description: s.description || "", price: Number(s.price), duration: s.duration_minutes, images: s.image_urls || [], status: s.status, is_flagged: s.is_flagged })}
-                            integrityIssues={getItemIssues("service", s.id)}
-                          />
-                        ))}
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* Packages Tab */}
-                <TabsContent value="packages" className="mt-0">
-                  {packages
-                    .filter(
-                      (p) =>
-                        (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
-                        shouldShowItem("package", p.id),
-                    ).length === 0 ? (
-                    <EmptyState message="No packages yet. Bundle services together." />
-                  ) : (
-                    <div className="space-y-3">
-                      {packages
-                        .filter(
-                          (p) =>
-                            (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                              (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
-                            shouldShowItem("package", p.id)
-                        )
-                        .map((p) => (
-                          <SelectableItemCard
-                            key={p.id}
-                            item={{
-                              id: p.id,
-                              type: "package",
-                              name: p.name,
-                              description: p.description || "",
-                              price: Number(p.price),
-                              originalPrice: p.original_price ? Number(p.original_price) : undefined,
-                              images: p.image_urls || [],
-                              status: p.status,
-                              is_flagged: (p as any).is_flagged || false,
-                            }}
-                            currency={currency}
-                            formatCurrency={formatCurrency}
-                            isSelected={selectedItems.has(p.id)}
-                            onSelect={handleSelectItem}
-                            canEdit={canEdit}
-                            onViewDetails={() => setViewDetailItem({ id: p.id, type: "package", name: p.name, description: p.description || "", price: Number(p.price), originalPrice: p.original_price ? Number(p.original_price) : undefined, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged || false })}
-                            onEdit={() => setEditItem({ id: p.id, type: "package", name: p.name, description: p.description || "", price: Number(p.price), originalPrice: p.original_price ? Number(p.original_price) : undefined, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged || false })}
-                            integrityIssues={getItemIssues("package", p.id)}
-                          />
-                        ))}
-                    </div>
-                  )}
-                </TabsContent>
-
-                {/* Products Tab - with Sub-tabs */}
-                <TabsContent value="products" className="mt-0">
-                  <Tabs value={productSubTab} onValueChange={(v) => setProductSubTab(v as ProductSubTab)}>
-                    <TabsList className="mb-4">
-                      <TabsTrigger value="inventory" className="flex items-center gap-2">
-                        <ShoppingBag className="w-4 h-4" />
-                        Inventory
-                      </TabsTrigger>
-                      <TabsTrigger value="fulfillment" className="flex items-center gap-2">
-                        <Truck className="w-4 h-4" />
-                        Fulfillment
-                      </TabsTrigger>
-                    </TabsList>
-
-                    <TabsContent value="inventory" className="mt-0">
-                      {products
-                        .filter(
-                          (p) =>
-                            (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                              (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
-                            shouldShowItem("product", p.id),
-                        ).length === 0 ? (
-                        <EmptyState message="No products yet. Add items to sell." />
-                      ) : (
-                        <div className="space-y-3">
-                          {products
-                            .filter(
-                              (p) =>
-                                (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                  (p.description || "").toLowerCase().includes(searchQuery.toLowerCase())) &&
-                                shouldShowItem("product", p.id)
-                            )
-                            .map((p) => (
-                              <SelectableItemCard
-                                key={p.id}
-                                item={{
-                                  id: p.id,
-                                  type: "product",
-                                  name: p.name,
-                                  description: p.description || "",
-                                  price: Number(p.price),
-                                  stock: p.stock_quantity,
-                                  images: p.image_urls || [],
-                                  status: p.status,
-                                  is_flagged: (p as any).is_flagged,
-                                }}
-                                currency={currency}
-                                formatCurrency={formatCurrency}
-                                isSelected={selectedItems.has(p.id)}
-                                onSelect={handleSelectItem}
-                                canEdit={canEdit}
-                                onViewDetails={() => setViewDetailItem({ id: p.id, type: "product", name: p.name, description: p.description || "", price: Number(p.price), stock: p.stock_quantity, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged })}
-                                onEdit={() => setEditItem({ id: p.id, type: "product", name: p.name, description: p.description || "", price: Number(p.price), stock: p.stock_quantity, images: p.image_urls || [], status: p.status, is_flagged: (p as any).is_flagged })}
-                                integrityIssues={getItemIssues("product", p.id)}
-                              />
-                            ))}
-                        </div>
-                      )}
-                    </TabsContent>
-
-                    <TabsContent value="fulfillment" className="mt-0">
-                      <ProductFulfillmentTab />
-                    </TabsContent>
-                  </Tabs>
-                </TabsContent>
-
-                {/* Vouchers Tab */}
-                <TabsContent value="vouchers" className="mt-0">
-                  {vouchersLoading ? (
-                    <div className="space-y-3">
-                      {[1, 2].map((i) => (
-                        <Card key={i}>
-                          <CardContent className="p-4">
-                            <Skeleton className="h-5 w-24 mb-2" />
-                            <Skeleton className="h-4 w-16" />
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
-                  ) : vouchers.filter(
-                    (voucher) =>
-                      voucher.code.toLowerCase().includes(searchQuery.toLowerCase()) &&
-                      shouldShowItem("voucher", voucher.id),
-                  ).length === 0 ? (
-                    <EmptyState message="No vouchers yet. Create gift cards for customers." />
-                  ) : (
-                    <div className="space-y-3">
-                      {vouchers
-                        .filter(
-                          (voucher) =>
-                            voucher.code.toLowerCase().includes(searchQuery.toLowerCase()) &&
-                            shouldShowItem("voucher", voucher.id),
-                        )
-                        .map((voucher) => (
-                          <SelectableItemCard
-                            key={voucher.id}
-                            item={{
-                              id: voucher.id,
-                              type: "voucher",
-                              name: voucher.code,
-                              description: [
-                                voucher.access_type ? `${voucher.access_type} voucher` : "Gift voucher",
-                                voucher.expires_at
-                                  ? `expires ${format(new Date(voucher.expires_at), "MMM d, yyyy")}`
-                                  : null,
-                                `balance ${formatCurrency(Number(voucher.balance))}`,
-                              ].filter(Boolean).join(" · "),
-                              price: Number(voucher.amount),
-                              status: voucher.status,
-                            }}
-                            currency={currency}
-                            formatCurrency={formatCurrency}
-                            isSelected={selectedItems.has(voucher.id)}
-                            onSelect={handleSelectItem}
-                            canEdit={canEdit}
-                            onViewDetails={() => setViewDetailItem({
-                              id: voucher.id,
-                              type: "voucher",
-                              name: voucher.code,
-                              description: "",
-                              price: Number(voucher.amount),
-                              status: voucher.status,
-                            })}
-                            onEdit={() => setEditItem({
-                              id: voucher.id,
-                              type: "voucher",
-                              name: voucher.code,
-                              description: "",
-                              price: Number(voucher.amount),
-                              status: voucher.status,
-                            })}
-                            integrityIssues={getItemIssues("voucher", voucher.id)}
-                          />
-                        ))}
-                    </div>
-                  )}
-                </TabsContent>
-              </>
-            )}
+        {isResourceFull && (
+          <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning-bg/50 px-4 py-3 text-sm text-warning-foreground">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <p>
+              <span className="font-medium">You've reached your plan's service limit.</span> Archive an existing service to free
+              up a slot, or upgrade your plan for unlimited services.
+            </p>
           </div>
-        </Tabs>
+        )}
+
+        <div className="mb-5 flex flex-wrap items-center gap-4">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search services..."
+              className="h-12 rounded-[12px] bg-white pl-11 text-sm shadow-sm sm:text-base"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {servicesLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i}>
+                <CardContent className="p-4">
+                  <Skeleton className="h-4 w-16 mb-2" />
+                  <Skeleton className="h-5 w-32 mb-1" />
+                  <Skeleton className="h-4 w-48" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : filteredServices.length === 0 ? (
+          <EmptyState message="No services yet. Add your first service." />
+        ) : (
+          <div className="space-y-3">
+            {filteredServices.map((s) => {
+              const item = toCatalogItem(s);
+              return (
+                <SelectableItemCard
+                  key={s.id}
+                  item={item}
+                  currency={currency}
+                  formatCurrency={formatCurrency}
+                  isSelected={selectedItems.has(s.id)}
+                  onSelect={() => handleSelectItem(s.id)}
+                  canEdit={canEdit}
+                  onViewDetails={() => setViewDetailItem(item)}
+                  onEdit={() => setEditItem(item)}
+                  integrityIssues={getItemIssues(s.id)}
+                />
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Bulk Actions Bar */}
       <BulkActionsBar
         selectedCount={selectedItems.size}
-        itemType={selectedTypes.size === 1 ? Array.from(selectedTypes)[0] : "service"}
-        onCreatePackage={showCreatePackage && canCreatePackage ? () => setPackageDialogOpen(true) : undefined}
+        itemType="service"
+        onCreatePackage={selectedItems.size > 0 ? () => setPackageDialogOpen(true) : undefined}
         onFlag={canFlag ? () => setFlagDialogOpen(true) : undefined}
-        onArchive={canArchive && activeTab !== "vouchers" ? () => setArchiveDialogOpen(true) : undefined}
-        onDelete={(canDelete || canRequestDelete) && showDeleteOption ? handleBulkDelete : undefined}
-        onDiscontinue={activeTab === "vouchers" && canArchive ? () => setArchiveDialogOpen(true) : undefined}
+        onArchive={canArchive ? () => setArchiveDialogOpen(true) : undefined}
+        onDelete={canDelete || canRequestDelete ? handleBulkDelete : undefined}
         onClear={clearSelection}
         canDelete={canDelete || canRequestDelete}
         canArchive={canArchive}
       />
 
-      {/* Confirmation Dialogs */}
       <ReasonConfirmDialog
         open={flagDialogOpen}
         onOpenChange={setFlagDialogOpen}
@@ -1525,18 +524,6 @@ export default function ServicesPage() {
         isLoading={isProcessing}
       />
 
-      <DeleteConfirmDialog
-        open={binDeleteTargets.length > 0}
-        onOpenChange={(open) => {
-          if (!open && !isBinBusy) setBinDeleteTargets([]);
-        }}
-        itemName={binDeleteTargets[0]?.name || ""}
-        itemCount={binDeleteTargets.length}
-        onConfirm={confirmPermanentBinDelete}
-        isLoading={isBinBusy}
-        description="This permanently removes the selected item(s). This action cannot be undone."
-      />
-
       <RequestDeleteDialog
         open={requestDeleteDialogOpen}
         onOpenChange={setRequestDeleteDialogOpen}
@@ -1545,736 +532,67 @@ export default function ServicesPage() {
         isLoading={isProcessing}
       />
 
-      {/* Dialogs */}
-      <AddServiceDialog
-        open={serviceDialogOpen}
-        onOpenChange={setServiceDialogOpen}
-        onSuccess={refetchServices}
-      />
+      <AddServiceDialog open={serviceDialogOpen} onOpenChange={setServiceDialogOpen} onSuccess={refetchServices} />
       <AddPackageDialog
         open={packageDialogOpen}
         onOpenChange={(isOpen) => {
           setPackageDialogOpen(isOpen);
           if (!isOpen) clearSelection();
         }}
-        onSuccess={refetchPackages}
+        onSuccess={() => {}}
         preSelectedItems={preSelectedPackageItems}
-      />
-      <AddProductDialog
-        open={productDialogOpen}
-        onOpenChange={setProductDialogOpen}
-        onSuccess={refetchProducts}
-      />
-      <AddVoucherDialog
-        open={voucherDialogOpen}
-        onOpenChange={setVoucherDialogOpen}
-        onSuccess={refetchVouchers}
       />
       <ImportDialog
         open={importDialogOpen}
         onOpenChange={(open) => {
           if (!isImporting) setImportDialogOpen(open);
         }}
-        title={`Import ${importType === "services" ? "Services" : "Products"}`}
-        description={`Upload a CSV or Excel file to bulk import ${importType}.`}
-        templateColumns={IMPORT_TEMPLATES[importType]}
-        templateFileName={importType}
+        title="Import Services"
+        description="Upload a CSV or Excel file to bulk import services."
+        templateColumns={IMPORT_TEMPLATE}
+        templateFileName="services"
         onImport={handleImportCatalog}
       />
 
       {selectedItems.size === 0 && (
-        <>
-          <button
-            type="button"
-            onClick={() => setBinOpen(true)}
-            className="fixed bottom-6 right-6 z-40 hidden items-center gap-2 rounded-full bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground shadow-lg hover:opacity-95 lg:inline-flex"
-          >
-            <Trash2 className="h-4 w-4" />
-            Bin ({binItems.length})
-          </button>
-        </>
+        <button
+          type="button"
+          onClick={() => setBinOpen(true)}
+          className="fixed bottom-6 right-6 z-40 hidden items-center gap-2 rounded-full bg-destructive px-4 py-2.5 text-sm font-medium text-destructive-foreground shadow-lg hover:opacity-95 lg:inline-flex"
+        >
+          <Trash2 className="h-4 w-4" />
+          Bin ({binItems.length})
+        </button>
       )}
 
-      <Dialog
+      <CatalogBinDialog
         open={binOpen}
-        onOpenChange={(open) => {
-          setBinOpen(open);
-          if (!open) {
-            setBinSelectMode(false);
-            setSelectedBinItemKeys(new Set());
-          }
-        }}
-      >
-        <DialogContent className="max-h-[calc(100dvh-1.5rem)] gap-0 rounded-[22px] border-0 sm:max-h-[88vh] sm:max-w-[640px]">
-          <DialogHeader className="space-y-1.5 text-left">
-            <DialogTitle className="font-serif text-[24px] font-medium tracking-[-0.3px]">
-              Bin
-            </DialogTitle>
-            <DialogDescription className="text-[14px] leading-5">
-              Restore deleted services, products, packages, and vouchers within 7 days.
-            </DialogDescription>
-            <div className="pt-1 text-[13px] text-muted-foreground">Total: {binItems.length}</div>
-          </DialogHeader>
+        onOpenChange={setBinOpen}
+        binItems={binItems}
+        binLoading={binLoading}
+        restoreItem={restoreItem}
+        permanentlyDeleteItem={permanentlyDeleteItem}
+        refetchBinItems={refetchBinItems}
+        onChanged={refetchAll}
+        canRestore={canRestoreBinItems}
+        canDelete={canDeleteBinItems}
+      />
 
-          <div className={cn(DIALOG_BODY_PADDING, isBinBusy && "pointer-events-none opacity-60")}>
-          {!binLoading && binItems.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isBinBusy}
-                  className="h-9 rounded-full border-[#141014]/10 px-4 font-normal"
-                  onClick={() => {
-                    if (binSelectMode) {
-                      setBinSelectMode(false);
-                      setSelectedBinItemKeys(new Set());
-                      return;
-                    }
-                    setBinSelectMode(true);
-                  }}
-                >
-                  {binSelectMode ? "Cancel select" : "Select"}
-                </Button>
-                {binSelectMode && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={isBinBusy}
-                    className="h-9 rounded-full border-[#141014]/10 px-4 font-normal"
-                    onClick={() => {
-                      if (selectedBinItemKeys.size === binItems.length) {
-                        setSelectedBinItemKeys(new Set());
-                        return;
-                      }
-                      setSelectedBinItemKeys(new Set(binItems.map((item) => makeBinKey(item))));
-                    }}
-                  >
-                    {selectedBinItemKeys.size === binItems.length ? "Clear all" : "Select all"}
-                  </Button>
-                )}
-              </div>
-
-              {binSelectMode && selectedBinItemKeys.size > 0 && (
-                <div className="scrollbar-hide flex w-full items-center gap-2 overflow-x-auto sm:w-auto">
-                  <span className="shrink-0 text-[13px] text-[#141014]/60">
-                    {selectedBinItemKeys.size} selected
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={!canRestoreBinItems || isBinBusy}
-                    className="h-9 shrink-0 rounded-full border-[#141014]/10 px-4 font-normal"
-                    onClick={async () => {
-                      const selectedItems = binItems.filter((item) => selectedBinItemKeys.has(makeBinKey(item)));
-                      setBinProcessingItemId("__bulk_restore__");
-                      let restoredCount = 0;
-                      for (const item of selectedItems) {
-                        const expiresAt = new Date(new Date(item.deleted_at).getTime() + 7 * 24 * 60 * 60 * 1000);
-                        if (expiresAt.getTime() <= Date.now()) continue;
-                        const restored = await restoreItem(item.id, item.type, { silent: true, skipRefetch: true });
-                        if (restored) restoredCount++;
-                      }
-                      await Promise.all([refetchBinItems(), refetchAll()]);
-                      setBinProcessingItemId(null);
-                      setSelectedBinItemKeys(new Set());
-                      setBinSelectMode(false);
-                      toast({
-                        title: "Restore complete",
-                        description: restoredCount > 0 ? `${restoredCount} item(s) restored.` : "No selected items could be restored.",
-                      });
-                    }}
-                  >
-                    {binProcessingItemId === "__bulk_restore__" ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Restoring...
-                      </>
-                    ) : (
-                      "Restore selected"
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    disabled={!canDeleteBinItems || isBinBusy}
-                    className="h-9 shrink-0 rounded-full bg-[#a23b3b] px-4 font-normal text-white hover:bg-[#8f3030]"
-                    onClick={() => {
-                      setBinDeleteTargets(
-                        binItems
-                          .filter((item) => selectedBinItemKeys.has(makeBinKey(item)))
-                          .map((item) => ({ id: item.id, name: item.name, type: item.type })),
-                      );
-                    }}
-                  >
-                    {binProcessingItemId === "__bulk_delete__" ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Deleting...
-                      </>
-                    ) : (
-                      "Delete selected"
-                    )}
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {binLoading ? (
-            <div className="space-y-4">
-              {Array.from({ length: 2 }).map((_, idx) => (
-                <Skeleton key={idx} className="h-[340px] rounded-[22px]" />
-              ))}
-            </div>
-          ) : binItems.length === 0 ? (
-            <div className="rounded-[14px] border border-[#141014]/[0.06] px-5 py-[60px] text-center text-sm text-[#141014]/42">
-              Bin is empty.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-4">
-              {binItems.map((item) => {
-                const expiresAt = new Date(new Date(item.deleted_at).getTime() + 7 * 24 * 60 * 60 * 1000);
-                const remainingMs = expiresAt.getTime() - Date.now();
-                const canStillRestore = remainingMs > 0;
-                const remainingDays = Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
-
-                return (
-                  <Card
-                    key={`${item.type}-${item.id}`}
-                    className="relative overflow-hidden rounded-[22px] border-[#141014]/[0.06] shadow-none"
-                  >
-                    <CardContent className="p-0">
-                      {binSelectMode && (
-                        <Checkbox
-                          aria-label={`Select ${item.name}`}
-                          checked={selectedBinItemKeys.has(makeBinKey(item))}
-                          onCheckedChange={(checked) => {
-                            setSelectedBinItemKeys((prev) => {
-                              const next = new Set(prev);
-                              const key = makeBinKey(item);
-                              if (checked) next.add(key);
-                              else next.delete(key);
-                              return next;
-                            });
-                          }}
-                          className="absolute right-3.5 top-3.5 z-10 h-6 w-6 rounded-[7px] border-[#141014]/15 bg-white data-[state=checked]:border-[#2e1f4e] data-[state=checked]:bg-[#2e1f4e]"
-                        />
-                      )}
-                      {item.image_urls && item.image_urls.length > 0 ? (
-                        <img
-                          src={item.image_urls[0]}
-                          alt={item.name}
-                          className="h-[150px] w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-[150px] w-full items-center justify-center bg-[#f2eefa] text-[#2e1f4e]">
-                          {item.type === "service" && <Scissors className="h-10 w-10" />}
-                          {item.type === "product" && <ShoppingBag className="h-10 w-10" />}
-                          {item.type === "package" && <Package className="h-10 w-10" />}
-                          {item.type === "voucher" && <Gift className="h-10 w-10" />}
-                        </div>
-                      )}
-                      <div className="p-[18px] sm:px-5">
-                        <div className="mb-2 flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <h4 className="truncate text-[17px] font-normal leading-tight text-[#141014]">
-                              {item.name}
-                            </h4>
-                            {item.description ? (
-                              <p className="mt-1 line-clamp-2 text-xs text-[#141014]/50">
-                                {item.description}
-                              </p>
-                            ) : null}
-                          </div>
-                          <Badge
-                            variant="secondary"
-                            className="shrink-0 border-0 bg-[#f1ece3] px-3 font-normal capitalize text-[#141014]/60"
-                          >
-                            {item.type}
-                          </Badge>
-                        </div>
-                        <div className="mb-3 text-[13px] text-[#141014]/60">
-                          {canStillRestore
-                            ? `${remainingDays} day(s) left before permanent deletion`
-                            : "Restore window expired"}
-                        </div>
-                        {item.location_names && item.location_names.length > 0 && (
-                          <div className="mb-4 flex flex-wrap gap-1.5">
-                            {item.location_names.map((locationName) => (
-                              <Badge
-                                key={`${item.id}-${locationName}`}
-                                variant="secondary"
-                                className="bg-[#f2eefa] px-3 font-normal text-[#2e1f4e]"
-                              >
-                                {locationName}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-9 rounded-full border-[#141014]/10 px-4 font-normal"
-                            disabled={
-                              binSelectMode ||
-                              !canRestoreBinItems ||
-                              !canStillRestore ||
-                              binProcessingItemId === item.id ||
-                              binProcessingItemId === "__bulk_restore__" ||
-                              binProcessingItemId === "__bulk_delete__"
-                            }
-                            onClick={async () => {
-                              setBinProcessingItemId(item.id);
-                              await restoreItem(item.id, item.type);
-                              await refetchAll();
-                              setBinProcessingItemId(null);
-                            }}
-                          >
-                            {binProcessingItemId === item.id ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Working...
-                              </>
-                            ) : (
-                              "Restore"
-                            )}
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="h-9 rounded-full bg-[#f7e5e5] px-4 font-normal text-[#a23b3b] hover:bg-[#f3dada]"
-                            disabled={
-                              binSelectMode ||
-                              !canDeleteBinItems ||
-                              binProcessingItemId === item.id ||
-                              binProcessingItemId === "__bulk_restore__" ||
-                              binProcessingItemId === "__bulk_delete__"
-                            }
-                            onClick={() => {
-                              setBinDeleteTargets([{ id: item.id, name: item.name, type: item.type }]);
-                            }}
-                          >
-                            {binProcessingItemId === item.id ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Deleting...
-                              </>
-                            ) : (
-                              "Delete now"
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={fixDialogOpen}
-        onOpenChange={(open) => {
-          setFixDialogOpen(open);
-          if (!open) {
-            setFixTarget(null);
-            setFixLocationIds([]);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Fix config: {fixTarget?.itemName || "Item"}</DialogTitle>
-            <DialogDescription>
-              Resolve flagged mapping/currency issues. Blocking issues stay hidden on storefront until fixed.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            {fixTarget?.issueCodes?.length ? (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Detected issues</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {fixTarget.issueCodes.map((issueCode) => (
-                    <Badge key={issueCode} variant="outline">
-                      {issueCode}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-
-            {isChainTier ? (
-              <LocationScopePicker
-                locations={manageableLocations}
-                selectedLocationIds={fixLocationIds}
-                onChange={setFixLocationIds}
-                disabled={isApplyingFix || locationsLoading || manageableLocations.length === 0}
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Non-chain tenants use legacy visibility rules. Save to re-run validation.
-              </p>
-            )}
-
-            {hasFixMixedCurrencies && (
-              <p className="text-sm text-destructive">
-                Selected branches use different currencies. Choose one currency group.
-              </p>
-            )}
-
-            {!canApplyIntegrityFix && (
-              <p className="text-sm text-muted-foreground">
-                Only owner and manager roles can apply integrity fixes.
-              </p>
-            )}
-          </div>
-          <DialogFooter className="mt-4">
-            <Button
-              variant="outline"
-              onClick={() => setFixDialogOpen(false)}
-              disabled={isApplyingFix}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={applyIntegrityFix}
-              disabled={
-                isApplyingFix ||
-                !canApplyIntegrityFix ||
-                (isChainTier && fixLocationIds.length === 0) ||
-                hasFixMixedCurrencies
-              }
-            >
-              {isApplyingFix ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Apply fix
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* View/Edit Dialogs */}
       <EditServiceDialog
-        open={!!editItem && editItem.type === "service"}
+        open={!!editItem}
         onOpenChange={(open) => !open && setEditItem(null)}
-        service={editItem?.type === "service" ? services.find(s => s.id === editItem.id) || null : null}
+        service={editItem ? services.find((s) => s.id === editItem.id) || null : null}
         onSuccess={refetchServices}
-      />
-      <EditProductDialog
-        open={!!editItem && editItem.type === "product"}
-        onOpenChange={(open) => !open && setEditItem(null)}
-        product={editItem?.type === "product" ? products.find(p => p.id === editItem.id) || null : null}
-        onSuccess={refetchProducts}
-      />
-      <EditPackageDialog
-        open={!!editItem && editItem.type === "package"}
-        onOpenChange={(open) => !open && setEditItem(null)}
-        pkg={editItem?.type === "package" ? packages.find(p => p.id === editItem.id) || null : null}
-        onSuccess={refetchPackages}
-      />
-      <EditVoucherDialog
-        open={!!editItem && editItem.type === "voucher"}
-        onOpenChange={(open) => !open && setEditItem(null)}
-        voucher={editItem?.type === "voucher" ? vouchers.find((voucher) => voucher.id === editItem.id) || null : null}
-        onSuccess={refetchVouchers}
       />
 
       <ServiceDetailDialog
-        open={!!viewDetailItem && viewDetailItem.type === "service"}
+        open={!!viewDetailItem}
         onOpenChange={(open) => !open && setViewDetailItem(null)}
-        service={viewDetailItem?.type === "service" ? services.find(s => s.id === viewDetailItem.id) || null : null}
+        service={viewDetailItem ? services.find((s) => s.id === viewDetailItem.id) || null : null}
         onEdit={() => { setEditItem(viewDetailItem); setViewDetailItem(null); }}
         onArchive={() => { setArchiveDialogOpen(true); setViewDetailItem(null); }}
-        onDelete={() => { setDeleteDialogOpen(true); setViewDetailItem(null); }}
-      />
-      <ProductDetailDialog
-        open={!!viewDetailItem && viewDetailItem.type === "product"}
-        onOpenChange={(open) => !open && setViewDetailItem(null)}
-        product={viewDetailItem?.type === "product" ? products.find(p => p.id === viewDetailItem.id) || null : null}
-        onEdit={() => { setEditItem(viewDetailItem); setViewDetailItem(null); }}
-        onArchive={() => { setArchiveDialogOpen(true); setViewDetailItem(null); }}
-        onDelete={() => { setDeleteDialogOpen(true); setViewDetailItem(null); }}
-      />
-      <PackageDetailDialog
-        open={!!viewDetailItem && viewDetailItem.type === "package"}
-        onOpenChange={(open) => !open && setViewDetailItem(null)}
-        pkg={viewDetailItem?.type === "package" ? packages.find(p => p.id === viewDetailItem.id) || null : null}
-        onEdit={() => { setEditItem(viewDetailItem); setViewDetailItem(null); }}
-        onArchive={() => { setArchiveDialogOpen(true); setViewDetailItem(null); }}
-        onDelete={() => { setDeleteDialogOpen(true); setViewDetailItem(null); }}
-      />
-      <VoucherDetailDialog
-        open={!!viewDetailItem && viewDetailItem.type === "voucher"}
-        onOpenChange={(open) => !open && setViewDetailItem(null)}
-        voucher={viewDetailItem?.type === "voucher" ? vouchers.find((voucher) => voucher.id === viewDetailItem.id) || null : null}
-        onEdit={() => { setEditItem(viewDetailItem); setViewDetailItem(null); }}
-        onDiscontinue={() => { setArchiveDialogOpen(true); setViewDetailItem(null); }}
         onDelete={() => { setDeleteDialogOpen(true); setViewDetailItem(null); }}
       />
     </SalonSidebar>
-  );
-}
-
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="text-center py-12">
-      <Package className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-      <p className="text-muted-foreground">{message}</p>
-    </div>
-  );
-}
-
-// Status chip component
-function StatusChip({ status, isFlagged }: { status?: string; isFlagged?: boolean }) {
-  if (isFlagged) {
-    return (
-      <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20 text-xs">
-        <Flag className="w-3 h-3 mr-1" />
-        Flagged
-      </Badge>
-    );
-  }
-
-  if (status === "archived") {
-    return (
-      <Badge variant="secondary" className="bg-muted text-muted-foreground text-xs">
-        <Archive className="w-3 h-3 mr-1" />
-        Archived
-      </Badge>
-    );
-  }
-
-  return null;
-}
-
-interface SelectableItemCardProps {
-  item: CatalogItem;
-  currency: string;
-  formatCurrency: (amount: number) => string;
-  isSelected?: boolean;
-  onSelect?: (id: string, type: ItemType) => void;
-  canEdit?: boolean;
-  onViewDetails?: () => void;
-  onEdit?: () => void;
-  integrityIssues?: CatalogIntegrityIssue[];
-}
-
-function SelectableItemCard({
-  item,
-  currency,
-  formatCurrency,
-  isSelected = false,
-  onSelect,
-  canEdit = false,
-  onViewDetails,
-  onEdit,
-  integrityIssues = [],
-}: SelectableItemCardProps) {
-  const typeLabels: Record<string, { label: string; color: string; iconBg: string; iconColor: string }> = {
-    service: {
-      label: "SERVICE",
-      color: "text-muted-foreground",
-      iconBg: "bg-[#f1eafa]",
-      iconColor: "text-primary",
-    },
-    package: {
-      label: "PACKAGE",
-      color: "text-muted-foreground",
-      iconBg: "bg-[#e1f3ec]",
-      iconColor: "text-[#268766]",
-    },
-    product: {
-      label: "PRODUCT",
-      color: "text-muted-foreground",
-      iconBg: "bg-[#fff2ce]",
-      iconColor: "text-[#8a6510]",
-    },
-    voucher: {
-      label: "VOUCHER",
-      color: "text-muted-foreground",
-      iconBg: "bg-[#edeaf1]",
-      iconColor: "text-primary",
-    },
-  };
-
-  const typeInfo = typeLabels[item.type] || typeLabels.service;
-  const blockingIssue = integrityIssues.find((issue) => issue.severity === "blocking");
-  const warningIssue = integrityIssues.find((issue) => issue.severity === "warning");
-  const firstIssue = blockingIssue || warningIssue;
-
-  return (
-    <Card className={cn(
-      "rounded-[20px] border-border/60 bg-white shadow-sm transition-shadow hover:border-primary/20 hover:shadow-md",
-      isSelected && "border-foreground ring-1 ring-foreground"
-    )}>
-      <CardContent className="p-3.5 sm:px-5 sm:py-4">
-        <div className="grid grid-cols-[auto_44px_minmax(0,1fr)_auto] items-start gap-2.5 sm:flex sm:items-center sm:gap-4">
-          {/* Checkbox */}
-          {onSelect && (
-            <Checkbox
-              checked={isSelected}
-              onCheckedChange={() => onSelect(item.id, item.type)}
-              className="mt-1 sm:mt-0"
-            />
-          )}
-
-          {/* Image thumbnail */}
-          {item.images && item.images.length > 0 ? (
-            <img
-              src={item.images[0]}
-              alt={item.name}
-              className="h-11 w-11 flex-shrink-0 rounded-[11px] object-cover sm:h-14 sm:w-14 sm:rounded-[12px]"
-            />
-          ) : (
-            <div className={cn(
-              "flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-[11px] sm:h-14 sm:w-14 sm:rounded-[12px]",
-              typeInfo.iconBg,
-            )}>
-              {item.type === "service" && <Scissors className={cn("h-5 w-5", typeInfo.iconColor)} />}
-              {item.type === "package" && <Package className={cn("h-5 w-5", typeInfo.iconColor)} />}
-              {item.type === "product" && <ShoppingBag className={cn("h-5 w-5", typeInfo.iconColor)} />}
-              {item.type === "voucher" && <Gift className={cn("h-5 w-5", typeInfo.iconColor)} />}
-            </div>
-          )}
-
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <p className={`text-xs font-medium uppercase tracking-wider ${typeInfo.color}`}>
-                {typeInfo.label}
-              </p>
-              <StatusChip status={item.status} isFlagged={item.is_flagged} />
-              {firstIssue && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "text-xs",
-                        blockingIssue
-                          ? "border-destructive/40 bg-destructive/10 text-destructive"
-                          : "border-warning/40 bg-warning/10 text-warning",
-                      )}
-                    >
-                      <AlertTriangle className="mr-1 h-3 w-3" />
-                      {blockingIssue ? "Blocking" : "Warning"}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-sm">
-                    <p className="text-xs">{firstIssue.issue_message}</p>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <h3 className="truncate text-sm font-medium sm:text-base">{item.name}</h3>
-              {item.type === "voucher" && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigator.clipboard.writeText(item.name);
-                    toast({ title: "Copied", description: `Voucher code ${item.name} copied to clipboard.` });
-                  }}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-            <p className="line-clamp-1 text-xs text-muted-foreground sm:text-sm">
-              {item.description || "No description"}
-            </p>
-            {firstIssue && firstIssue.branch_location_names.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {firstIssue.branch_location_names.map((branchName) => (
-                  <Badge key={`${item.id}-${branchName}`} variant="secondary" className="text-[10px]">
-                    {branchName}
-                  </Badge>
-                ))}
-              </div>
-            )}
-
-            <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              {item.duration && (
-                <Badge variant="secondary" className="border-0 bg-[#eee9e1] text-xs font-normal text-muted-foreground">
-                  <Clock className="w-3 h-3 mr-1" />
-                  {item.duration} mins
-                </Badge>
-              )}
-              {item.stock !== undefined && (
-                <Badge variant="secondary" className="border-0 bg-[#e1f3ec] text-xs font-normal text-[#268766]">
-                  {item.stock} in stock
-                </Badge>
-              )}
-              {item.originalPrice && item.originalPrice > item.price && (
-                <Badge variant="secondary" className="border-0 bg-[#eee9e1] text-xs font-normal text-muted-foreground">
-                  {Math.round((1 - item.price / item.originalPrice) * 100)}% savings
-                </Badge>
-              )}
-              {item.type === "voucher" && item.status && (
-                <Badge
-                  variant="secondary"
-                  className={cn(
-                    "border-0 text-xs font-normal capitalize",
-                    item.status === "active"
-                      ? "bg-[#e1f3ec] text-[#268766]"
-                      : item.status === "redeemed"
-                        ? "bg-[#eee9e1] text-muted-foreground"
-                        : "bg-destructive/10 text-destructive",
-                  )}
-                >
-                  {item.status}
-                </Badge>
-              )}
-            </div>
-
-            <div className="mt-2 sm:hidden">
-              <p className="font-serif text-base font-semibold">{formatCurrency(item.price)}</p>
-              {item.originalPrice && (
-                <p className="text-xs text-muted-foreground line-through">
-                  {formatCurrency(item.originalPrice)}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-start gap-1">
-            <div className="hidden flex-shrink-0 text-right sm:block">
-              <p className="font-serif text-lg font-semibold">{formatCurrency(item.price)}</p>
-              {item.originalPrice && (
-                <p className="text-sm text-muted-foreground line-through">
-                  {formatCurrency(item.originalPrice)}
-                </p>
-              )}
-            </div>
-
-            {/* Three-dot menu */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9 rounded-full sm:h-10 sm:w-10">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onViewDetails}>
-                  <Eye className="w-4 h-4 mr-2" />
-                  View Details
-                </DropdownMenuItem>
-                {canEdit && (
-                  <DropdownMenuItem onClick={onEdit}>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
   );
 }

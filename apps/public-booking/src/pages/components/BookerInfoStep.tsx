@@ -17,9 +17,10 @@ import {
   SelectValue,
 } from "@ui/select";
 import { useMarketCountries } from "@/hooks/useMarketCountries";
+import { validateE164Phone } from "@shared/validation";
 import type { DeliveryAddress } from "@/hooks";
-import { AlertTriangle, Eye, EyeOff, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Check, Eye, EyeOff, Loader2, Lock, Mail, Pencil, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 export interface BookerInfo {
   firstName: string;
@@ -51,6 +52,8 @@ interface BookerInfoStepProps {
   onOtpChange?: (value: string) => void;
   onOtpSubmit?: () => void;
   onOtpResend?: () => void;
+  /** Fires whenever the in-place email edit (pencil → re-check) is open and unconfirmed, so the wizard can block "Continue" until it settles. */
+  onEmailEditPendingChange?: (pending: boolean) => void;
 }
 
 export function BookerInfoStep({
@@ -73,6 +76,7 @@ export function BookerInfoStep({
   onOtpChange,
   onOtpSubmit,
   onOtpResend,
+  onEmailEditPendingChange,
 }: BookerInfoStepProps) {
   const { data: marketCountries } = useMarketCountries();
   const selectableCountries = marketCountries ?? PRODUCT_LIVE_COUNTRIES;
@@ -86,10 +90,60 @@ export function BookerInfoStep({
     onChange({ ...info, [field]: value });
   };
 
+  // Only relevant once we've reached the manual-entry form for someone who
+  // doesn't already have an account (an existing account instead goes
+  // through the OTP/password flow above, whose fields are already locked).
+  // auth-resolve-identifier already confirmed no account exists for the
+  // email they arrived with, so it starts locked without a second backend
+  // round-trip -- clicking the pencil re-opens it, and "Check email" below
+  // re-runs the SAME onEmailContinue/auth-resolve-identifier call used for
+  // the very first email. If that now finds an account, emailStage moves to
+  // "otp"/"password" (this whole block disappears, replaced by sign-in) --
+  // so manually-typed name/phone are cleared defensively rather than risk
+  // them leaking back in if the user bails out of sign-in to a guest entry.
+  const showCheckedEmailField = emailStage === "details" && !hasExistingAccount;
+  const [emailEditing, setEmailEditing] = useState(false);
+  const [emailJustConfirmed, setEmailJustConfirmed] = useState(false);
+  const wasProcessingEmailRef = useRef(false);
+  // Snapshot of the email at the moment edit mode opened — "Check email"
+  // only makes sense once they've actually changed it, not the instant they
+  // click the pencil.
+  const emailAtEditStartRef = useRef("");
+  const emailHasBeenEdited = emailEditing && info.email.trim() !== emailAtEditStartRef.current.trim();
+
+  useEffect(() => {
+    const wasProcessing = wasProcessingEmailRef.current;
+    wasProcessingEmailRef.current = isProcessingEmail;
+    if (!(wasProcessing && !isProcessingEmail && emailEditing)) return;
+
+    if (emailStage === "details") {
+      setEmailJustConfirmed(true);
+      const timer = setTimeout(() => {
+        setEmailJustConfirmed(false);
+        setEmailEditing(false);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+
+    setEmailEditing(false);
+    onChange({ ...info, firstName: "", lastName: "", phone: "" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isProcessingEmail, emailEditing, emailStage]);
+
+  // Block "Continue" on the wizard's own footer for as long as the email is
+  // unlocked for editing but hasn't been re-confirmed yet (covers both "they
+  // just clicked the pencil" and "they edited it and the check is running").
+  useEffect(() => {
+    onEmailEditPendingChange?.(showCheckedEmailField && emailEditing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showCheckedEmailField, emailEditing]);
+
+  const phoneValidation = validateE164Phone(info.phone);
+
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-serif text-xl font-semibold mb-2">Your Information</h3>
+        <h3 className="font-serif text-lg font-semibold mb-2">Your Information</h3>
         <p className="text-sm text-muted-foreground mb-6">
           {emailStage === "details"
             ? "Please provide your contact details for booking confirmation"
@@ -99,18 +153,64 @@ export function BookerInfoStep({
 
       <div className="space-y-2">
         <Label>Email *</Label>
-        <Input
-          type="email"
-          value={info.email}
-          onChange={(e) => updateField("email", e.target.value)}
-          placeholder="john@example.com"
-          disabled={
-            emailStage === "otp" ||
-            emailStage === "password" ||
-            isProcessingEmail ||
-            (emailStage === "details" && hasExistingAccount)
-          }
-        />
+        {showCheckedEmailField ? (
+          <>
+            <div className="relative">
+              <Input
+                type="email"
+                value={info.email}
+                onChange={(e) => updateField("email", e.target.value)}
+                placeholder="john@example.com"
+                disabled={!emailEditing || isProcessingEmail}
+                className="pr-10"
+              />
+              {emailEditing && isProcessingEmail && (
+                <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+              )}
+              {emailJustConfirmed && (
+                <Check className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-success" />
+              )}
+              {!emailEditing && !emailJustConfirmed && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    emailAtEditStartRef.current = info.email;
+                    setEmailEditing(true);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Edit email"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            {emailHasBeenEdited && !isProcessingEmail && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onEmailContinue}
+                disabled={!info.email.trim()}
+              >
+                <Mail className="w-3.5 h-3.5 mr-1.5" />
+                Check email
+              </Button>
+            )}
+          </>
+        ) : (
+          <Input
+            type="email"
+            value={info.email}
+            onChange={(e) => updateField("email", e.target.value)}
+            placeholder="john@example.com"
+            disabled={
+              emailStage === "otp" ||
+              emailStage === "password" ||
+              isProcessingEmail ||
+              (emailStage === "details" && hasExistingAccount)
+            }
+          />
+        )}
       </div>
 
       {emailStage === "email" && (
@@ -206,6 +306,8 @@ export function BookerInfoStep({
 
       {emailStage === "details" && (
         <>
+      {!hasExistingAccount && (
+        <>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>First Name *</Label>
@@ -213,7 +315,6 @@ export function BookerInfoStep({
             value={info.firstName}
             onChange={(e) => updateField("firstName", e.target.value)}
             placeholder="John"
-            disabled={hasExistingAccount}
           />
         </div>
         <div className="space-y-2">
@@ -222,7 +323,6 @@ export function BookerInfoStep({
             value={info.lastName}
             onChange={(e) => updateField("lastName", e.target.value)}
             placeholder="Doe"
-            disabled={hasExistingAccount}
           />
         </div>
       </div>
@@ -235,8 +335,11 @@ export function BookerInfoStep({
           placeholder="Phone number"
           defaultCountry="NG"
           allowedCountryCodes={selectableCountries.map((country) => country.code)}
-          disabled={hasExistingAccount}
+          hasError={!phoneValidation.isValid}
         />
+        {!phoneValidation.isValid && (
+          <p className="text-sm text-destructive">{phoneValidation.error}</p>
+        )}
         {phoneEmailConflict && (
           <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
@@ -246,6 +349,8 @@ export function BookerInfoStep({
           </div>
         )}
       </div>
+      </>
+      )}
 
       <div className="space-y-2">
         <Label>Notes for the salon</Label>

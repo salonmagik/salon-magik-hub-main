@@ -230,27 +230,27 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
       // subscription_status === "past_due". Removed: the subscription
       // lifecycle work made past_due a deliberately *operational* state for
       // the length of the grace period (see is_tenant_operational and AD-4
-      // in docs/design/paystack-subscription-lifecycle-completion.design.md)
-      // — the tenant is meant to keep working and be warned, not be locked
+      // in docs/design/paystack-subscription-lifecycle-completion.design.md):
+      // the tenant is meant to keep working and be warned, not be locked
       // out of the entire dashboard. A `blocking: true` overlay with no
       // route exception made that impossible in practice: it re-triggers on
       // every route (including /salon/subscription itself, its own CTA
       // target), permanently hiding the actual settle UI behind an overlay
       // whose only action loops back to the same block. BillingStateBanner
-      // (mounted in SalonSidebar) is this system's replacement — a
+      // (mounted in SalonSidebar) is this system's replacement: a
       // persistent, non-blocking, unmissable banner with a working settle
       // action, for both past_due and suspended.
 
-      // Trial status (expired-block, T-7/T-3 warnings) is NOT handled here —
+      // Trial status (expired-block, T-7/T-3 warnings) is NOT handled here.
       // TrialBanner.tsx already owns the full lifecycle via useTrialEnforcement
       // (which is override-aware), rendering its own non-dismissable blocking
       // dialog when hard-expired and its own warning strip otherwise. This
       // banner system used to duplicate that logic independently, which meant
       // a hard-expired tenant got TWO blocking overlays stacked on top of each
-      // other — the cruder one from here (no "Contact Admin" path, and until
+      // other: the cruder one from here (no "Contact Admin" path, and until
       // recently no sign-out) painted over TrialBanner's better one underneath.
 
-      // Priority 12: Owner Invite Expired — staff_invitations is queried
+      // Priority 12: Owner Invite Expired. staff_invitations is queried
       // tenant-wide with no scoping to who the invite was for or who sent
       // it, so without this role check every team member (not just the
       // owner) would see "your owner invitation expired," which reads as
@@ -272,7 +272,7 @@ export function BannerProvider({ children, platform }: BannerProviderProps) {
         });
       }
 
-      // Only worth surfacing while SMS actually can't send right now — this
+      // Only worth surfacing while SMS actually can't send right now. This
       // used to show unconditionally for every NG branch all day, which
       // read as "SMS is broken" even at 3pm when sending works fine.
       if (activeBranchCountry === "NG") {

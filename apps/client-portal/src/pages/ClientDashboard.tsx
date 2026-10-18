@@ -23,6 +23,7 @@ import { Skeleton } from "@ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { formatCurrency } from "@shared/currency";
 import { cn } from "@shared/utils";
+import { buildPublicBookingUrl } from "@/lib/bookingUrl";
 
 const paymentStatusLabels: Record<string, string> = {
   unpaid: "Payment pending",
@@ -43,13 +44,39 @@ function bookingStatus(booking: {
   return booking.status === "scheduled" ? "Confirmed" : booking.status;
 }
 
+/** What to call a booking row when it has no services -- a product-only
+ * purchase previously fell back to "Salon appointment"/"Salon visit", which
+ * misdescribes an order. */
+function bookingHeadline(
+  booking: {
+    services?: { service_name: string }[] | null;
+    products?: { product_name: string }[] | null;
+  },
+  fallback: string,
+) {
+  if (booking.services && booking.services.length > 0) {
+    return booking.services.map((service) => service.service_name).join(", ");
+  }
+  if (booking.products && booking.products.length > 0) {
+    return booking.products.map((product) => product.product_name).join(", ");
+  }
+  return fallback;
+}
+
 export default function ClientDashboard() {
   const { customers, isLoading: authLoading } = useClientAuth();
   const {
-    bookings,
+    bookings: upcomingRaw,
     nextAppointment,
     isLoading: upcomingLoading,
   } = useClientBookings("upcoming");
+  // "Upcoming bookings" here means real scheduled appointments, not
+  // dateless product/package orders or appointments still awaiting a time
+  // slot (those showed as an empty "--" card before this filter).
+  const bookings = useMemo(
+    () => upcomingRaw.filter((booking) => Boolean(booking.scheduled_start)),
+    [upcomingRaw],
+  );
   const { bookings: completedBookings, isLoading: historyLoading } =
     useClientBookings("completed");
   const { packages, isLoading: packagesLoading } = useClientBalance();
@@ -57,9 +84,7 @@ export default function ClientDashboard() {
 
   const customerName = customers[0]?.full_name?.split(" ")[0] || "there";
   const activePackages = packages.filter((item) => item.status === "active");
-  const nextService =
-    nextAppointment?.services?.map((service) => service.service_name).join(", ") ||
-    "your appointment";
+  const nextService = nextAppointment ? bookingHeadline(nextAppointment, "your appointment") : "your appointment";
   const daysUntilNext =
     nextAppointment?.scheduled_start
       ? differenceInCalendarDays(
@@ -120,7 +145,7 @@ export default function ClientDashboard() {
                 asChild
                 className="h-12 shrink-0 rounded-full bg-[#f6c744] px-8 text-base text-[#171115] hover:bg-[#ffd45c]"
               >
-                <Link to="/bookings">
+                <Link to={nextAppointment ? "/bookings/upcoming" : "/bookings"}>
                   {nextAppointment ? "View my bookings" : "Find a booking"}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
@@ -133,7 +158,7 @@ export default function ClientDashboard() {
           <div className="mb-4 flex items-end justify-between gap-4">
             <h2 className="font-serif text-2xl font-semibold">Upcoming bookings</h2>
             <Link
-              to="/bookings"
+              to="/bookings/upcoming"
               className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
             >
               View all <ArrowRight className="h-3.5 w-3.5" />
@@ -168,7 +193,7 @@ export default function ClientDashboard() {
                   >
                     <div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl bg-[#f3edff] text-primary">
                       <span className="font-serif text-2xl font-semibold">
-                        {date ? format(date, "dd") : "—"}
+                        {date ? format(date, "dd") : "-"}
                       </span>
                       <span className="text-xs uppercase">
                         {date ? format(date, "MMM") : ""}
@@ -176,8 +201,7 @@ export default function ClientDashboard() {
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-lg font-medium">
-                        {booking.services?.map((service) => service.service_name).join(", ") ||
-                          "Salon appointment"}
+                        {bookingHeadline(booking, "Salon appointment")}
                       </p>
                       <p className="mt-1 text-sm text-muted-foreground">
                         {booking.tenant?.name || "Salon"}
@@ -215,7 +239,7 @@ export default function ClientDashboard() {
           <div className="mb-4 flex items-end justify-between gap-4">
             <h2 className="font-serif text-2xl font-semibold">My packages</h2>
             <Link
-              to="/balance"
+              to="/bookings/packages"
               className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
             >
               View balances <ArrowRight className="h-3.5 w-3.5" />
@@ -264,7 +288,7 @@ export default function ClientDashboard() {
                               <Info className="h-3 w-3 cursor-default" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-56 text-xs">
-                              Combined count across every service or product included in this package — not just one item.
+                              Combined count across every service or product included in this package, not just one item.
                             </TooltipContent>
                           </Tooltip>
                         </p>
@@ -306,34 +330,48 @@ export default function ClientDashboard() {
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {customers.map((customer, index) => (
-                <div
-                  key={customer.id}
-                  className="overflow-hidden rounded-3xl border bg-white shadow-sm"
-                >
+              {customers.map((customer, index) => {
+                const websiteUrl = buildPublicBookingUrl(customer.tenant.slug);
+                return (
                   <div
-                    className={cn(
-                      "flex h-36 items-center justify-center",
-                      index % 3 === 0
-                        ? "bg-[#3c2861]"
-                        : index % 3 === 1
-                          ? "bg-[#f3bf3c]"
-                          : "bg-[#7f70a5]",
-                    )}
+                    key={customer.id}
+                    className="overflow-hidden rounded-3xl border bg-white shadow-sm"
                   >
-                    <Store className="h-10 w-10 text-white/85" />
+                    <div
+                      className={cn(
+                        "flex h-36 items-center justify-center",
+                        index % 3 === 0
+                          ? "bg-[#3c2861]"
+                          : index % 3 === 1
+                            ? "bg-[#f3bf3c]"
+                            : "bg-[#7f70a5]",
+                      )}
+                    >
+                      <Store className="h-10 w-10 text-white/85" />
+                    </div>
+                    <div className="p-6">
+                      <p className="font-serif text-xl font-semibold">
+                        {customer.tenant.name}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {customer.tenant.country || "Salon"} · {customer.visit_count || 0} visit
+                        {customer.visit_count === 1 ? "" : "s"}
+                      </p>
+                      {websiteUrl && (
+                        <a
+                          href={websiteUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                        >
+                          Visit website
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
                   </div>
-                  <div className="p-6">
-                    <p className="font-serif text-xl font-semibold">
-                      {customer.tenant.name}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {customer.tenant.country || "Salon"} · {customer.visit_count || 0} visit
-                      {customer.visit_count === 1 ? "" : "s"}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>
@@ -370,10 +408,10 @@ export default function ClientDashboard() {
                       <span className="text-sm text-muted-foreground">
                         {booking.scheduled_start
                           ? format(new Date(booking.scheduled_start), "d MMM yyyy")
-                          : "—"}
+                          : "-"}
                       </span>
                       <span className="font-medium">
-                        {booking.services?.[0]?.service_name || "Salon visit"}
+                        {bookingHeadline(booking, "Salon visit")}
                       </span>
                       <span className="text-sm text-muted-foreground">
                         {booking.tenant?.name || "Salon"}
@@ -427,7 +465,7 @@ export default function ClientDashboard() {
                               <Info className="h-3 w-3 text-muted-foreground cursor-default" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-56 text-xs">
-                              Paid funds plus store credit combined — may include amounts already reserved for an upcoming booking.
+                              Paid funds plus store credit combined, may include amounts already reserved for an upcoming booking.
                             </TooltipContent>
                           </Tooltip>
                         </div>

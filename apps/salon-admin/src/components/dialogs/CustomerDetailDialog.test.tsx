@@ -38,7 +38,7 @@ vi.mock("@/hooks/useAppointments", () => ({
 
 // ScheduleAppointmentDialog (rendered by CustomerDetailDialog for its
 // "Book Appointment" action) pulls in these regardless of its own `open`
-// prop — a function component's hooks all run on every render.
+// prop, since a function component's hooks all run on every render.
 vi.mock("@/hooks/useCustomers", () => ({
   useCustomers: () => ({ customers: [], isLoading: false, refetch: vi.fn() }),
 }));

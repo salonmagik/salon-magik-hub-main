@@ -90,9 +90,9 @@ export default function WaitlistPage() {
   };
 
   const WAITLIST_STATUS_TOOLTIPS: Record<string, string> = {
-    pending: "Signed up for the waitlist — hasn't been reviewed yet.",
-    invited: "Approved and sent an invite email — hasn't signed up for an account yet.",
-    rejected: "Declined — will not be invited.",
+    pending: "Signed up for the waitlist, hasn't been reviewed yet.",
+    invited: "Approved and sent an invite email, hasn't signed up for an account yet.",
+    rejected: "Declined. Will not be invited.",
     converted: "Signed up for a real account using their invite.",
   };
 
@@ -144,10 +144,10 @@ export default function WaitlistPage() {
       closed: "neutral",
     };
     const tooltips: Record<MarketInterestStatus, string> = {
-      new: "Just registered interest — hasn't been looked at yet.",
+      new: "Just registered interest, hasn't been looked at yet.",
       reviewing: "Someone on the team is currently assessing this lead.",
       contacted: "We've reached out to this person directly.",
-      qualified: "Assessed as a good fit — ready to move forward.",
+      qualified: "Assessed as a good fit, ready to move forward.",
       closed: "No longer being pursued.",
     };
 
@@ -224,7 +224,7 @@ export default function WaitlistPage() {
                                       <span className="cursor-default text-muted-foreground">ⓘ</span>
                                     </TooltipTrigger>
                                     <TooltipContent side="top" className="max-w-56 text-xs">
-                                      The plan they said they were interested in when applying to the waitlist — not necessarily what they'll pick during onboarding.
+                                      The plan they said they were interested in when applying to the waitlist, not necessarily what they'll pick during onboarding.
                                     </TooltipContent>
                                   </Tooltip>
                                 </span>
@@ -238,8 +238,8 @@ export default function WaitlistPage() {
                               <TableRow key={signup.lead_id}>
                                 <TableCell className="font-medium">{signup.name}</TableCell>
                                 <TableCell>{signup.email}</TableCell>
-                                <TableCell className="capitalize">{signup.plan_interest || "—"}</TableCell>
-                                <TableCell>{signup.invited_at ? format(new Date(signup.invited_at), "MMM d, yyyy") : "—"}</TableCell>
+                                <TableCell className="capitalize">{signup.plan_interest || "N/A"}</TableCell>
+                                <TableCell>{signup.invited_at ? format(new Date(signup.invited_at), "MMM d, yyyy") : "N/A"}</TableCell>
                                 <TableCell>{format(new Date(signup.signed_up_at), "MMM d, yyyy")}</TableCell>
                               </TableRow>
                             ))}

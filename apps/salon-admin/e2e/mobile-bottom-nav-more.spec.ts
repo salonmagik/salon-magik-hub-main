@@ -45,7 +45,7 @@ test("More on the mobile bottom nav opens a bottom sheet with the overflow items
   // An overflow item — not on the bottom bar — must be reachable here.
   await expect(sheet.getByText("Reports", { exact: true })).toBeVisible();
   await expect(sheet.getByText("Customers", { exact: true })).toBeVisible();
-  await expect(sheet.getByText("Services and Products", { exact: true })).toBeVisible();
+  await expect(sheet.getByText("Catalog", { exact: true })).toBeVisible();
   await expect(sheet.getByText("Sign out", { exact: true })).toBeVisible();
 });
 

@@ -275,7 +275,7 @@ export function EditSMSTemplateDialog({
               </div>
             </DialogHeader>
 
-            <div className={cn(DIALOG_BODY_PADDING, "space-y-4.5")}>
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-[18px]")}>
               {/* Active Toggle */}
               <div className="flex items-center justify-between rounded-2xl border bg-muted/40 p-3">
                 <div>

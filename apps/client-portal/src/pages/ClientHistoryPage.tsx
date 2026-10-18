@@ -7,11 +7,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/c
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
-import { CreditCard, Calendar, ArrowUpRight, ArrowDownLeft, Store, Info } from "lucide-react";
+import { CreditCard, Calendar, ArrowUpRight, ArrowDownLeft, Store, Info, MoreVertical } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { Button } from "@ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@ui/dropdown-menu";
 
 const TYPE_TOOLTIPS: Record<string, string> = {
   payment: "A payment made for a booking.",
@@ -59,6 +65,12 @@ export default function ClientHistoryPage() {
     }
     return <ArrowUpRight className="h-4 w-4 text-muted-foreground" />;
   };
+
+  // A refund transaction's own method says where it landed: "purse" means it
+  // was issued as redeemable salon credit, anything else (cash, transfer,
+  // card) was paid back to the customer directly, outside Salon Magik.
+  const refundDestinationLabel = (method: string) =>
+    method === "purse" ? "Refunded as credit" : "Refunded externally";
 
   return (
     <ClientSidebar>
@@ -136,6 +148,11 @@ export default function ClientHistoryPage() {
                               <Badge variant="outline" className="text-xs">
                                 {METHOD_LABELS[tx.method] || tx.method}
                               </Badge>
+                              {tx.type === "refund" && (
+                                <Badge className="text-xs bg-green-100 text-green-800">
+                                  {refundDestinationLabel(tx.method)}
+                                </Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-2 text-sm text-muted-foreground">
                               <Store className="h-3 w-3" />
@@ -146,12 +163,7 @@ export default function ClientHistoryPage() {
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-end gap-3 text-right">
-                          {(tx.type === "payment" || tx.type === "deposit") && tx.status === "completed" && (
-                            <Button variant="outline" size="sm" onClick={() => setRefundTransaction(tx)}>
-                              Request refund
-                            </Button>
-                          )}
+                        <div className="flex items-end gap-2 text-right">
                           <div>
                           <p className={`font-semibold ${getTypeColor(tx.type)}`}>
                             {tx.type === "refund" ? "+" : ""}
@@ -169,6 +181,20 @@ export default function ClientHistoryPage() {
                             <TooltipContent side="top" className="max-w-56 text-xs">{STATUS_TOOLTIP}</TooltipContent>
                           </Tooltip>
                           </div>
+                          {(tx.type === "payment" || tx.type === "deposit") && tx.status === "completed" && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Transaction actions">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => setRefundTransaction(tx)}>
+                                  Request refund
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </div>
                       </div>
                     ))}

@@ -8,7 +8,7 @@ export function BenefitsSection() {
 
   const benefits = [
     `${trialDays}-day free trial, no card required`,
-    "Works on any device — phone, tablet, or desktop",
+    "Works on any device: phone, tablet, or desktop",
     "Multiple payment methods supported",
     "WhatsApp notifications coming soon",
     "Offline-first design for unreliable networks",

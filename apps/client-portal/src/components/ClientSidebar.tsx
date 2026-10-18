@@ -39,12 +39,12 @@ interface ClientSidebarProps {
 }
 
 // Desktop keeps its own top nav (unchanged). Mobile's bottom bar below is a
-// separate, deliberately shorter set — the busiest four destinations get a
+// separate, deliberately shorter set: the busiest four destinations get a
 // permanent tab, everything else lives behind "More" so nothing is ever
 // listed in both places at once.
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
-  { label: "Bookings", icon: Calendar, path: "/bookings" },
+  { label: "Bookings & Orders", icon: Calendar, path: "/bookings" },
   { label: "History", icon: Clock, path: "/history" },
   { label: "Store Credit", icon: RefreshCcw, path: "/balance" },
   { label: "Notifications", icon: Bell, path: "/notifications", showBadge: true },
@@ -55,7 +55,7 @@ const navItems = [
 const BOTTOM_TABS = [
   { label: "Home", icon: LayoutDashboard, path: "/", showBadge: false },
   { label: "Bookings", icon: Calendar, path: "/bookings", showBadge: false },
-  { label: "Alerts", icon: Bell, path: "/notifications", showBadge: true },
+  { label: "Notifications", icon: Bell, path: "/notifications", showBadge: true },
   { label: "Profile", icon: User, path: "/profile", showBadge: false },
 ] as const;
 
@@ -66,7 +66,7 @@ const MORE_ITEMS = [
 ] as const;
 
 // Kept in sync with MORE_ITEMS' paths (plus /refunds, which redirects into
-// /balance) — whatever "More" can navigate to, so the tab reads as active
+// /balance): whatever "More" can navigate to, so the tab reads as active
 // for the whole time you're browsing one of its destinations, not just while
 // the sheet itself is open.
 const MORE_PATHS = ["/history", "/balance", "/refunds", "/help"];
@@ -151,7 +151,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
   const [announcementsGateOpen, setAnnouncementsGateOpen] = useState(false);
   const lastScrollYRef = useRef(0);
 
-  // The confirm-details prompt gets first claim on the user's attention —
+  // The confirm-details prompt gets first claim on the user's attention,
   // a just-signed-up customer shouldn't have a feature announcement stack
   // on top of (or under) it. Once it's genuinely out of the way (confirmed,
   // skipped, or was never needed), give it a few seconds of breathing room
@@ -247,7 +247,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
   return (
     <ClientInactivityGuard>
       <div className="min-h-screen min-w-0 overflow-x-hidden bg-background">
-        {/* Mobile Header — navigation itself lives on the bottom bar below;
+        {/* Mobile Header: navigation itself lives on the bottom bar below;
             this is chrome (brand) only, no duplicate nav entry point. */}
         <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-white/10 bg-primary px-4 text-white lg:hidden">
           <Link to="/" className="flex items-center gap-2">
@@ -318,7 +318,7 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
           </div>
         </main>
 
-        {/* Mobile Bottom Navigation — hidden on a booking's own detail page,
+        {/* Mobile Bottom Navigation: hidden on a booking's own detail page,
             which has its own action menu and payment button in this same
             thumb zone. */}
         {!isBookingDetailRoute && (

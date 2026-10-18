@@ -49,7 +49,7 @@ const STATUS_STYLES: Record<
 function TrendText({
   value,
   suffix,
-  nullLabel = "—",
+  nullLabel = "N/A",
 }: {
   value: number | null;
   suffix: string;
@@ -308,7 +308,7 @@ export default function SalonDashboard() {
 									<span className="font-medium">You're out of SMS marketing credits.</span>
 								) : (
 									<>
-										<span className="font-medium">SMS marketing credits are running low</span> —{" "}
+										<span className="font-medium">SMS marketing credits are running low:</span>{" "}
 										{stats.communicationCredits} remaining.
 									</>
 								)}
@@ -376,7 +376,7 @@ export default function SalonDashboard() {
 									<p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">
 										{canViewPayments
 											? `${currency} ${stats.revenueToday.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-											: "—"}
+											: "N/A"}
 									</p>
 									<div className="mt-2">
 										{canViewPayments && stats.revenueTrendPct !== null ? (
@@ -425,7 +425,7 @@ export default function SalonDashboard() {
 									<p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">
 										{canViewReports && stats.showUpRate !== null
 											? `${stats.showUpRate}%`
-											: "—"}
+											: "N/A"}
 									</p>
 									<div className="mt-2">
 										{canViewReports && stats.showUpRateTrend !== null ? (
@@ -463,7 +463,7 @@ export default function SalonDashboard() {
 										New Clients
 									</p>
 									<p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">
-										{canViewCustomers ? stats.newClientsThisWeek : "—"}
+										{canViewCustomers ? stats.newClientsThisWeek : "N/A"}
 									</p>
 									<div className="mt-2">
 										{canViewCustomers && stats.newClientsTrend !== null ? (
@@ -595,7 +595,7 @@ export default function SalonDashboard() {
 														<Info className="h-3 w-3 text-muted-foreground cursor-default" />
 													</TooltipTrigger>
 													<TooltipContent side="top" className="max-w-56 text-xs">
-														Unpaid balances from completed appointments — money customers still owe you.
+														Unpaid balances from completed appointments: money customers still owe you.
 													</TooltipContent>
 												</Tooltip>
 											</div>
@@ -649,7 +649,7 @@ export default function SalonDashboard() {
 														<Info className="h-3 w-3 text-muted-foreground cursor-default" />
 													</TooltipTrigger>
 													<TooltipContent side="top" className="max-w-56 text-xs">
-														Customers with a positive salon balance — paid funds or store credit they can spend on a future visit.
+														Customers with a positive salon balance, paid funds or store credit they can spend on a future visit.
 													</TooltipContent>
 												</Tooltip>
 											</div>

@@ -727,7 +727,7 @@ export default function MarketingPage() {
         id: "nigeria-sms-window",
         label: "Nigeria SMS delivery window",
         status: effectiveChannel === "sms" && nigeriaSmsOutsideWindow ? "blocked" : "warning",
-        detail: "Nigerian telecom operators enforce an 8:00 a.m.–8:00 p.m. Nigeria-time SMS window. This legal and telco requirement cannot be bypassed. Sending outside the window is disabled; scheduling is coming later.",
+        detail: "Nigerian telecom operators enforce an 8:00 a.m. to 8:00 p.m. Nigeria-time SMS window. This legal and telco requirement cannot be bypassed. Sending outside the window is disabled; scheduling is coming later.",
       });
     }
 
@@ -1151,7 +1151,7 @@ export default function MarketingPage() {
   }, [activeCustomers, singleCustomerSearch]);
 
   const audienceLabel = !isAudienceComplete ? "Not chosen yet" : audienceMode === "single"
-    ? `1 customer — ${singleCustomerData?.full_name || ""}`
+    ? `1 customer: ${singleCustomerData?.full_name || ""}`
     : `${selectedAudienceDefinition?.label} · ${effectiveAudienceCustomers.length}`;
   const summaryCount = selectedChannel ? selectedRecipientCount : !isAudienceComplete ? 0 : audienceMode === "single" ? 1 : effectiveAudienceCustomers.length;
   const toggleStep = (step: number) => setOpenStep(current => current === step ? 0 : step);
@@ -1168,7 +1168,7 @@ export default function MarketingPage() {
   const renderSendSummary = () => (
               <aside className="marketing-send-summary" aria-label="Send summary" aria-live="polite">
                 <div className="marketing-summary-heading"><h2>Send summary</h2><span className={`marketing-badge ${sendResult ? "success" : canSendBroadcast ? "success" : "warning"}`}>{sendResult ? (sendResult.failed ? "Check history" : "Sent") : canSendBroadcast ? "Ready" : "Not ready"}</span></div>
-                <dl><div><dt>Audience</dt><dd>{audienceLabel}</dd></div><div><dt>Recipients</dt><dd>{summaryCount}</dd></div><div><dt>Channel</dt><dd>{selectedChannel ? selectedChannel === "email" ? "Email" : "SMS" : "Not chosen yet"}</dd></div><div><dt>Cost</dt><dd>{!selectedChannel ? "—" : selectedChannel === "email" ? "Included" : `${estimatedCost} credits`}</dd></div>{selectedChannel === "sms" && <div><dt>Balance after</dt><dd className={balanceAfterSend < 0 ? "marketing-negative" : undefined}>{balanceAfterSend} credits</dd></div>}</dl>
+                <dl><div><dt>Audience</dt><dd>{audienceLabel}</dd></div><div><dt>Recipients</dt><dd>{summaryCount}</dd></div><div><dt>Channel</dt><dd>{selectedChannel ? selectedChannel === "email" ? "Email" : "SMS" : "Not chosen yet"}</dd></div><div><dt>Cost</dt><dd>{!selectedChannel ? "N/A" : selectedChannel === "email" ? "Included" : `${estimatedCost} credits`}</dd></div>{selectedChannel === "sms" && <div><dt>Balance after</dt><dd className={balanceAfterSend < 0 ? "marketing-negative" : undefined}>{balanceAfterSend} credits</dd></div>}</dl>
                 {selectedChannel && <div className="marketing-preview"><span>Preview</span>{!message.trim() && !emailSubject.trim() ? <p>{selectedChannel === "email" ? "Subject line preview and email body will render here as you type." : "Your message will appear here as you type."}</p> : <>{selectedChannel === "email" && <strong>{previewSubject || "Add a subject line…"}</strong>}<p>{selectedChannel === "email" ? renderEmailPreview(previewBody) : previewBody}</p><small>Personalisation shown with sample customer details.</small></>}</div>}
                 {selectedChannel && !sendResult && <div className="marketing-send-notices">{[...blockedPreflightItems, ...warningPreflightItems].filter(item => !["message", "test"].includes(item.id)).map(item => <p key={item.id} className={item.status === "blocked" ? "marketing-negative" : ""}>{item.detail}</p>)}{smsCountryMismatchRecipients.length > 0 && audienceMode === "group" && <button type="button" className="marketing-text-button" onClick={removeSmsCountryMismatches}>Remove mismatched numbers</button>}</div>}
                 <button type="button" className="marketing-button primary marketing-send" onClick={handleSendBroadcast} disabled={!canSendBroadcast}>{isSubmitting && <Loader2 size={14} className="animate-spin" />}{isSubmitting ? "Sending…" : sendResult ? "Broadcast sent" : (mobilePreviewOpen ? "Send message" : `Send to ${summaryCount} customer${summaryCount === 1 ? "" : "s"}`)}</button>
@@ -1184,7 +1184,7 @@ export default function MarketingPage() {
         <div className="marketing-heading">
           <div>
             <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">Marketing</h1>
-            <p>Send announcements and reminders by email and SMS. This is broadcast messaging — not a live chat with customers.</p>
+            <p>Send announcements and reminders by email and SMS. This is broadcast messaging, not a live chat with customers.</p>
           </div>
           <div className="marketing-actions">
             <button type="button" className="marketing-button" onClick={() => setHowItWorksOpen(true)}><Info size={13} />How it works</button>
@@ -1193,8 +1193,8 @@ export default function MarketingPage() {
         </div>
 
         <div className="marketing-metrics" aria-busy={creditsLoading}>
-          <div className="marketing-metric"><span className="marketing-metric-icon"><Phone size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "—" : stats.creditsRemaining.toLocaleString()}</strong><p>SMS credits left</p></div></div>
-          <div className="marketing-metric"><span className="marketing-metric-icon email"><Mail size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "—" : stats.emailsSentThisMonth.toLocaleString()}</strong><p>Emails sent this month · unlimited</p></div></div>
+          <div className="marketing-metric"><span className="marketing-metric-icon"><Phone size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "N/A" : stats.creditsRemaining.toLocaleString()}</strong><p>SMS credits left</p></div></div>
+          <div className="marketing-metric"><span className="marketing-metric-icon email"><Mail size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "N/A" : stats.emailsSentThisMonth.toLocaleString()}</strong><p>Emails sent this month · unlimited</p></div></div>
           <div className="marketing-metric unavailable"><span className="marketing-metric-icon"><MessageCircle size={18} /></span><div><p>WhatsApp</p><span className="marketing-badge">Coming soon</span></div></div>
         </div>
         {(customersError || segmentsError || creditsError) && <div role="alert" className="marketing-notice">Some marketing data couldn’t be loaded. Refresh the page before sending a broadcast.</div>}
@@ -1209,7 +1209,7 @@ export default function MarketingPage() {
             {activeDraft && !sendResult && <div className="marketing-notice"><span>Your saved draft is ready. Available until {format(new Date(activeDraft.expires_at), "MMM d, h:mm a")}.</span><button type="button" className="marketing-button" onClick={resumeDraft}>Resume draft</button></div>}
             {sendResult && <div role="status" className={`marketing-confirmation ${sendResult.failed ? "partial" : ""}`}>
               <span className="marketing-confirmation-icon">{sendResult.failed ? <AlertCircle size={20} /> : <Check size={20} />}</span>
-              <div><h2>{sendResult.sent > 0 ? `Sent to ${sendResult.sent} customer${sendResult.sent === 1 ? "" : "s"}` : "Broadcast wasn’t sent"}</h2><p>via {effectiveChannel === "email" ? "Email" : "SMS"} · {sendResult.creditsUsed ? `${sendResult.creditsUsed} credits used` : "no credits used"}{sendResult.failed > 0 ? ` · ${sendResult.failed} failed — see Delivery History` : ""}</p></div>
+              <div><h2>{sendResult.sent > 0 ? `Sent to ${sendResult.sent} customer${sendResult.sent === 1 ? "" : "s"}` : "Broadcast wasn’t sent"}</h2><p>via {effectiveChannel === "email" ? "Email" : "SMS"} · {sendResult.creditsUsed ? `${sendResult.creditsUsed} credits used` : "no credits used"}{sendResult.failed > 0 ? ` · ${sendResult.failed} failed, see Delivery History` : ""}</p></div>
               <div className="marketing-confirmation-actions"><button type="button" className="marketing-button" onClick={() => setSaveReusable({ open: true, name: "" })} disabled={reusableTemplates.length >= 3}>Save to reuse</button><button type="button" className="marketing-button primary" onClick={resetBroadcastFlow}>Send another</button></div>
             </div>}
 
@@ -1315,7 +1315,7 @@ export default function MarketingPage() {
           </TabsContent>
 
           <TabsContent value="templates" className="marketing-tab-content">
-            <div className="marketing-template-heading"><div><h2>Automated messages</h2><p>Sent automatically when something happens — a booking, a reminder, a cancellation.</p></div><div className="marketing-chips"><button type="button" className="marketing-chip" aria-pressed={templateChannel === "email"} onClick={() => setTemplateChannel("email")}>Email</button><button type="button" className="marketing-chip" aria-pressed={templateChannel === "sms"} onClick={() => setTemplateChannel("sms")}>SMS</button></div></div>
+            <div className="marketing-template-heading"><div><h2>Automated messages</h2><p>Sent automatically when something happens: a booking, a reminder, a cancellation.</p></div><div className="marketing-chips"><button type="button" className="marketing-chip" aria-pressed={templateChannel === "email"} onClick={() => setTemplateChannel("email")}>Email</button><button type="button" className="marketing-chip" aria-pressed={templateChannel === "sms"} onClick={() => setTemplateChannel("sms")}>SMS</button></div></div>
             <div className="marketing-list">{(templateChannel === "email" ? emailTemplatesLoading : smsTemplatesLoading) ? <p className="marketing-empty">Loading templates…</p> : templateChannel === "email" ? SALON_EMAIL_TEMPLATE_TYPES.map(type => {
               const template = emailTemplates.find(item => item.template_type === type);
               return <button type="button" className="marketing-template-row" key={type} onClick={() => setEditingEmailTemplate(type)} aria-label={`Edit ${templateTypeLabels[type]} email template`}><span><strong>{templateTypeLabels[type]}</strong><small>{templateDescriptions[type]}</small></span><span className={`marketing-badge ${template ? "customized" : ""}`}>{template ? "Customized" : "Default"}</span><Pencil size={14} /></button>;
@@ -1323,7 +1323,7 @@ export default function MarketingPage() {
               const template = smsTemplates.find(item => item.template_type === type);
               return <button type="button" className="marketing-template-row" key={type} onClick={() => setEditingSmsTemplate(type)} aria-label={`Edit ${smsTemplateTypeLabels[type]} SMS template`}><span><strong>{smsTemplateTypeLabels[type]}</strong><small>{templateDescriptions[type]}</small></span><span className={`marketing-badge ${template ? "customized" : ""}`}>{template ? "Customized" : "Default"}</span><Pencil size={14} /></button>;
             })}</div>
-            <div className="marketing-template-heading marketing-saved-heading"><div><h2>Saved broadcasts</h2><p>Your own reusable campaigns — up to 3. Reuse them from the compose screen.</p></div></div>
+            <div className="marketing-template-heading marketing-saved-heading"><div><h2>Saved broadcasts</h2><p>Your own reusable campaigns, up to 3. Reuse them from the compose screen.</p></div></div>
             <div className="marketing-saved-broadcasts">{reusableTemplatesLoading ? <p className="marketing-empty">Loading saved broadcasts…</p> : reusableTemplates.length === 0 ? <p className="marketing-empty">After sending a broadcast, choose “Save to reuse” to keep it here.</p> : reusableTemplates.map(template => <button type="button" key={template.id} onClick={() => { resetBroadcastFlow(); setSelectedChannel(template.channel); setMessage(template.body); setEmailSubject(template.subject || ""); setSelectedTemplateId(`saved-${template.id}`); setActiveTab("send-broadcast"); }}><strong>{template.name}</strong><span>{template.channel === "email" ? "Email" : "SMS"} · {template.body}</span></button>)}</div>
           </TabsContent>
 

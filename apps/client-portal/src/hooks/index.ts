@@ -12,4 +12,8 @@ export { useClientRefunds } from "./useClientRefunds";
 export type { ClientRefundWithDetails } from "./useClientRefunds";
 export { useClientTransactions } from "./useClientTransactions";
 export type { ClientTransactionWithTenant } from "./useClientTransactions";
+export { useClientVouchers, isVoucherUnused } from "./useClientVouchers";
+export type { ClientVoucher } from "./useClientVouchers";
+export { useClientProductOrders } from "./useClientProductOrders";
+export type { ClientProductOrder } from "./useClientProductOrders";
 export { ConfirmDetailsPromptProvider, useConfirmDetailsPrompt } from "./useConfirmDetailsPrompt";

@@ -47,9 +47,9 @@ interface BookingActionsProps {
 type ActionDialogType = "running-late" | "reschedule" | "cancel" | null;
 
 // "On My Way" notifies the salon, but nothing on the salon side surfaces that
-// notification type distinctly yet (no icon/title mapping, no click-through) —
-// hidden until that's wired up, rather than shipping a button that appears to
-// do nothing useful for the salon.
+// notification type distinctly yet (no icon/title mapping, no click-through),
+// so it's hidden until that's wired up, rather than shipping a button that
+// appears to do nothing useful for the salon.
 const ON_MY_WAY_ENABLED = false;
 
 export function BookingActions({ booking, onActionComplete }: BookingActionsProps) {
@@ -77,12 +77,12 @@ export function BookingActions({ booking, onActionComplete }: BookingActionsProp
     !onMyWayMarked;
 
   // Can mark "Running Late" if before scheduled start and the customer has
-  // actually paid something toward it — an entirely unpaid booking isn't a
+  // actually paid something toward it: an entirely unpaid booking isn't a
   // committed appointment yet, so there's nothing to be "running late" for.
   const canMarkRunningLate =
     isBeforeStart && booking.status === "scheduled" && booking.payment_status !== "unpaid";
 
-  // Self-service reschedule not yet available — keep flag false until implemented
+  // Self-service reschedule not yet available, keep flag false until implemented
   const canReschedule = false;
 
   // Can cancel if before start

@@ -22,3 +22,4 @@ export { useAvailableDays } from "./useAvailableDays";
 export { useDepositCalculation, calculateCancellationFee } from "./useDepositCalculation";
 export { useBookingCountryContext, type PublicBookingCountryContext } from "./useBookingCountryContext";
 export { useResolvedSlug } from "./useResolvedSlug";
+export { useCheckedEmail, type EmailCheckPhase } from "./useCheckedEmail";

@@ -27,7 +27,7 @@ export interface SubscriptionLifecycle {
 
 /**
  * Derives the current lifecycle state and its single primary action from
- * currentTenant — the one place that decides what the subscription surface
+ * currentTenant, the one place that decides what the subscription surface
  * shows, per the Implementation Design's AD-2/requirement 22. A tenant is
  * never in more than one of these states at once, and each state has
  * exactly one primary action.
@@ -64,7 +64,7 @@ export function useSubscriptionLifecycle(): SubscriptionLifecycle {
 	}
 
 	if (status === "active") {
-		// A cancellation-pending tenant is deliberately still `active` (AD-2) —
+		// A cancellation-pending tenant is deliberately still `active` (AD-2):
 		// full paid access, with the pending state expressed only by
 		// subscription_cancel_at.
 		if (cancelAt && cancelAt.getTime() > Date.now()) {
@@ -72,7 +72,7 @@ export function useSubscriptionLifecycle(): SubscriptionLifecycle {
 		}
 
 		if (!currentTenant.next_billing_at) {
-			// Activated but no card captured yet — nothing to cancel, nothing
+			// Activated but no card captured yet. Nothing to cancel, nothing
 			// due; the only meaningful action is adding a payment method.
 			return { state: "awaiting_payment_method", primaryAction: "add_payment_method", accessEndDate: null, graceEndsAt: null };
 		}

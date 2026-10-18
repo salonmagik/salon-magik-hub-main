@@ -336,7 +336,7 @@ export function EditTemplateDialog({ open, onOpenChange, templateType }: EditTem
               </div>
             </DialogHeader>
 
-            <div className={cn(DIALOG_BODY_PADDING, "space-y-4.5")}>
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-[18px]")}>
               {/* Active Toggle */}
               <div className="flex items-center justify-between">
                 <Label htmlFor="is-active">Enable this template</Label>

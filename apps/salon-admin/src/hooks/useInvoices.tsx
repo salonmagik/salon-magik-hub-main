@@ -20,6 +20,8 @@ export interface CreateInvoiceData {
     unitPrice: number;
     serviceId?: string;
     productId?: string;
+    isPackageCovered?: boolean;
+    packageName?: string;
   }[];
   notes?: string;
   dueDate?: string;
@@ -137,6 +139,8 @@ export function useInvoices() {
           total_price: item.quantity * item.unitPrice,
           service_id: item.serviceId || null,
           product_id: item.productId || null,
+          is_package_covered: item.isPackageCovered || false,
+          package_name: item.packageName || null,
         }));
 
         const { error: itemsError } = await supabase
@@ -188,16 +192,94 @@ export function useInvoices() {
 
       if (apptError) throw apptError;
 
+      // Look up package-credit reservations for this appointment so services
+      // covered by a package can be shown as "covered" instead of charged.
+      const packageNameByAppointmentServiceId = new Map<string, string>();
+      try {
+        const { data: reservations, error: reservationsError } = await supabase
+          .from("package_entitlement_reservations" as never)
+          .select(
+            "appointment_service_id, entitlement_item:customer_package_entitlement_items(entitlement:customer_package_entitlements(package:packages(name)))",
+          )
+          .eq("appointment_id", appointmentId)
+          .in("status", ["reserved", "consumed"]);
+
+        if (reservationsError) throw reservationsError;
+
+        type RawReservation = {
+          appointment_service_id: string | null;
+          entitlement_item: { entitlement: { package: { name: string } | null } | null } | null;
+        };
+
+        ((reservations || []) as unknown as RawReservation[]).forEach((r) => {
+          if (!r.appointment_service_id) return;
+          const packageName = r.entitlement_item?.entitlement?.package?.name;
+          if (packageName) {
+            packageNameByAppointmentServiceId.set(r.appointment_service_id, packageName);
+          }
+        });
+      } catch (reservationErr) {
+        // Fallback: split into separate lookups if the nested embed can't resolve.
+        console.warn("Nested reservation embed failed, falling back to split queries:", reservationErr);
+        const { data: reservations } = await supabase
+          .from("package_entitlement_reservations" as never)
+          .select("appointment_service_id, entitlement_item_id")
+          .eq("appointment_id", appointmentId)
+          .in("status", ["reserved", "consumed"]);
+
+        const rawReservations = (reservations || []) as unknown as {
+          appointment_service_id: string | null;
+          entitlement_item_id: string;
+        }[];
+        const itemIds = [...new Set(rawReservations.map((r) => r.entitlement_item_id))];
+
+        if (itemIds.length > 0) {
+          const { data: items2 } = await supabase
+            .from("customer_package_entitlement_items" as never)
+            .select("id, entitlement_id")
+            .in("id", itemIds);
+
+          const entitlementIdByItemId = new Map(
+            ((items2 || []) as unknown as { id: string; entitlement_id: string }[]).map((i) => [i.id, i.entitlement_id]),
+          );
+          const entitlementIds = [...new Set([...entitlementIdByItemId.values()])];
+
+          const { data: entitlements2 } = await supabase
+            .from("customer_package_entitlements" as never)
+            .select("id, package:packages(name)")
+            .in("id", entitlementIds);
+
+          const packageNameByEntitlementId = new Map(
+            ((entitlements2 || []) as unknown as { id: string; package: { name: string } | null }[]).map((e) => [
+              e.id,
+              e.package?.name,
+            ]),
+          );
+
+          rawReservations.forEach((r) => {
+            if (!r.appointment_service_id) return;
+            const entitlementId = entitlementIdByItemId.get(r.entitlement_item_id);
+            const packageName = entitlementId ? packageNameByEntitlementId.get(entitlementId) : undefined;
+            if (packageName) {
+              packageNameByAppointmentServiceId.set(r.appointment_service_id, packageName);
+            }
+          });
+        }
+      }
+
       // Build line items from services and products
       const items: CreateInvoiceData["items"] = [];
 
       // Add services
-      (appointment.appointment_services || []).forEach((svc: { service_id?: string | null; service_name: string; price: number }) => {
+      (appointment.appointment_services || []).forEach((svc: { id: string; service_id?: string | null; service_name: string; price: number }) => {
+        const packageName = packageNameByAppointmentServiceId.get(svc.id);
         items.push({
           description: svc.service_name,
           quantity: 1,
-          unitPrice: Number(svc.price),
+          unitPrice: packageName ? 0 : Number(svc.price),
           serviceId: svc.service_id || undefined,
+          isPackageCovered: !!packageName,
+          packageName: packageName || undefined,
         });
       });
 

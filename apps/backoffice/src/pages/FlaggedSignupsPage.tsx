@@ -10,7 +10,7 @@ import { format } from "date-fns";
 import { EmptyState } from "@ui/empty-state";
 
 const FLAG_LABEL: Record<FlaggedSignupRow["flag_type"], string> = {
-  blocked_phone_reuse: "Blocked — phone reuse",
+  blocked_phone_reuse: "Blocked phone reuse",
   shared_signup_ip: "Shared signup IP",
 };
 
@@ -21,9 +21,9 @@ const FLAG_BADGE: Record<FlaggedSignupRow["flag_type"], string> = {
 
 const FLAG_EXPLANATION: Record<FlaggedSignupRow["flag_type"], string> = {
   blocked_phone_reuse:
-    "Signup was rejected outright — the phone number already owned a tenant before, even though that tenant is no longer active.",
+    "Signup was rejected outright. The phone number already owned a tenant before, even though that tenant is no longer active.",
   shared_signup_ip:
-    "Signup went through (different phone, different email), but the phone-verification code was requested from an IP that's also produced another trial tenant. Not blocked automatically — shared IPs are common — but worth a look if the pattern repeats.",
+    "Signup went through (different phone, different email), but the phone-verification code was requested from an IP that's also produced another trial tenant. Not blocked automatically, since shared IPs are common, but worth a look if the pattern repeats.",
 };
 
 export default function FlaggedSignupsPage() {
@@ -52,7 +52,7 @@ export default function FlaggedSignupsPage() {
             Flagged Signups
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Signals worth a human look for free-trial abuse — trials don't require a card, so phone reuse and shared signup IPs are the main signals available.
+            Signals worth a human look for free-trial abuse. Trials don't require a card, so phone reuse and shared signup IPs are the main signals available.
           </p>
         </div>
 
@@ -120,14 +120,14 @@ export default function FlaggedSignupsPage() {
                       <TableCell className="text-sm text-muted-foreground">
                         {format(new Date(row.detected_at), "MMM d, yyyy · h:mm a")}
                       </TableCell>
-                      <TableCell className="font-mono text-sm">{row.phone_last4 ? `•••• ${row.phone_last4}` : "—"}</TableCell>
-                      <TableCell className="text-sm">{row.attempted_email || "—"}</TableCell>
-                      <TableCell className="font-mono text-sm">{row.ip_address || "—"}</TableCell>
+                      <TableCell className="font-mono text-sm">{row.phone_last4 ? `•••• ${row.phone_last4}` : "N/A"}</TableCell>
+                      <TableCell className="text-sm">{row.attempted_email || "N/A"}</TableCell>
+                      <TableCell className="font-mono text-sm">{row.ip_address || "N/A"}</TableCell>
                       <TableCell>
                         {row.tenant_name ? (
                           <span className="text-sm">{row.tenant_name}</span>
                         ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
+                          <span className="text-sm text-muted-foreground">N/A</span>
                         )}
                       </TableCell>
                     </TableRow>

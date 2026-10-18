@@ -17,7 +17,7 @@ import { CircleDollarSign, Loader2, RotateCcw, TriangleAlert, WalletCards } from
 import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
-import { cn } from "@shared/utils";
+import { cn, generateUUID } from "@shared/utils";
 import { formatCurrency } from "@shared/currency";
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
@@ -68,12 +68,6 @@ interface RefundTransaction {
   customer?: { id: string; full_name: string } | null;
 }
 
-interface RecoverabilityInfo {
-  requiresWalletDebit: boolean;
-  walletBalance: number;
-  currency: string;
-}
-
 interface PendingRefund {
   id: string;
   amount: number;
@@ -106,8 +100,7 @@ export function RequestRefundDialog({
   const [maxRefundAmount, setMaxRefundAmount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [recoverability, setRecoverability] = useState<RecoverabilityInfo | null>(null);
-  const idempotencyKeyRef = useRef<string>(crypto.randomUUID());
+  const idempotencyKeyRef = useRef<string>(generateUUID());
 
   const currency = transaction?.currency || currentTenant?.currency || "USD";
   const isApproval = Boolean(request);
@@ -117,19 +110,6 @@ export function RequestRefundDialog({
 
   const numericAmount = Number(amount);
 
-  // Advisory only — the backend (debit_salon_wallet_for_refund) is the real
-  // guarantee. If the check failed to resolve, destinations stay selectable
-  // and the backend decides at submit, per the usability NFR.
-  const walletShortfall = Boolean(
-    mode === "complete" &&
-      recoverability?.requiresWalletDebit &&
-      Number.isFinite(numericAmount) &&
-      numericAmount > 0 &&
-      numericAmount > recoverability.walletBalance,
-  );
-  const storeCreditBlockedByWallet = mode === "complete" && !isApproval && walletShortfall;
-  const bothDestinationsBlocked = storeCreditBlockedByWallet;
-
   useEffect(() => {
     if (!open || !transaction) return;
     setStage("form");
@@ -137,8 +117,7 @@ export function RequestRefundDialog({
     setAmount(request ? String(request.amount) : "");
     setReason(request?.reason || "");
     setRefundType(request?.refund_type === "offline" ? "offline" : "store_credit");
-    setRecoverability(null);
-    idempotencyKeyRef.current = crypto.randomUUID();
+    idempotencyKeyRef.current = generateUUID();
 
     const loadRefundableAmount = async () => {
       setIsLoading(true);
@@ -161,30 +140,7 @@ export function RequestRefundDialog({
     };
 
     void loadRefundableAmount();
-
-    if (mode === "complete") {
-      supabase
-        .rpc("check_refund_recoverability" as never, { p_transaction_id: transaction.id } as never)
-        .then(({ data, error }) => {
-          if (error || !data) return;
-          const result = data as { requires_wallet_debit: boolean; wallet_balance: number; currency: string };
-          setRecoverability({
-            requiresWalletDebit: result.requires_wallet_debit,
-            walletBalance: Number(result.wallet_balance),
-            currency: result.currency,
-          });
-        });
-    }
   }, [open, request, transaction, mode]);
-
-  // If the amount is raised past what the wallet can cover after a
-  // wallet-gated destination was already selected, fall back to the one
-  // destination that's never gated on the wallet.
-  useEffect(() => {
-    if (walletShortfall && refundType === "store_credit") {
-      setRefundType("offline");
-    }
-  }, [walletShortfall, refundType]);
 
   const validationMessage = useMemo(() => {
     if (!amount || !Number.isFinite(numericAmount) || numericAmount <= 0) {
@@ -251,7 +207,7 @@ export function RequestRefundDialog({
     // A declined/failed attempt is terminal. A fresh key allows a genuinely
     // new attempt; if the prior outcome is still pending, the backend's
     // transaction lock and pending-refund guard reject the duplicate.
-    idempotencyKeyRef.current = crypto.randomUUID();
+    idempotencyKeyRef.current = generateUUID();
     setStage("form");
   };
 
@@ -364,21 +320,16 @@ export function RequestRefundDialog({
                   <div className="grid gap-3 sm:grid-cols-2">
                     <button
                       type="button"
-                      disabled={storeCreditBlockedByWallet}
                       onClick={() => setRefundType("store_credit")}
                       className={cn(
                         "rounded-xl border p-4 text-left transition-colors",
-                        storeCreditBlockedByWallet
-                          ? "cursor-not-allowed opacity-60"
-                          : refundType === "store_credit" ? "border-primary bg-primary/5" : "hover:border-primary/40",
+                        refundType === "store_credit" ? "border-primary bg-primary/5" : "hover:border-primary/40",
                       )}
                     >
                       <WalletCards className="mb-3 h-5 w-5 text-primary" />
                       <p className="text-sm font-medium">Salon balance</p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {storeCreditBlockedByWallet
-                          ? "Unavailable — store credit is funded from your salon balance, which no longer holds this payment."
-                          : "Immediately available as store credit."}
+                        The refunded amount will be available in the customer's salon balance for future appointments.
                       </p>
                     </button>
                     <button
@@ -394,9 +345,6 @@ export function RequestRefundDialog({
                       <p className="mt-1 text-xs text-muted-foreground">Handled outside Salon Magik.</p>
                     </button>
                   </div>
-                  {bothDestinationsBlocked && (
-                    <p className="text-xs text-muted-foreground">{WITHDRAWN_FUNDS_MESSAGE}</p>
-                  )}
                 </div>
 
                 <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900" role="note">

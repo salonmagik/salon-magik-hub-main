@@ -250,7 +250,7 @@ export function NewDeviceReviewModal({ open, onClose }: Props) {
         )}
 
         <Button variant="ghost" className="w-full" onClick={onClose}>
-          {atCapacity ? "I'll do this later" : "This was me — dismiss"}
+          {atCapacity ? "I'll do this later" : "This was me, dismiss"}
         </Button>
         </div>
       </DialogContent>

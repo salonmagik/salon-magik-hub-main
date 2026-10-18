@@ -77,8 +77,6 @@ import {
 	Globe,
 	Eye,
 	ExternalLink,
-	Palette,
-	Sparkles,
 	Minus,
 	Plus,
 	Info,
@@ -115,7 +113,6 @@ import { usePlans } from "@/hooks/usePlans";
 import { CustomDomainManager } from "./CustomDomainManager";
 import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
 import { useTenantRecurringTotal } from "@/hooks/useTenantRecurringTotal";
-import { useStaffOperationsAddon } from "@/hooks/useStaffOperationsAddon";
 import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
@@ -146,7 +143,6 @@ const BASE_SETTINGS_TABS = [
 	{ id: "withdrawals", label: "Withdrawals", icon: ArrowDownUp },
 	{ id: "notifications", label: "Notifications", icon: Bell },
 	{ id: "subscription", label: "Subscription", icon: Zap },
-	{ id: "addons", label: "Add-ons", icon: Sparkles },
 	{ id: "custom-domain", label: "Custom Domain", icon: Globe },
 ] as const;
 
@@ -184,7 +180,7 @@ function describePlanConfigError(
 	if (!message) return fallback;
 	// Postgres RAISE EXCEPTION messages come back prefixed with the SQLSTATE
 	// code (e.g. "P0001: BRANCHES_BELOW_ACTIVE_LOCATIONS"), so an exact-match
-	// lookup against the bare code never hit — match by substring instead.
+	// lookup against the bare code never hit, so match by substring instead.
 	const knownCode = Object.keys(PLAN_CONFIG_ERROR_MESSAGES).find((code) =>
 		message.includes(code),
 	);
@@ -220,7 +216,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	} = useAuth();
 	const { data: activeTrialOverride } = useActiveTrialOverride(currentTenant?.id);
 
-	// /salon/settings is a legacy unscoped URL — always redirect to the correct scoped page.
+	// /salon/settings is a legacy unscoped URL; always redirect to the correct scoped page.
 	useEffect(() => {
 		if (scope !== "auto") return;
 		const dest = activeContextType === "owner_hub" ? "/salon/business-settings" : "/salon/branch-settings";
@@ -290,7 +286,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		useTenantEntitlements(currentTenant?.id);
 	const currentPlan = plans?.find((plan) => plan.slug === currentTenant?.plan);
 	const { data: recurringTotal } = useTenantRecurringTotal();
-	const staffOperationsAddon = useStaffOperationsAddon();
 
 	const { data: ecommerceThemePricing } = useQuery({
 		queryKey: [
@@ -345,10 +340,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				{ id: "sessions", label: "Active Sessions", icon: Shield },
 			];
 		} else if (resolvedScope === "subscription") {
-			tabs = [
-				{ id: "subscription", label: "Subscription", icon: Zap },
-				{ id: "addons", label: "Add-ons", icon: Sparkles },
-			];
+			tabs = [{ id: "subscription", label: "Subscription", icon: Zap }];
 		} else {
 			tabs = [...BASE_SETTINGS_TABS];
 		}
@@ -358,17 +350,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	}, [resolvedScope]);
 
 	const [activeTab, setActiveTab] = useState(() => {
-		if (resolvedScope === "subscription") {
-			const tab = searchParams.get("tab");
-			return tab === "addons" ? "addons" : "subscription";
-		}
+		if (resolvedScope === "subscription") return "subscription";
 		const tab = searchParams.get("tab");
 		return tab && settingsTabs.some((t) => t.id === tab) ? tab : "profile";
 	});
 
 	const settingsWalletLocationId = activeContextType === "location" ? activeLocationId : null;
 	const { wallet } = useSalonWallet(currentTenant?.id, settingsWalletLocationId);
-	// Online booking can't be turned on without a payout account — enforced
+	// Online booking can't be turned on without a payout account. This is enforced
 	// at the DB level too (trg_enforce_online_booking_requires_payout), this
 	// just disables the toggle with an explanation instead of a raw DB error.
 	const { destinations: payoutDestinations, isLoading: payoutDestinationsLoading } = usePayoutDestinations(currentTenant?.id);
@@ -376,7 +365,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 	// Seed the branches/seats inputs from entitlements, and re-seed whenever
 	// entitlements change (e.g. right after a payment completes) as long as
-	// the user hasn't started editing away from the last-seeded values —
+	// the user hasn't started editing away from the last-seeded values,
 	// otherwise a fresh payment's redirect would leave the inputs showing the
 	// pre-payment numbers until a manual refresh.
 	const lastSeededRef = useRef<{ branches: string; seats: string } | null>(
@@ -422,7 +411,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			} catch (error) {
 				if (quoteRequestIdRef.current !== requestId) return;
 				// Supabase RPC errors are plain PostgrestError objects, not Error
-				// instances — `instanceof Error` was always false here, so the
+				// instances, so `instanceof Error` was always false here, and the
 				// friendly message text below never actually got used.
 				const rawMessage = (error as { message?: string } | null)?.message;
 				setPlanConfigQuote(null);
@@ -577,7 +566,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					return;
 				}
 
-				// Charged immediately via stored card — no redirect needed.
+				// Charged immediately via stored card, no redirect needed.
 				await Promise.all([refreshTenants(), refetchEntitlements()]);
 				toast({
 					title: "Billing updated",
@@ -602,7 +591,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					title: "Billing updated",
 					description: requestedIncrease
 						? "Your plan configuration has been updated with no additional charge."
-						: `You're now on the ${planConfigQuote.required_plan_slug} plan. No charge — this was a decrease.`,
+						: `You're now on the ${planConfigQuote.required_plan_slug} plan. No charge: this was a decrease.`,
 				});
 			}
 		} catch (error) {
@@ -696,13 +685,13 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 	// Handle top-up success/cancel notifications
 	useEffect(() => {
-		// scope="auto" is the legacy /salon/settings redirector — it's about to
+		// scope="auto" is the legacy /salon/settings redirector; it's about to
 		// unmount as soon as the scope-redirect effect above fires. Running the
 		// payment-verification calls here races that navigate(): this effect's
 		// own setSearchParams and the redirect's navigate() both fire in the same
 		// commit, and whichever the async verify call's .then() resolves against
 		// is often the already-unmounted instance, so refreshTenants() and
-		// setPaymentSuccessModal() silently no-op — the modal never appears and
+		// setPaymentSuccessModal() silently no-op, so the modal never appears and
 		// the subscription tab shows stale data until a manual reload. Skip here
 		// and let the effect re-run on the stable business/branch-settings
 		// instance once the redirect lands, where state updates actually stick.
@@ -907,7 +896,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				return;
 			}
 
-			// Charged immediately via stored card — no redirect needed.
+			// Charged immediately via stored card, no redirect needed.
 			await refetchEntitlements();
 			toast({
 				title: "Theme activated",
@@ -1246,7 +1235,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const activeBookingTheme: BookingThemeKey = currentTenant?.active_theme_key === "ecommerce"
 		? "ecommerce"
 		: "default";
-	// Paid themes are an ongoing annual charge — a trialing tenant hasn't
+	// Paid themes are an ongoing annual charge. A trialing tenant hasn't
 	// committed to paying for anything yet, so don't let them start a second
 	// bill before the base plan itself is active.
 	const canPurchasePaidTheme = currentTenant?.subscription_status === "active";
@@ -2428,7 +2417,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						<p className="text-sm text-muted-foreground">
 							These are your defaults, applied across all {locations.length} branches
 							{overriddenLocations.length > 0
-								? ` — ${overriddenLocations.length} ${overriddenLocations.length === 1 ? "branch customizes" : "branches customize"} them below.`
+								? `. ${overriddenLocations.length} ${overriddenLocations.length === 1 ? "branch customizes" : "branches customize"} them below.`
 								: "."}
 						</p>
 					</div>
@@ -2541,7 +2530,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							<div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
 								<Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
 								<p>
-									SMS reminders only send 8am–8pm Nigeria time — a telecom rule we can't override.
+									SMS reminders only send 8am to 8pm Nigeria time, a telecom rule we can't override.
 								</p>
 							</div>
 						)}
@@ -2660,7 +2649,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					</CardContent>
 				</Card>
 
-				{/* Branch overrides — only the defaults view of a multi-branch business needs this */}
+				{/* Branch overrides: only the defaults view of a multi-branch business needs this */}
 				{showBranchScope && editingDefaults && (
 					<Card>
 						{!isChainScope && (
@@ -2752,7 +2741,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 																					: defaultsRow[field.column]
 																						? "On"
 																						: "Off"
-																				: "—"}
+																				: "N/A"}
 																			)
 																		</span>
 																	</span>
@@ -3050,7 +3039,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							</div>
 						)}
 
-						{/* ── Booking toggles — each saves immediately via a confirm popover ── */}
+						{/* Booking toggles: each saves immediately via a confirm popover */}
 						<div className="space-y-1">
 							{(
 								[
@@ -3239,7 +3228,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
                 </p>
               </div> */}
 
-						{/* ── Scheduling & capacity — these fields need explicit save ── */}
+						{/* Scheduling & capacity: these fields need explicit save */}
 						<div className="rounded-xl border bg-muted/30 p-4 ">
 							<div className="pt-2">
 								<p className="text-sm font-semibold text-foreground">
@@ -3593,14 +3582,14 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 	const renderSubscriptionTab = () => {
 		// An active gifted-trial override (Backoffice → Tenant Gifted Trials)
-		// takes precedence over the tenant's own trial dates — see
+		// takes precedence over the tenant's own trial dates; see
 		// useActiveTrialOverride's doc comment.
 		const effectiveTrialEndsAt = activeTrialOverride?.ends_at ?? currentTenant?.trial_ends_at;
 		const trialEndsAt = effectiveTrialEndsAt
 			? new Date(effectiveTrialEndsAt)
 			: null;
 		// Math.ceil (not date-fns differenceInDays, which floors) to match the
-		// sidebar badge and trial-ending banner — otherwise the same trial_ends_at
+		// sidebar badge and trial-ending banner. Otherwise the same trial_ends_at
 		// shows a different day count depending which part of the UI you're on.
 		const daysRemaining = trialEndsAt
 			? Math.max(
@@ -3687,7 +3676,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								"linear-gradient(160deg, #1F1536 0%, #2E1F4E 60%, #3A2660 100%)",
 						}}
 					>
-						{/* Decorative scattered salon icons — same motif as the auth screens */}
+						{/* Decorative scattered salon icons: same motif as the auth screens */}
 						<div aria-hidden className="pointer-events-none absolute inset-0 select-none overflow-hidden">
 							<svg width="30" height="30" viewBox="0 0 32 32" fill="none" className="absolute" style={{ top: "10%", right: "8%", opacity: 0.1, transform: "rotate(18deg)" }}>
 								<circle cx="8" cy="22" r="4.5" stroke="white" strokeWidth="2" />
@@ -3804,7 +3793,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						</div>
 						{subscriptionLifecycle.state === "cancellation_pending" && (
 							<div className="subscription-cancellation-banner relative mt-3 rounded-lg border p-3 text-sm">
-								Cancelling — your plan stays active until{" "}
+								Cancelling: your plan stays active until{" "}
 								{subscriptionLifecycle.accessEndDate
 									? format(subscriptionLifecycle.accessEndDate, "MMM d")
 									: "the end of your billing period"}
@@ -3842,7 +3831,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 												: "starts after trial"
 											: currentTenant?.next_billing_at
 												? `next charge · ${format(new Date(currentTenant.next_billing_at), "MMM d")}`
-												: "billing not scheduled — add a payment method"}
+												: "billing not scheduled, add a payment method"}
 									</p>
 								</div>
 								<div className="subscription-hero-breakdown mt-3 space-y-1 border-t border-dashed border-white/15 pt-3 text-sm">
@@ -3880,7 +3869,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									</div>
 									{recurringTotal.breakdown.billing_cycle === "annual" && (
 										<p className="pt-1 text-xs text-white/50">
-											Base plan is billed annually and isn't part of this monthly line — this covers add-ons only.
+											Base plan is billed annually and isn't part of this monthly line. This covers add-ons only.
 										</p>
 									)}
 								</div>
@@ -3928,7 +3917,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										disabled={isPurchasingTheme}
 										onClick={() => void purchaseThemeAddon()}
 									>
-										{isPurchasingTheme ? "Renewing…" : `Renew now — ${formatCurrency(ecommerceThemePricing || 0, currentTenant?.currency || "GHS")}`}
+										{isPurchasingTheme ? "Renewing…" : `Renew now: ${formatCurrency(ecommerceThemePricing || 0, currentTenant?.currency || "GHS")}`}
 									</Button>
 								</>
 							) : themeDaysRemaining !== null ? (
@@ -3950,7 +3939,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								<span className="subscription-config-icon"><Building2 className="h-4 w-4" /></span>
 								<span>
 									<span className="block text-sm font-medium">Adjust branches &amp; team seats</span>
-									<span className="mt-0.5 block text-xs text-muted-foreground">Change your plan by telling us what you need — we’ll do the math</span>
+									<span className="mt-0.5 block text-xs text-muted-foreground">Change your plan by telling us what you need, we’ll do the math</span>
 								</span>
 							</span>
 							<ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", subscriptionPlanConfigOpen && "rotate-180")} />
@@ -3967,7 +3956,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								planConfigQuote?.required_plan_slug === "chain") && (
 								<p className="text-xs text-muted-foreground">
 									On the Chain plan, each branch you add here includes 12 team
-									seats automatically — opening a new branch location elsewhere
+									seats automatically. Opening a new branch location elsewhere
 									doesn't add seats on its own, only increasing the branch count
 									here does.
 								</p>
@@ -4104,7 +4093,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							{planConfigQuoteErrorCode === "BRANCHES_BELOW_ACTIVE_LOCATIONS" && (
 								<div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-3">
 									<p className="text-sm">
-										Pause {branchesOverBy} branch{branchesOverBy === 1 ? "" : "es"} to free up your branch count, or raise the branch count above. Paused branches stop taking new bookings but existing bookings and data are kept — you can revive them any time.
+										Pause {branchesOverBy} branch{branchesOverBy === 1 ? "" : "es"} to free up your branch count, or raise the branch count above. Paused branches stop taking new bookings but existing bookings and data are kept, so you can revive them any time.
 									</p>
 									<div className="space-y-1.5 max-h-48 overflow-y-auto scrollbar-hide">
 										{activeLocationsForBranchPause.map((location) => (
@@ -4148,7 +4137,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									<div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
 										{isPlanConfigUnchanged ? (
 											<p>
-												You're currently on this plan —{" "}
+												You're currently on this plan:{" "}
 												<span className="font-medium capitalize">
 													{planConfigQuote.required_plan_slug}
 												</span>{" "}
@@ -4185,8 +4174,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 													}
 												>
 													{isPlanConfigIncrease
-														? `+${formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month — payment required`
-														: `${formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month — applies immediately, no charge`}
+														? `+${formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month, payment required`
+														: `${formatCurrency(planConfigQuote.price_delta || 0, planConfigQuote.currency)} / month, applies immediately, no charge`}
 												</p>
 												{isPlanConfigIncrease &&
 													(planConfigQuote.discount_amount || 0) > 0 && (
@@ -4221,12 +4210,12 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								)}
 
 							{/* While trialing, the single bottom "Upgrade Now" button is the
-							    only call to action — it already picks up whatever branches/
+							    only call to action; it already picks up whatever branches/
 							    seats are staged here. Showing a second button in both places
 							    at once ("No changes" + "Upgrade Now") reads as two competing
 							    actions for what's really one decision. Once actually
 							    subscribed, this becomes the only button for plan-config
-							    changes — always visible so the control has a stable anchor,
+							    changes, always visible so the control has a stable anchor,
 							    disabled until there's a real change to submit. */}
 							{!isTrialing && (
 								<>
@@ -4234,7 +4223,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										!isPlanConfigIncrease &&
 										!planConfigQuote?.requires_custom_locations && (
 											<p className="text-xs text-amber-600">
-												Downgrading may remove features tied to your current plan. This applies immediately — no refunds for the current billing period.
+												Downgrading may remove features tied to your current plan. This applies immediately: no refunds for the current billing period.
 											</p>
 										)}
 									<Button
@@ -4360,7 +4349,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									className="w-full gap-2"
 									onClick={() => {
 										// Branches/seats staged above? Activate on that
-										// configuration directly — applyPlanConfiguration already
+										// configuration directly. applyPlanConfiguration already
 										// redirects to Paystack for first-time payment when needed,
 										// same as the plain confirm-dialog path below. Otherwise
 										// fall back to the base-plan confirm dialog.
@@ -4412,7 +4401,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 									</div>
 								)}
 								<p className="pt-2 text-xs text-muted-foreground">
-									{isPlanConfigIncrease ? "You'll be redirected to Paystack to confirm this payment." : "This applies immediately — no charge today."}
+									{isPlanConfigIncrease ? "You'll be redirected to Paystack to confirm this payment." : "This applies immediately, no charge today."}
 								</p>
 							</div>
 							<DialogFooter className="gap-2 px-6 pb-5 pt-3 sm:flex-row sm:justify-end sm:gap-2 sm:px-6 sm:pb-5 sm:pt-3" style={{ "--primary": "262 46% 22%", "--primary-foreground": "0 0% 100%", "--accent": "262 45% 94%", "--accent-foreground": "262 46% 22%" } as CSSProperties}>
@@ -4505,106 +4494,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						accessEndDate={currentTenant?.next_billing_at ? new Date(currentTenant.next_billing_at) : null}
 						onCancelled={() => setCancelSubscriptionOpen(false)}
 					/>
-				</CardContent>
-			</Card>
-		);
-	};
-
-	const renderAddonsTab = () => {
-		const expiresInDays = staffOperationsAddon.expiresAt
-			? Math.ceil((staffOperationsAddon.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-			: null;
-
-		return (
-			<Card data-tour-id="tour-subscription-addons">
-				<CardHeader>
-					<CardTitle>Add-ons</CardTitle>
-					<CardDescription>
-						Extra, optional features billed on their own — separate from your subscription, so they never ride on next month's invoice or get cancelled along with it.
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="space-y-4">
-					<div className="subscription-addon-card space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
-						<div className="flex items-center justify-between gap-4">
-							<div>
-								<p className="text-sm font-medium">Staff Operations</p>
-								<p className="mt-0.5 text-xs text-muted-foreground">
-									Check-ins, time-off requests, and leave allowances.
-									{staffOperationsAddon.isEnabled
-										? ""
-										: staffOperationsAddon.isPlanEligible && staffOperationsAddon.priceLabel
-											? ` ${staffOperationsAddon.priceLabel} for 30 days.`
-											: ""}
-									{!staffOperationsAddon.isPlanEligible ? " Available on Studio and Chain plans." : ""}
-								</p>
-								{staffOperationsAddon.isEnabled && expiresInDays !== null && (
-									<p className={cn("mt-1 text-xs font-medium", expiresInDays <= 3 ? "text-amber-600" : "text-muted-foreground")}>
-										{expiresInDays > 0 ? `Renews in ${expiresInDays} day${expiresInDays === 1 ? "" : "s"}` : "Expired — renew to keep using it"}
-									</p>
-								)}
-							</div>
-							{staffOperationsAddon.isPlanEligible ? (
-								staffOperationsAddon.isEnabled ? (
-									<div className="flex shrink-0 items-center gap-2">
-										{expiresInDays !== null && expiresInDays <= 3 && (
-											<Button
-												type="button"
-												size="sm"
-												className="rounded-full"
-												disabled={staffOperationsAddon.isUpdating}
-												onClick={() => staffOperationsAddon.purchase()}
-											>
-												Renew now
-											</Button>
-										)}
-										<Button
-											type="button"
-											variant="outline"
-											size="sm"
-											className="rounded-full"
-											disabled={staffOperationsAddon.isUpdating}
-											onClick={() => staffOperationsAddon.disable()}
-										>
-											Disable
-										</Button>
-									</div>
-								) : (
-									<Button
-										type="button"
-										size="sm"
-										className="shrink-0 rounded-full"
-										disabled={staffOperationsAddon.isUpdating || !staffOperationsAddon.hasValidPrice}
-										onClick={() => staffOperationsAddon.purchase()}
-									>
-										{staffOperationsAddon.isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : `Enable${staffOperationsAddon.priceLabel ? ` — ${staffOperationsAddon.priceLabel}` : ""}`}
-									</Button>
-								)
-							) : (
-								<Badge variant="outline" className="shrink-0">Studio+ only</Badge>
-							)}
-						</div>
-					</div>
-
-					<div className="subscription-addon-card space-y-3 rounded-lg border border-primary/15 bg-primary/[0.035] p-4">
-						<div className="flex items-center justify-between gap-4">
-							<div>
-								<p className="text-sm font-medium">Booking page themes</p>
-								<p className="mt-0.5 text-xs text-muted-foreground">
-									Preview, purchase, and apply themes for your booking page.
-								</p>
-							</div>
-							<Button
-								type="button"
-								variant="outline"
-								size="sm"
-								className="shrink-0 gap-1.5 rounded-full"
-								onClick={() => navigate("/salon/themes-settings")}
-							>
-								<Palette className="h-3.5 w-3.5" />
-								Browse themes
-							</Button>
-						</div>
-					</div>
 				</CardContent>
 			</Card>
 		);
@@ -4921,7 +4810,6 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 			{activeTab === "notifications" && renderNotificationsTab()}
 			{activeTab === "roles" && renderRolesTab()}
 			{activeTab === "subscription" && renderSubscriptionTab()}
-		{activeTab === "addons" && renderAddonsTab()}
 			{CUSTOM_DOMAINS_ENABLED && activeTab === "custom-domain" && (
 				<div data-tour-id="tour-custom-domain">
 					<CustomDomainManager />
@@ -4931,7 +4819,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		</>
 	);
 
-	// Business and branch scopes: sidebar handles navigation — each tab renders
+	// Business and branch scopes: sidebar handles navigation, each tab renders
 	// its own page-level header above the card content.
 	if (isChainScope) {
 		const header = chainTabHeaders[activeTab];

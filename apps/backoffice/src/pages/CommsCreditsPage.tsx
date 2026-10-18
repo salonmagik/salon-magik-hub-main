@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { EmptyState } from "@ui/empty-state";
 
 function formatMoney(amount: number | null | undefined, currency: string | null | undefined) {
-  if (amount === null || amount === undefined) return "—";
+  if (amount === null || amount === undefined) return "N/A";
   const symbols: Record<string, string> = { GHS: "₵", NGN: "₦", USD: "$" };
   const symbol = currency ? symbols[currency] || `${currency} ` : "";
   return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -74,7 +74,7 @@ export default function CommsCreditsPage() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {[
             { label: "Messages sent (30d)", value: summary.totalSent.toLocaleString(), sub: `${summary.totalSms.toLocaleString()} SMS · ${summary.totalEmail.toLocaleString()} email`, icon: MessageSquareText, tone: "text-violet-700 bg-violet-50" },
-            { label: "Delivery rate", value: summary.deliveryRate !== null ? `${summary.deliveryRate.toFixed(1)}%` : "—", sub: "last 30 days, salon-sent", icon: CircleDollarSign, tone: "text-emerald-700 bg-emerald-50" },
+            { label: "Delivery rate", value: summary.deliveryRate !== null ? `${summary.deliveryRate.toFixed(1)}%` : "N/A", sub: "last 30 days, salon-sent", icon: CircleDollarSign, tone: "text-emerald-700 bg-emerald-50" },
             { label: "Low balance (<10)", value: summary.lowBalance.toLocaleString(), sub: "salons at risk of running out", icon: TriangleAlert, tone: "text-red-700 bg-red-50" },
           ].map((metric) => (
             <Card key={metric.label} className="backoffice-panel">
@@ -126,17 +126,17 @@ export default function CommsCreditsPage() {
                       <TableRow key={row.tenant_id} className="cursor-pointer" onClick={() => setSelectedTenant(row)}>
                         <TableCell>
                           <div className="font-medium">{row.tenant_name}</div>
-                          <div className="text-xs text-muted-foreground">{row.country || "—"}</div>
+                          <div className="text-xs text-muted-foreground">{row.country || "N/A"}</div>
                         </TableCell>
                         <TableCell>
                           <span className={(row.balance ?? 0) < 10 ? "text-red-600 font-medium" : "font-medium"}>
-                            {row.balance ?? "—"}
+                            {row.balance ?? "N/A"}
                           </span>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {row.free_monthly_allocation
                             ? `${Math.max(0, row.free_monthly_allocation - (row.balance ?? 0))} / ${row.free_monthly_allocation}`
-                            : "—"}
+                            : "N/A"}
                         </TableCell>
                         <TableCell className="text-sm">
                           {row.last_purchase_at
@@ -170,7 +170,7 @@ function TenantMessageLogDrawer({ tenant, onClose }: { tenant: CommsUsageRow | n
       <Sheet open={Boolean(tenant)} onOpenChange={(open) => !open && onClose()}>
         <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>{tenant?.tenant_name} — message log</SheetTitle>
+            <SheetTitle>{tenant?.tenant_name} message log</SheetTitle>
             <SheetDescription>
               Salon-sent messages only. Click a row to see exactly what was sent.
             </SheetDescription>
@@ -205,7 +205,7 @@ function TenantMessageLogDrawer({ tenant, onClose }: { tenant: CommsUsageRow | n
                         {maskRecipient(msg.recipient, msg.channel)}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">
-                        {msg.content || msg.subject || "—"}
+                        {msg.content || msg.subject || "N/A"}
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className={`text-xs capitalize ${STATUS_BADGE[msg.status] || ""}`}>

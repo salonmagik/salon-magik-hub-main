@@ -31,7 +31,7 @@ function TenantAvatar({ name, logoUrl, className }: { name: string; logoUrl?: st
 }
 
 /**
- * Kept as a sibling of the dropdown trigger, never nested inside it — the
+ * Kept as a sibling of the dropdown trigger, never nested inside it, because the
  * trigger is itself a real <button>, and a <button> inside a <button> is
  * invalid HTML (and would also toggle the dropdown open on every copy).
  */
@@ -48,7 +48,7 @@ function CopyBookingLinkButton({
   });
   const isOnlineBookingEnabled = Boolean(tenant?.online_booking_enabled);
   // Payouts is only reachable from the owner hub by an owner/manager/
-  // supervisor — sending anyone else there just lands them on "Payouts
+  // supervisor. Sending anyone else there just lands them on "Payouts
   // isn't available here," a dead end with nothing to act on.
   const canSetUpPayouts = currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor";
 
@@ -91,15 +91,15 @@ function CopyBookingLinkButton({
         {isOnlineBookingEnabled
           ? "Copy your salon's public booking page link."
           : canSetUpPayouts
-            ? "Online booking isn't turned on yet — it needs a payout account set up first. Click to go to Payout Destinations settings."
-            : "Online booking isn't turned on yet — ask your salon owner or manager to set up a payout account first."}
+            ? "Online booking isn't turned on yet. It needs a payout account set up first. Click to go to Payout Destinations settings."
+            : "Online booking isn't turned on yet. Ask your salon owner or manager to set up a payout account first."}
       </TooltipContent>
     </Tooltip>
   );
 }
 
 /**
- * Header tenant switcher — only renders once the signed-in identity holds a
+ * Header tenant switcher: only renders once the signed-in identity holds a
  * role at more than one tenant. Deliberately styled as a dropdown panel
  * (not the sidebar's native <select> branch switcher) so switching
  * *businesses* reads as a distinct, bigger action than switching branches
@@ -175,7 +175,7 @@ export function TenantSwitcher() {
           </div>
           <div className="mt-1.5 border-t pt-2 px-2.5 pb-1">
             <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-              Switching changes which business's data you see — bookings, staff, and settings all update.
+              Switching changes which business's data you see: bookings, staff, and settings all update.
             </p>
           </div>
         </DropdownMenuContent>

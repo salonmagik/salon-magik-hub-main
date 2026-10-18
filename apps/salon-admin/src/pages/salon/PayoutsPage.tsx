@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { Button } from "@ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@ui/card";
@@ -45,14 +46,20 @@ const withdrawalStatusStyles: Record<string, { bg: string; text: string }> = {
 
 // "awaiting_otp" is an internal-only state (a transfer stuck needing our own
 // team to complete a step on our Paystack account, nothing to do with the
-// salon) — it's tracked in backoffice, but here it's shown as an ordinary
+// salon). It's tracked in backoffice, but here it's shown as an ordinary
 // pending transfer so nothing salon-facing ever hints at it.
 function getSalonFacingWithdrawalStatus(status: string | null | undefined): string {
   return status === "awaiting_otp" ? "pending" : status || "pending";
 }
 
+const PAYOUTS_SUB_TABS = new Set(["history", "accounts", "settings"]);
+
 export default function PayoutsPage() {
-  const [payoutsSubTab, setPayoutsSubTab] = useState("history");
+  const [searchParams] = useSearchParams();
+  const [payoutsSubTab, setPayoutsSubTab] = useState(() => {
+    const tab = searchParams.get("tab");
+    return tab && PAYOUTS_SUB_TABS.has(tab) ? tab : "history";
+  });
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
   const [selectedWithdrawal, setSelectedWithdrawal] = useState<SalonWithdrawal | null>(null);
   const [selectedCountry, setSelectedCountry] = useState<string>("");
@@ -65,7 +72,7 @@ export default function PayoutsPage() {
   const isOwnerHub = activeContextType === "owner_hub";
   const selectedWalletLocationId = selectedWalletScope === "__central__" ? null : selectedWalletScope;
   // Payouts management (accounts, withdrawals, assignments) is restricted to
-  // owner/manager/supervisor — stylists and receptionists never see or access it.
+  // owner/manager/supervisor; stylists and receptionists never see or access it.
   const canManagePayouts = isOwnerHub && (
     currentRole === "owner" || currentRole === "manager" || currentRole === "supervisor"
   );
@@ -86,7 +93,7 @@ export default function PayoutsPage() {
     canManagePayouts ? selectedWalletLocationId : null,
   );
 
-  // The active pill can be scrolled out of view (many branches) — never
+  // The active pill can be scrolled out of view (many branches), so never
   // leave it selected-but-invisible off-screen when the page loads or the
   // scope changes elsewhere (e.g. the withdrawal dialog's destination picker).
   useEffect(() => {
@@ -190,7 +197,7 @@ export default function PayoutsPage() {
           )}
         </div>
 
-        {/* Branch switcher — a scrollable row of pills instead of a dropdown,
+        {/* Branch switcher: a scrollable row of pills instead of a dropdown,
             so every wallet is visible/reachable in one tap; scrolls sideways
             (trackpad, touch, shift+wheel) with a soft edge fade as the only
             hint there's more, no separate arrow buttons or counter. */}
@@ -220,7 +227,7 @@ export default function PayoutsPage() {
                     </span>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-56 text-xs">
-                    Money not yet linked to a specific branch — from invoices not tied to a booking, or manual top-ups.
+                    Money not yet linked to a specific branch: from invoices not tied to a booking, or manual top-ups.
                   </TooltipContent>
                 </Tooltip>
               </button>
@@ -259,7 +266,7 @@ export default function PayoutsPage() {
                         <Info className="h-3 w-3 text-muted-foreground cursor-default" />
                       </TooltipTrigger>
                       <TooltipContent side="top" className="max-w-56 text-xs">
-                        Everything you've earned that hasn't been paid out yet — including money still clearing with our payment processor and not withdrawable just yet.
+                        Everything you've earned that hasn't been paid out yet, including money still clearing with our payment processor and not withdrawable just yet.
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -396,7 +403,7 @@ export default function PayoutsPage() {
                             </p>
                             {displayStatus === "failed" && (
                               <p className="text-xs text-destructive mt-0.5">
-                                This withdrawal couldn't be completed — contact support for details.
+                                This withdrawal couldn't be completed. Contact support for details.
                               </p>
                             )}
                           </div>
@@ -410,7 +417,7 @@ export default function PayoutsPage() {
             </Card>
           </TabsContent>
 
-          {/* Accounts — one list, every account shows which branch(es) pay
+          {/* Accounts: one list, every account shows which branch(es) pay
               into it, instead of a branch-first card and a full-accounts
               card repeating the same data two different ways. */}
           <TabsContent value="accounts" className="mt-4">
@@ -451,7 +458,7 @@ export default function PayoutsPage() {
                   <div>
                     <p className="text-sm font-medium">Withdraw whenever you're ready</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Once money is in your available balance, request a withdrawal anytime — it's paid out on the next business day. See the Accounts tab for where it's sent, and the History tab to track a request.
+                      Once money is in your available balance, request a withdrawal anytime. It's paid out on the next business day. See the Accounts tab for where it's sent, and the History tab to track a request.
                     </p>
                   </div>
                 </div>
