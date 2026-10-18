@@ -124,6 +124,8 @@ export function PurseTopupDialog({
             customerEmail: customerEmail || "customer@example.com",
             intentType: "customer_purse_topup",
             customerId,
+            successUrl: window.location.href,
+            cancelUrl: window.location.href,
           }),
         }
       );

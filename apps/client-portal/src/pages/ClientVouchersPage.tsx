@@ -9,6 +9,7 @@ import { cn } from "@shared/utils";
 import { Skeleton } from "@ui/skeleton";
 import { VoucherDetailDialog } from "@/components/VoucherDetailDialog";
 import { voucherStatusMeta } from "@/lib/bookingsOrdersUi";
+import { Button } from "@ui/button";
 
 export default function ClientVouchersPage() {
   const { customers } = useClientAuth();
@@ -58,13 +59,14 @@ export default function ClientVouchersPage() {
             {vouchers.map((voucher) => {
               const unused = isVoucherUnused(voucher);
               const meta = voucherStatusMeta(voucher.status, unused);
+              const tenantPhone = tenantPhoneByTenantId.get(voucher.tenant_id);
               return (
                 <button
                   key={voucher.id}
                   type="button"
                   onClick={() => setSelected(voucher)}
                   className={cn(
-                    "flex w-full cursor-pointer items-center justify-between gap-3 rounded-[14px] border border-dashed border-[#D9D2E6] bg-white p-4.5 text-left transition-shadow hover:shadow-md",
+                    "flex w-full cursor-pointer items-center justify-between gap-3 rounded-[14px] border border-dashed border-[#D9D2E6] bg-white p-[18px] text-left transition-shadow hover:shadow-md",
                     !unused && "opacity-65",
                   )}
                 >
@@ -82,6 +84,17 @@ export default function ClientVouchersPage() {
                         : `Redeemed ${format(new Date(voucher.updated_at), "MMM d, yyyy")}`}
                     </p>
                   </div>
+                  {unused && (
+                    <Button
+                      size="sm"
+                      disabled={!tenantPhone}
+                      asChild={!!tenantPhone}
+                      onClick={(event) => event.stopPropagation()}
+                      className="shrink-0"
+                    >
+                      {tenantPhone ? <a href={`tel:${tenantPhone}`}>Use now</a> : <span>Use now</span>}
+                    </Button>
+                  )}
                 </button>
               );
             })}

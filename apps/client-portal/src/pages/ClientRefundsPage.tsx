@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import {
   ArrowDownLeft,
@@ -30,6 +30,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { formatCurrency } from "@shared/currency";
 import { cn } from "@shared/utils";
 import { useSearchParams } from "react-router-dom";
+import { useToast } from "@ui/ui/use-toast";
 
 const BALANCE_COPY: Record<string, string> = {
   "Paid funds": "Money you've paid into this salon's balance yourself, e.g. top-ups or prepaid packages.",
@@ -58,18 +59,73 @@ const entryLabels: Record<string, string> = {
 
 export default function ClientRefundsPage() {
   const [searchParams] = useSearchParams();
-  const { customers, user, refreshCustomers } = useClientAuth();
+  const { customers, user, isAuthenticated, refreshCustomers } = useClientAuth();
   const { purses, isLoading: pursesLoading, refetch: refetchPurses } = useClientPurse();
   const { grants, entries, packages, isLoading: balanceLoading, refetch: refetchBalance } = useClientBalance();
   const { refunds, isLoading: refundsLoading } = useClientRefunds();
+  const { toast } = useToast();
   const [claimOpen, setClaimOpen] = useState(false);
   const [voucherCode, setVoucherCode] = useState("");
   const [claimError, setClaimError] = useState("");
   const [isClaiming, setIsClaiming] = useState(false);
   const [topupCustomerId, setTopupCustomerId] = useState<string | null>(null);
+  const [isVerifyingTopup, setIsVerifyingTopup] = useState(false);
+  const verifyTopupCalledRef = useRef(false);
 
   const isLoading = pursesLoading || balanceLoading || refundsLoading;
   const topupCustomer = customers.find((customer) => customer.id === topupCustomerId);
+
+  // After a Paystack redirect from the "Add funds" dialog (?reference= or
+  // ?trxref=), actively verify and finalize the top-up as a safety net
+  // independent of the Paystack webhook, which credits the purse and
+  // notifies the salon but may be slow or may never fire for some
+  // checkouts. Mirrors the same pattern used for booking payments on
+  // ClientBookingDetailPage.
+  useEffect(() => {
+    if (verifyTopupCalledRef.current || !isAuthenticated) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const reference = params.get("reference") || params.get("trxref");
+    if (!reference) return;
+
+    verifyTopupCalledRef.current = true;
+
+    const runVerify = async () => {
+      setIsVerifyingTopup(true);
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke("verify-purse-topup", {
+          body: { reference },
+        });
+
+        if (fnError) {
+          console.error("verify-purse-topup error:", fnError);
+        } else if (data?.verified) {
+          toast({
+            title: "Funds added",
+            description: "Your balance has been updated.",
+          });
+        } else if (["abandoned", "failed"].includes(data?.paystackStatus)) {
+          toast({
+            title: "Payment wasn't completed",
+            description: "You can try again whenever you're ready.",
+            variant: "destructive",
+          });
+        }
+      } catch (err) {
+        console.error("Purse top-up verification failed:", err);
+      } finally {
+        setIsVerifyingTopup(false);
+        await Promise.all([refetchBalance(), refetchPurses()]);
+        const clean = new URLSearchParams(window.location.search);
+        clean.delete("reference");
+        clean.delete("trxref");
+        const newSearch = clean.toString();
+        window.history.replaceState({}, "", window.location.pathname + (newSearch ? `?${newSearch}` : ""));
+      }
+    };
+
+    void runVerify();
+  }, [isAuthenticated]);
 
   const salonBalances = useMemo(() => customers.map((customer) => {
     const salonGrants = grants.filter((grant) => grant.customer_id === customer.id && grant.status === "active");
@@ -118,6 +174,15 @@ export default function ClientRefundsPage() {
             Claim voucher
           </Button>
         </div>
+
+        {isVerifyingTopup && (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="flex items-center gap-3 pt-4">
+              <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin text-primary" />
+              <p className="text-sm font-medium text-primary">Confirming your top-up, please wait...</p>
+            </CardContent>
+          </Card>
+        )}
 
         <Tabs
           defaultValue={["balance", "packages", "activity", "refunds"].includes(searchParams.get("tab") || "")

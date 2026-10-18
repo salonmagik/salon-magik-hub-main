@@ -42,11 +42,6 @@ const faqs = [
     answer:
       "Use the support form below, choose the relevant salon, and select a booking-related issue type. Salon Magik will notify the salon inside their admin app and by email.",
   },
-  {
-    question: "Why did I stop receiving booking updates?",
-    answer:
-      "Check your communication preferences in Profile & Security. If SMS or email updates are disabled, salons may not be able to send booking reminders through Salon Magik.",
-  },
 ];
 
 type SupportTicket = {

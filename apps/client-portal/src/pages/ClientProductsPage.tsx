@@ -35,7 +35,7 @@ export default function ClientProductsPage() {
           <div>
             <h1 className="font-serif text-2xl font-semibold text-[#2E1F4E]">Products</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {orders.length} {orders.length === 1 ? "product" : "products"} purchased. Tap one to see its order and fulfillment history.
+              {orders.length} {orders.length === 1 ? "product" : "products"} purchased. Tap one to see its order, branch and fulfillment history.
             </p>
           </div>
         </div>

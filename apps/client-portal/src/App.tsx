@@ -3,6 +3,7 @@ import { TooltipProvider } from "@ui/tooltip";
 import ClientLoginPage from "@/pages/ClientLoginPage";
 import ClientDashboard from "@/pages/ClientDashboard";
 import ClientBookingsPage from "@/pages/ClientBookingsPage";
+import ClientUpcomingPage from "@/pages/ClientUpcomingPage";
 import ClientPackagesPage from "@/pages/ClientPackagesPage";
 import ClientProductsPage from "@/pages/ClientProductsPage";
 import ClientVouchersPage from "@/pages/ClientVouchersPage";
@@ -52,6 +53,14 @@ function App() {
             element={
               <ClientProtectedRoute>
                 <ClientBookingsPage />
+              </ClientProtectedRoute>
+            }
+          />
+          <Route
+            path="/bookings/upcoming"
+            element={
+              <ClientProtectedRoute>
+                <ClientUpcomingPage />
               </ClientProtectedRoute>
             }
           />

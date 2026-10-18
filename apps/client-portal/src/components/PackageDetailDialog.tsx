@@ -47,11 +47,13 @@ export function PackageDetailDialog({
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [purchase, setPurchase] = useState<{ amount: number; reference: string | null; currency: string } | null>(null);
+  const [locationLabel, setLocationLabel] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open || !entitlement) {
       setSessions([]);
       setPurchase(null);
+      setLocationLabel(null);
       return;
     }
 
@@ -84,7 +86,7 @@ export function PackageDetailDialog({
     if (entitlement.purchased_transaction_id) {
       supabase
         .from("transactions")
-        .select("amount, currency, paystack_reference, id")
+        .select("amount, currency, paystack_reference, id, appointment:appointments(location:locations(name, city))")
         .eq("id", entitlement.purchased_transaction_id)
         .maybeSingle()
         .then(({ data, error }) => {
@@ -98,6 +100,10 @@ export function PackageDetailDialog({
               reference: data.paystack_reference || data.id,
               currency: data.currency,
             });
+            const location = (data as any).appointment?.location as { name: string | null; city: string | null } | null;
+            if (location?.name) {
+              setLocationLabel(location.city ? `${location.name}, ${location.city}` : location.name);
+            }
           }
         });
     }
@@ -124,6 +130,7 @@ export function PackageDetailDialog({
           </DialogTitle>
           <DialogDescription>
             Purchased {format(new Date(entitlement.starts_at), "MMM d, yyyy")}
+            {locationLabel ? ` · ${locationLabel}` : ""}
           </DialogDescription>
         </DialogHeader>
 

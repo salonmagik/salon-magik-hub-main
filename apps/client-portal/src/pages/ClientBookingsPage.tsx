@@ -40,7 +40,17 @@ function EmptySection({ message }: { message: string }) {
 
 export default function ClientBookingsPage() {
   const { customers } = useClientAuth();
-  const { bookings: upcoming, isLoading: upcomingLoading } = useClientBookings("upcoming");
+  const { bookings: upcomingRaw, isLoading: upcomingLoading } = useClientBookings("upcoming");
+  // useClientBookings("upcoming") deliberately also returns bookings with no
+  // scheduled_start (originally meant to keep an unscheduled item visible
+  // elsewhere), but "Upcoming" here means a real appointment with a real
+  // date, that's the whole point of the section. A product/package order or
+  // an appointment still awaiting a time slot belongs in Packages/Products
+  // or gets scheduled first, not shown here as a dateless "--" card.
+  const upcoming = useMemo(
+    () => upcomingRaw.filter((booking) => Boolean(booking.scheduled_start)),
+    [upcomingRaw],
+  );
   const { packages, isLoading: packagesLoading } = useClientBalance();
   const { orders, isLoading: ordersLoading } = useClientProductOrders();
   const { vouchers, isLoading: vouchersLoading } = useClientVouchers();
@@ -90,7 +100,11 @@ export default function ClientBookingsPage() {
           <>
             {/* Upcoming */}
             <section className="space-y-3.5">
-              <SectionHeader title="Upcoming" count={String(upcoming.length)} />
+              <SectionHeader
+                title="Upcoming"
+                count={String(upcoming.length)}
+                seeAllHref={upcoming.length > 2 ? "/bookings/upcoming" : undefined}
+              />
               {upcomingPreview.length === 0 ? (
                 <EmptySection message="No upcoming bookings" />
               ) : (
@@ -154,7 +168,7 @@ export default function ClientBookingsPage() {
                         key={entitlement.id}
                         type="button"
                         onClick={() => setSelectedPackage(entitlement)}
-                        className="flex cursor-pointer flex-col gap-2.5 rounded-[14px] border border-[#EAE4D8] bg-white p-4.5 text-left transition-shadow hover:shadow-md"
+                        className="flex cursor-pointer flex-col gap-2.5 rounded-[14px] border border-[#EAE4D8] bg-white p-[18px] text-left transition-shadow hover:shadow-md"
                       >
                         <div className="flex items-start justify-between gap-2.5">
                           <div>
@@ -245,7 +259,7 @@ export default function ClientBookingsPage() {
                         key={voucher.id}
                         type="button"
                         onClick={() => setSelectedVoucher(voucher)}
-                        className="flex cursor-pointer items-center justify-between gap-3 rounded-[14px] border border-dashed border-[#D9D2E6] bg-white p-4.5 text-left transition-shadow hover:shadow-md"
+                        className="flex cursor-pointer items-center justify-between gap-3 rounded-[14px] border border-dashed border-[#D9D2E6] bg-white p-[18px] text-left transition-shadow hover:shadow-md"
                       >
                         <div>
                           <span className={cn("rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide", meta.className)}>

@@ -1007,13 +1007,22 @@ export default function ClientBookingDetailPage() {
               <span className="font-medium">{formatCurrency(booking.amount_paid, currency)}</span>
             </div>
             
-            {booking.amount_paid < booking.total_amount && (
+            {["refunded_full", "refunded_partial"].includes(booking.payment_status) ? (
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Balance Due</span>
-                <span className="font-medium text-destructive">
-                  {formatCurrency(outstandingAmount || (booking.total_amount - booking.amount_paid), currency)}
+                <span className="text-muted-foreground">Refund status</span>
+                <span className="font-medium text-green-600">
+                  {booking.payment_status === "refunded_full" ? "Fully refunded" : "Partially refunded"}
                 </span>
               </div>
+            ) : (
+              booking.amount_paid < booking.total_amount && (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Balance Due</span>
+                  <span className="font-medium text-destructive">
+                    {formatCurrency(outstandingAmount || (booking.total_amount - booking.amount_paid), currency)}
+                  </span>
+                </div>
+              )
             )}
 
             {booking.amount_paid > 0 && (

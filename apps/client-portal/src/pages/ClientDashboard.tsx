@@ -23,6 +23,7 @@ import { Skeleton } from "@ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { formatCurrency } from "@shared/currency";
 import { cn } from "@shared/utils";
+import { buildPublicBookingUrl } from "@/lib/bookingUrl";
 
 const paymentStatusLabels: Record<string, string> = {
   unpaid: "Payment pending",
@@ -65,10 +66,17 @@ function bookingHeadline(
 export default function ClientDashboard() {
   const { customers, isLoading: authLoading } = useClientAuth();
   const {
-    bookings,
+    bookings: upcomingRaw,
     nextAppointment,
     isLoading: upcomingLoading,
   } = useClientBookings("upcoming");
+  // "Upcoming bookings" here means real scheduled appointments, not
+  // dateless product/package orders or appointments still awaiting a time
+  // slot (those showed as an empty "--" card before this filter).
+  const bookings = useMemo(
+    () => upcomingRaw.filter((booking) => Boolean(booking.scheduled_start)),
+    [upcomingRaw],
+  );
   const { bookings: completedBookings, isLoading: historyLoading } =
     useClientBookings("completed");
   const { packages, isLoading: packagesLoading } = useClientBalance();
@@ -137,7 +145,7 @@ export default function ClientDashboard() {
                 asChild
                 className="h-12 shrink-0 rounded-full bg-[#f6c744] px-8 text-base text-[#171115] hover:bg-[#ffd45c]"
               >
-                <Link to="/bookings">
+                <Link to={nextAppointment ? "/bookings/upcoming" : "/bookings"}>
                   {nextAppointment ? "View my bookings" : "Find a booking"}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
@@ -150,7 +158,7 @@ export default function ClientDashboard() {
           <div className="mb-4 flex items-end justify-between gap-4">
             <h2 className="font-serif text-2xl font-semibold">Upcoming bookings</h2>
             <Link
-              to="/bookings"
+              to="/bookings/upcoming"
               className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
             >
               View all <ArrowRight className="h-3.5 w-3.5" />
@@ -231,7 +239,7 @@ export default function ClientDashboard() {
           <div className="mb-4 flex items-end justify-between gap-4">
             <h2 className="font-serif text-2xl font-semibold">My packages</h2>
             <Link
-              to="/balance"
+              to="/bookings/packages"
               className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-primary"
             >
               View balances <ArrowRight className="h-3.5 w-3.5" />
@@ -322,34 +330,48 @@ export default function ClientDashboard() {
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {customers.map((customer, index) => (
-                <div
-                  key={customer.id}
-                  className="overflow-hidden rounded-3xl border bg-white shadow-sm"
-                >
+              {customers.map((customer, index) => {
+                const websiteUrl = buildPublicBookingUrl(customer.tenant.slug);
+                return (
                   <div
-                    className={cn(
-                      "flex h-36 items-center justify-center",
-                      index % 3 === 0
-                        ? "bg-[#3c2861]"
-                        : index % 3 === 1
-                          ? "bg-[#f3bf3c]"
-                          : "bg-[#7f70a5]",
-                    )}
+                    key={customer.id}
+                    className="overflow-hidden rounded-3xl border bg-white shadow-sm"
                   >
-                    <Store className="h-10 w-10 text-white/85" />
+                    <div
+                      className={cn(
+                        "flex h-36 items-center justify-center",
+                        index % 3 === 0
+                          ? "bg-[#3c2861]"
+                          : index % 3 === 1
+                            ? "bg-[#f3bf3c]"
+                            : "bg-[#7f70a5]",
+                      )}
+                    >
+                      <Store className="h-10 w-10 text-white/85" />
+                    </div>
+                    <div className="p-6">
+                      <p className="font-serif text-xl font-semibold">
+                        {customer.tenant.name}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {customer.tenant.country || "Salon"} · {customer.visit_count || 0} visit
+                        {customer.visit_count === 1 ? "" : "s"}
+                      </p>
+                      {websiteUrl && (
+                        <a
+                          href={websiteUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                        >
+                          Visit website
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </a>
+                      )}
+                    </div>
                   </div>
-                  <div className="p-6">
-                    <p className="font-serif text-xl font-semibold">
-                      {customer.tenant.name}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {customer.tenant.country || "Salon"} · {customer.visit_count || 0} visit
-                      {customer.visit_count === 1 ? "" : "s"}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

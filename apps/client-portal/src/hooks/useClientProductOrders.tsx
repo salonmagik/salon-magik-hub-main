@@ -10,6 +10,8 @@ export interface ClientProductOrder extends AppointmentProduct {
   tenantId: string | null;
   tenantName: string | null;
   tenantCurrency: string;
+  locationName: string | null;
+  locationCity: string | null;
 }
 
 // Products are fulfillment line items on an appointment (appointment_products),
@@ -37,7 +39,7 @@ export function useClientProductOrders() {
     try {
       const { data, error: fetchError } = await supabase
         .from("appointments")
-        .select("id, tenant_id, tenant:tenants(name, currency), products:appointment_products(*)")
+        .select("id, tenant_id, tenant:tenants(name, currency), location:locations(name, city), products:appointment_products(*)")
         .in("customer_id", customerIds);
 
       if (fetchError) throw fetchError;
@@ -45,6 +47,7 @@ export function useClientProductOrders() {
       const flattened: ClientProductOrder[] = [];
       for (const appointment of (data || []) as any[]) {
         const tenant = appointment.tenant as { name: string | null; currency: string } | null;
+        const location = appointment.location as { name: string | null; city: string | null } | null;
         for (const product of (appointment.products || []) as AppointmentProduct[]) {
           flattened.push({
             ...product,
@@ -52,6 +55,8 @@ export function useClientProductOrders() {
             tenantId: appointment.tenant_id ?? null,
             tenantName: tenant?.name ?? null,
             tenantCurrency: tenant?.currency || "GHS",
+            locationName: location?.name ?? null,
+            locationCity: location?.city ?? null,
           });
         }
       }

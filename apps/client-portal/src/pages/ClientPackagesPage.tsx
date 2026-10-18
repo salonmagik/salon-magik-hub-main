@@ -68,7 +68,7 @@ export default function ClientPackagesPage() {
                   type="button"
                   onClick={() => setSelected(entitlement)}
                   className={cn(
-                    "flex cursor-pointer flex-col gap-2.5 rounded-[14px] border border-[#EAE4D8] bg-white p-4.5 text-left transition-shadow hover:shadow-md",
+                    "flex cursor-pointer flex-col gap-2.5 rounded-[14px] border border-[#EAE4D8] bg-white p-[18px] text-left transition-shadow hover:shadow-md",
                     expired && "opacity-55",
                   )}
                 >

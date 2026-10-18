@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
+import { supabase } from "@/lib/supabase";
 import type { ClientProductOrder } from "@/hooks";
 import { formatCurrency } from "@shared/currency";
 import {
@@ -33,10 +35,38 @@ function stepIndexFor(status: string): number {
 }
 
 export function ProductDetailDialog({ open, onOpenChange, order, tenantPhone }: ProductDetailDialogProps) {
+  const [reference, setReference] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !order) {
+      setReference(null);
+      return;
+    }
+
+    supabase
+      .from("transactions")
+      .select("id, paystack_reference")
+      .eq("appointment_id", order.appointmentId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("Error fetching product order transaction:", error);
+          setReference(null);
+          return;
+        }
+        setReference(data ? (data.paystack_reference || data.id) : null);
+      });
+  }, [open, order]);
+
   if (!order) return null;
 
   const cancelled = order.fulfillment_status === "cancelled";
   const activeStep = stepIndexFor(order.fulfillment_status);
+  const locationLabel = order.locationName
+    ? order.locationCity ? `${order.locationName}, ${order.locationCity}` : order.locationName
+    : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -49,6 +79,7 @@ export function ProductDetailDialog({ open, onOpenChange, order, tenantPhone }: 
           <DialogDescription>
             Ordered {format(new Date(order.created_at), "MMM d, yyyy")}
             {order.tenantName ? ` · ${order.tenantName}` : ""}
+            {locationLabel ? ` · ${locationLabel}` : ""}
           </DialogDescription>
         </DialogHeader>
 
@@ -115,6 +146,12 @@ export function ProductDetailDialog({ open, onOpenChange, order, tenantPhone }: 
                 <p className="text-xs text-muted-foreground">Quantity</p>
                 <p className="font-semibold">{order.quantity}</p>
               </div>
+              {reference && (
+                <div>
+                  <p className="text-xs text-muted-foreground">Reference</p>
+                  <p className="truncate font-semibold">{reference}</p>
+                </div>
+              )}
             </div>
           </div>
 
