@@ -5,7 +5,7 @@ interface SalonMagikLogoProps {
   size?: "xs" | "sm" | "md" | "lg";
   showText?: boolean;
   variant?: "default" | "white";
-  /** Drop the icon's background box entirely — for headers where the page
+  /** Drop the icon's background box entirely, for headers where the page
    * background already matches (or the mark should just float on it). Text
    * color still follows `variant`. */
   transparentIcon?: boolean;

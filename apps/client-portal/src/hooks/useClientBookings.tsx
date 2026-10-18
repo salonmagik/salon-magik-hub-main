@@ -68,7 +68,7 @@ export function useClientBookings(filter: BookingFilter = "upcoming") {
         query = query.eq("status", "cancelled");
       } else if (filter === "unpaid") {
         // Any non-cancelled booking still owing money, regardless of whether
-        // the appointment itself is upcoming or already completed — this is
+        // the appointment itself is upcoming or already completed. This is
         // about money owed, not scheduling status.
         query = query.neq("status", "cancelled").in("payment_status", ["unpaid", "deposit_paid"]);
       }

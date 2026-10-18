@@ -23,7 +23,7 @@ describe("needsDetailsConfirmation", () => {
   // The bug this whole change fixes: skipping used to be indistinguishable
   // from confirming, so a skip was as permanent as a real confirmation and
   // the customer had no way back to the form.
-  it("is false after a skip too — the automatic prompt doesn't reappear, but that's not the same as confirmed", () => {
+  it("is false after a skip too: the automatic prompt doesn't reappear, but that's not the same as confirmed", () => {
     expect(
       needsDetailsConfirmation({
         client_password_initialized: true,

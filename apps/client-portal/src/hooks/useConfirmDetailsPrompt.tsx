@@ -10,7 +10,7 @@ const ConfirmDetailsPromptContext = createContext<ConfirmDetailsPromptValue | nu
 
 /**
  * The confirm-details modal renders once at the app shell so it can nudge a
- * customer from any page, but the "you skipped this — confirm now" banner
+ * customer from any page, but the "you skipped this: confirm now" banner
  * lives on the profile page. This context is the one wire between them, so
  * the profile page doesn't need to know the modal is a shell-level thing.
  */

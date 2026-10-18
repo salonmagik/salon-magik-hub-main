@@ -185,7 +185,7 @@ export default function ClientDashboard() {
                   >
                     <div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl bg-[#f3edff] text-primary">
                       <span className="font-serif text-2xl font-semibold">
-                        {date ? format(date, "dd") : "—"}
+                        {date ? format(date, "dd") : "-"}
                       </span>
                       <span className="text-xs uppercase">
                         {date ? format(date, "MMM") : ""}
@@ -280,7 +280,7 @@ export default function ClientDashboard() {
                               <Info className="h-3 w-3 cursor-default" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-56 text-xs">
-                              Combined count across every service or product included in this package — not just one item.
+                              Combined count across every service or product included in this package, not just one item.
                             </TooltipContent>
                           </Tooltip>
                         </p>
@@ -386,7 +386,7 @@ export default function ClientDashboard() {
                       <span className="text-sm text-muted-foreground">
                         {booking.scheduled_start
                           ? format(new Date(booking.scheduled_start), "d MMM yyyy")
-                          : "—"}
+                          : "-"}
                       </span>
                       <span className="font-medium">
                         {bookingHeadline(booking, "Salon visit")}
@@ -443,7 +443,7 @@ export default function ClientDashboard() {
                               <Info className="h-3 w-3 text-muted-foreground cursor-default" />
                             </TooltipTrigger>
                             <TooltipContent side="top" className="max-w-56 text-xs">
-                              Paid funds plus store credit combined — may include amounts already reserved for an upcoming booking.
+                              Paid funds plus store credit combined, may include amounts already reserved for an upcoming booking.
                             </TooltipContent>
                           </Tooltip>
                         </div>

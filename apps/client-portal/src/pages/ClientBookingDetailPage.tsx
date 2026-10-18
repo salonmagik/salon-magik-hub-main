@@ -191,8 +191,8 @@ export default function ClientBookingDetailPage() {
   // customer lands straight in Paystack checkout instead of needing a second
   // tap on this page. Mirrors handleCompletePayment's own eligibility logic
   // (defined further down, after this component's early-return guards, so
-  // it isn't safely referenceable from an effect declared this early) —
-  // duplicated rather than shared for that reason.
+  // it isn't safely referenceable from an effect declared this early),
+  // so it's duplicated rather than shared for that reason.
   useEffect(() => {
     if (autoPayTriggeredRef.current || !booking) return;
     const params = new URLSearchParams(location.search);
@@ -352,7 +352,7 @@ export default function ClientBookingDetailPage() {
         setPendingReference(null);
         await refetchBookingAndSiblings();
       } else if (["abandoned", "failed"].includes(data?.paystackStatus)) {
-        // Terminal non-success on Paystack's side — the earlier attempt is
+        // Terminal non-success on Paystack's side: the earlier attempt is
         // dead, not still in flight. Drop it so "Complete Payment" comes
         // back instead of leaving the customer stuck on a check-status
         // button that can never succeed.
@@ -365,7 +365,7 @@ export default function ClientBookingDetailPage() {
       } else {
         toast({
           title: "Still processing",
-          description: "This payment hasn't cleared yet — check again in a moment.",
+          description: "This payment hasn't cleared yet, check again in a moment.",
         });
       }
     } catch (err) {
@@ -616,7 +616,7 @@ export default function ClientBookingDetailPage() {
           <Card className="border-primary/30 bg-primary/5">
             <CardContent className="pt-4 flex items-center gap-3">
               <LoadingState variant="inline" className="flex-shrink-0 text-primary" />
-              <p className="text-sm font-medium text-primary">Verifying your payment — please wait…</p>
+              <p className="text-sm font-medium text-primary">Verifying your payment, please wait…</p>
             </CardContent>
           </Card>
         )}
@@ -635,7 +635,7 @@ export default function ClientBookingDetailPage() {
               <Badge className={`cursor-default ${status.className}`}>{status.label}</Badge>
             </TooltipTrigger>
             <TooltipContent side="top" className="max-w-56 text-xs">
-              Where the {orderKind === "booking" ? "appointment" : orderKindNounCap(orderKind).toLowerCase()} is in its lifecycle — scheduled, in progress, or completed.
+              Where the {orderKind === "booking" ? "appointment" : orderKindNounCap(orderKind).toLowerCase()} is in its lifecycle: scheduled, in progress, or completed.
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -796,7 +796,7 @@ export default function ClientBookingDetailPage() {
           </Card>
         )}
 
-        {/* Mixed outcome card — some approved, some declined/rescheduled */}
+        {/* Mixed outcome card: some approved, some declined/rescheduled */}
         {hasMixedOutcomes && (
           <Card className="border-amber-300 bg-amber-50/60">
             <CardContent className="pt-5 space-y-4">
@@ -813,11 +813,11 @@ export default function ClientBookingDetailPage() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                  <span className="text-emerald-900 font-medium">{groupApprovedItems.length} item{groupApprovedItems.length !== 1 ? "s" : ""} approved — ready to pay</span>
+                  <span className="text-emerald-900 font-medium">{groupApprovedItems.length} item{groupApprovedItems.length !== 1 ? "s" : ""} approved, ready to pay</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <XCircle className="h-4 w-4 text-destructive shrink-0" />
-                  <span className="text-destructive/90 font-medium">{groupContactItems.length} item{groupContactItems.length !== 1 ? "s" : ""} declined or rescheduled — contact branch</span>
+                  <span className="text-destructive/90 font-medium">{groupContactItems.length} item{groupContactItems.length !== 1 ? "s" : ""} declined or rescheduled, contact branch</span>
                 </div>
               </div>
 

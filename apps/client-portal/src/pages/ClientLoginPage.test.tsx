@@ -36,7 +36,7 @@ describe("ClientLoginPage", () => {
       </MemoryRouter>
     );
 
-    // Email tab is active by default — Continue stays disabled rather than
+    // Email tab is active by default, so Continue stays disabled rather than
     // letting an empty/invalid submit through and showing a post-hoc error.
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
 

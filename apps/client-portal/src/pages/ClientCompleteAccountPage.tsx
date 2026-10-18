@@ -38,7 +38,7 @@ export default function ClientCompleteAccountPage() {
 
     setIsLoading(true);
     try {
-      // Capture email before calling the edge function — updateUserById invalidates the
+      // Capture email before calling the edge function: updateUserById invalidates the
       // current refresh token as a security measure, so we must re-sign in afterwards.
       const { data: { user: currentUser } } = await supabase.auth.getUser();
       const userEmail = currentUser?.email;

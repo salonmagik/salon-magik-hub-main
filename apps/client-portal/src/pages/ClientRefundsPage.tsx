@@ -33,8 +33,8 @@ import { useSearchParams } from "react-router-dom";
 
 const BALANCE_COPY: Record<string, string> = {
   "Paid funds": "Money you've paid into this salon's balance yourself, e.g. top-ups or prepaid packages.",
-  "Store credit": "Credit the salon has issued you — refunds, goodwill, or promotions. Not money you paid in.",
-  "Reserved": "Held against an upcoming booking — not available to spend until that booking is completed or cancelled.",
+  "Store credit": "Credit the salon has issued you: refunds, goodwill, or promotions. Not money you paid in.",
+  "Reserved": "Held against an upcoming booking, not available to spend until that booking is completed or cancelled.",
 };
 
 const sourceLabels: Record<string, string> = {
@@ -282,7 +282,7 @@ export default function ClientRefundsPage() {
                                         <Info className="h-3 w-3 text-muted-foreground cursor-default" />
                                       </TooltipTrigger>
                                       <TooltipContent side="top" className="max-w-56 text-xs">
-                                        "Reserved" is held against an upcoming booking — not available to use until that booking is completed or cancelled.
+                                        "Reserved" is held against an upcoming booking, not available to use until that booking is completed or cancelled.
                                       </TooltipContent>
                                     </Tooltip>
                                   )}
@@ -342,7 +342,7 @@ export default function ClientRefundsPage() {
                             <Badge variant="outline" className="cursor-default">{refund.status}</Badge>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-56 text-xs">
-                            Where this refund is in the salon's approval process — pending, approved, completed, or rejected.
+                            Where this refund is in the salon's approval process: pending, approved, completed, or rejected.
                           </TooltipContent>
                         </Tooltip>
                       </div>

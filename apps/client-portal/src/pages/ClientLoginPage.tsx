@@ -235,7 +235,7 @@ export default function ClientLoginPage() {
 
     setIsLoading(true);
     try {
-      // Always sign in with email — Supabase phone auth provider is disabled.
+      // Always sign in with email: Supabase phone auth provider is disabled.
       // For phone-identified users, loginEmail is the email on the auth account.
       const signInEmail =
         resolution.identifierType === "email"
@@ -527,7 +527,7 @@ export default function ClientLoginPage() {
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {isPhoneOtp
                       ? "Check your messages for a text from Salon Magik."
-                      : "Check the inbox — and spam folder — for an email from Salon Magik."}
+                      : "Check the inbox (and spam folder) for an email from Salon Magik."}
                   </p>
                 </div>
 
