@@ -2,8 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ClientRefundRequestDialog } from "./ClientRefundRequestDialog";
 
-const { rpcMock } = vi.hoisted(() => ({ rpcMock: vi.fn() }));
-vi.mock("@/lib/supabase", () => ({ supabase: { rpc: rpcMock } }));
+const { rpcMock, invokeMock } = vi.hoisted(() => ({ rpcMock: vi.fn(), invokeMock: vi.fn() }));
+vi.mock("@/lib/supabase", () => ({
+  supabase: { rpc: rpcMock, functions: { invoke: invokeMock } },
+}));
 
 const transaction = { id: "tx-1", amount: 150, currency: "GHS", tenantName: "Apple Hair Stores" };
 
@@ -11,6 +13,8 @@ describe("ClientRefundRequestDialog", () => {
   beforeEach(() => {
     rpcMock.mockReset();
     rpcMock.mockResolvedValue({ data: "request-1", error: null });
+    invokeMock.mockReset();
+    invokeMock.mockResolvedValue({ data: null, error: null });
   });
 
   it("lets a client request all or part of a payment without choosing the refund method", async () => {

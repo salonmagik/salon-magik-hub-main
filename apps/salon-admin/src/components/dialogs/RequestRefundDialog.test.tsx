@@ -42,7 +42,7 @@ describe("RequestRefundDialog", () => {
     await waitFor(() => expect(screen.getByText("₵150.00")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "All" }));
     expect(screen.getByRole("button", { name: /Salon balance/i })).not.toBeDisabled();
-    expect(screen.getByText(/draws it down against a future booking or purchase/i)).toBeInTheDocument();
+    expect(screen.getByText(/available in the customer's salon balance for future appointments/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Cash \/ transfer/i })).not.toBeDisabled();
   });
 
