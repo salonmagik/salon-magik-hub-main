@@ -56,12 +56,12 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
     locationId ? item.location_ids.includes(locationId) : !!item.is_default
   );
   // A branch with nothing pinned yet gets nudged to pick any existing,
-  // currency-matching account instead of just being told to go add one —
+  // currency-matching account instead of just being told to go add one:
   // picking here pins it to this branch going forward (see handleWithdraw).
   const needsBranchAssignment = !!locationId && pinnedDestinations.length === 0;
   // Same nudge for the General wallet: accounts can exist without any of
   // them marked as the default (e.g. added before "Set as default" existed,
-  // or never checked at creation) — don't tell the salon to go add a new
+  // or never checked at creation), so don't tell the salon to go add a new
   // one when it just needs one of its existing accounts designated default.
   const needsDefaultAssignment = !locationId && pinnedDestinations.length === 0;
   const needsAssignment = needsBranchAssignment || needsDefaultAssignment;
@@ -98,7 +98,7 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
     catch (error) { quoteError = error instanceof Error ? error.message : "Invalid withdrawal"; }
   }
 
-  // Reset form when dialog opens. Also refetch destinations — this dialog's
+  // Reset form when dialog opens. Also refetch destinations: this dialog's
   // own usePayoutDestinations instance fetches once at mount, which can be
   // long before the salon actually has a destination configured (or before
   // one added on the Accounts tab exists yet), leaving it permanently stale
@@ -171,7 +171,7 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
     setError("");
 
     try {
-      // First withdrawal from a branch with no pinned account yet — the
+      // First withdrawal from a branch with no pinned account yet: the
       // one just picked becomes that branch's explicit account going
       // forward, matching what the backend now requires (no more implicit
       // fallback to a "default" destination for an unassigned branch).
@@ -188,7 +188,7 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
         await refetchDestinations();
       }
 
-      // Same idea for the General wallet — only one destination is ever
+      // Same idea for the General wallet: only one destination is ever
       // "the" default, so clear any other before setting this one.
       if (needsDefaultAssignment && tenantId) {
         const { error: clearDefaultError } = await supabase
@@ -290,7 +290,7 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
                         <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                         <p className="text-xs">
                           {formatCurrency(pendingBalance, currency)} still settling
-                          {nextSettlementAt ? ` — available by ${nextSettlementAt}` : ""}
+                          {nextSettlementAt ? `, available by ${nextSettlementAt}` : ""}
                         </p>
                       </div>
                     </TooltipTrigger>
@@ -316,12 +316,12 @@ export function WithdrawalDialog({ open, onOpenChange, locationId = null, curren
               <Label htmlFor="destination">Payout Destination</Label>
               {needsBranchAssignment && scopedDestinations.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  This branch doesn't have a payout account yet — pick one below and it'll be used for this branch going forward.
+                  This branch doesn't have a payout account yet. Pick one below and it'll be used for this branch going forward.
                 </p>
               )}
               {needsDefaultAssignment && scopedDestinations.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  General doesn't have a default payout account yet — pick one below and it'll become the default going forward.
+                  General doesn't have a default payout account yet. Pick one below and it'll become the default going forward.
                 </p>
               )}
               {scopedDestinations.length === 0 ? (

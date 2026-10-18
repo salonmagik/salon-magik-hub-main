@@ -86,7 +86,7 @@ export function useTransactions(filters?: {
       const ledgerTransactions = (data as TransactionWithDetails[] || []);
 
       // A customer paying online via Paystack only gets a `transactions` row
-      // once the webhook confirms success or failure — until then, the only
+      // once the webhook confirms success or failure; until then, the only
       // record of that payment is a `payment_intents` row (status: pending).
       // That made the appointment itself show as awaiting payment while the
       // Transactions/Cashflow page showed nothing at all for it. Surface

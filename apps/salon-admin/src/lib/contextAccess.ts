@@ -43,7 +43,7 @@ export function isModuleAllowedInContext(
     return contextType === "location";
   }
 
-  // Billing/Subscription is tenant-wide, not per-branch — business hub only,
+  // Billing/Subscription is tenant-wide, not per-branch: business hub only,
   // regardless of role permissions.
   if (routePath === "/salon/subscription" || module === "billing") {
     return contextType === "owner_hub";

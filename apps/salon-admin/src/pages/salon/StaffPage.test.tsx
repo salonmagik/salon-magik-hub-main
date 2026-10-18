@@ -51,7 +51,7 @@ vi.mock("@/lib/supabase", () => {
     maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
     // Makes the chain itself awaitable, for callers (like ProductTourProvider)
     // that resolve a list query directly off .eq() rather than terminating
-    // with .single()/.maybeSingle() — matching the real Supabase client,
+    // with .single()/.maybeSingle(), matching the real Supabase client,
     // whose query builder is a genuine thenable.
     then: (onFulfilled: (value: { data: unknown[]; error: null }) => unknown) =>
       Promise.resolve({ data: [], error: null }).then(onFulfilled),

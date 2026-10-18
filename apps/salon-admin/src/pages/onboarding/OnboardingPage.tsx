@@ -230,8 +230,8 @@ export default function OnboardingPage() {
           if (data?.available === false) {
             setOwnerInviteError(
               data.reason === "already_owner"
-                ? "This email already owns another salon on Salon Magik. Each owner can only manage one active salon — try a different email for this owner."
-                : "This email already has a Salon Magik account. We can't send an owner invite to an existing account yet — try a different email, or have them sign in and set this up themselves once you're done.",
+                ? "This email already owns another salon on Salon Magik. Each owner can only manage one active salon, so try a different email for this owner."
+                : "This email already has a Salon Magik account. We can't send an owner invite to an existing account yet, so try a different email, or have them sign in and set this up themselves once you're done.",
             );
             return;
           }
@@ -505,7 +505,7 @@ export default function OnboardingPage() {
       // Mark the originating waitlist lead converted, regardless of which
       // signup path was used. Previously this only ran for the Google OAuth
       // flow (keyed on a client-side invite token saved before the OAuth
-      // redirect) — the regular email/password path never threads that
+      // redirect); the regular email/password path never threads that
       // token through (it can't: signup there requires an email-confirm
       // step in between), so every non-Google conversion silently never
       // marked its lead, leaving the backoffice "Converted" tab empty.
@@ -545,7 +545,7 @@ export default function OnboardingPage() {
           });
         } else if (promoClaimData?.success) {
           clearPendingSalesPromoCode();
-          // Grant the trial-day bonus immediately — every eligibility
+          // Grant the trial-day bonus immediately: every eligibility
           // condition (trialing, within window, has a redemption) is
           // already true at this exact moment, so there's no reason to
           // make the tenant come back later and click through a separate
@@ -857,7 +857,7 @@ export default function OnboardingPage() {
           <SegmentProgress currentIndex={currentStepIndex} total={totalSteps} />
         </div>
 
-        {/* Step content — no white card wrapper, sits directly on cream */}
+        {/* Step content: no white card wrapper, sits directly on cream */}
         <div>
 
             {step === "role" && (
@@ -907,7 +907,7 @@ export default function OnboardingPage() {
                       <div className="rounded-[18px] bg-[#EDE9E4] px-5 py-5">
                         {chainQuote.requires_custom ? (
                           <p className="text-[13.5px] text-amber-700">
-                            This location count requires custom pricing. You can continue — activation will remain pending until Backoffice approves a quote.
+                            This location count requires custom pricing. You can continue, but activation will remain pending until Backoffice approves a quote.
                           </p>
                         ) : (
                           <>

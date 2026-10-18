@@ -115,7 +115,7 @@ export default function AssignmentPendingPage() {
     return () => {
       active = false;
     };
-    // refreshTenants intentionally excluded — held via ref to avoid infinite loop
+    // refreshTenants intentionally excluded: held via ref to avoid infinite loop
     // when refreshTenants() state update triggers a new function reference
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);

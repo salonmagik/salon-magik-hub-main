@@ -45,7 +45,7 @@ export function PlanChangeBanner() {
 
     toast("Your plan pricing has changed", {
       description: effectiveAt
-        ? `${description} — effective ${new Date(effectiveAt).toLocaleDateString()}`
+        ? `${description}, effective ${new Date(effectiveAt).toLocaleDateString()}`
         : description,
       duration: 10000,
       action: {

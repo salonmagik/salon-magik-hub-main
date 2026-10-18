@@ -100,8 +100,8 @@ export function useReports(period: "today" | "week" | "month" | "custom" = "mont
           return {
             current: customRange,
             prev: { start: prevStart, end: prevEnd },
-            label: `${format(customRange.start, "MMM d")} – ${format(customRange.end, "MMM d")}`,
-            prevLabel: `${format(prevStart, "MMM d")} – ${format(prevEnd, "MMM d")}`,
+            label: `${format(customRange.start, "MMM d")} to ${format(customRange.end, "MMM d")}`,
+            prevLabel: `${format(prevStart, "MMM d")} to ${format(prevEnd, "MMM d")}`,
           };
         }
         return {

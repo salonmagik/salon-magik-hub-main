@@ -88,7 +88,7 @@ export function StaffDetailDialog({ open, onOpenChange, staff }: StaffDetailDial
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Email</p>
-                <p className="font-medium">{staff.email || "—"}</p>
+                <p className="font-medium">{staff.email || "N/A"}</p>
               </div>
             </div>
 
@@ -98,7 +98,7 @@ export function StaffDetailDialog({ open, onOpenChange, staff }: StaffDetailDial
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Phone</p>
-                <p className="font-medium">{staff.profile?.phone || "—"}</p>
+                <p className="font-medium">{staff.profile?.phone || "N/A"}</p>
               </div>
             </div>
           </div>
@@ -158,7 +158,7 @@ export function StaffDetailDialog({ open, onOpenChange, staff }: StaffDetailDial
               <div>
                 <p className="text-sm text-muted-foreground">Joined</p>
                 <p className="font-medium">
-                  {staff.joinedAt ? format(new Date(staff.joinedAt), "MMM d, yyyy") : "—"}
+                  {staff.joinedAt ? format(new Date(staff.joinedAt), "MMM d, yyyy") : "N/A"}
                 </p>
               </div>
             </div>

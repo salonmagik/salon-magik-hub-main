@@ -58,11 +58,11 @@ export function useWithdrawals(tenantId?: string, locationId?: string | null) {
 
   // A withdrawal's status changes server-side (the transfer.success/failed
   // webhook, or an internal reconciliation) with no action from the user
-  // still looking at this page — without this, "pending" only ever updated
+  // still looking at this page. Without this, "pending" only ever updated
   // to its real outcome after the user did something themselves (e.g.
   // submitted another withdrawal), even though the notification for the
   // same event arrived instantly. This hook mounts more than once at a time
-  // (PayoutsPage and WithdrawalDialog both use it) — a hardcoded channel
+  // (PayoutsPage and WithdrawalDialog both use it), and a hardcoded channel
   // name would collide the same way useNotifications' did, so each instance
   // gets its own channel name.
   const instanceIdRef = useRef(generateUUID());

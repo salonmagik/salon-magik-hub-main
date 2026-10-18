@@ -26,7 +26,7 @@ const FINISHED_STATUS = "finished";
 const SKIPPED_STATUS = "skipped";
 
 // react-joyride + its tooltip live in their own chunk (see
-// ProductTourRenderer), loaded only once a tour actually starts — this file
+// ProductTourRenderer), loaded only once a tour actually starts. This file
 // stays cheap so it can be mounted at the App root for every user without
 // adding to everyone's initial bundle.
 const ProductTourRenderer = lazy(() => import("./ProductTourRenderer"));
@@ -41,7 +41,7 @@ export interface ProductTourStepInput {
   /**
    * Override the default 6s target-wait. Use a short value (~1.5s) for
    * steps whose target is conditionally rendered on the SAME page (no
-   * navigation, no lazy chunk to wait for) — e.g. a checklist card that
+   * navigation, no lazy chunk to wait for), e.g. a checklist card that
    * only exists while setup is incomplete. Skipping past it should be
    * near-instant, not a multi-second stall, when it's simply not there.
    */
@@ -49,17 +49,17 @@ export interface ProductTourStepInput {
 }
 
 export interface StartTourInput {
-  /** Flattened spotlight steps to run, in order — may come from one walkthrough or several concatenated. */
+  /** Flattened spotlight steps to run, in order: may come from one walkthrough or several concatenated. */
   steps: ProductTourStepInput[];
   /** Every walkthrough id represented in `steps`, marked seen together when the run finishes or is skipped. */
   walkthroughIds: string[];
-  /** Fires once this run ends, whether finished or skipped — lets a page chain a follow-up tour. */
+  /** Fires once this run ends, whether finished or skipped, letting a page chain a follow-up tour. */
   onComplete?: () => void;
 }
 
 interface ProductTourContextValue {
   startTour: (input: StartTourInput) => void;
-  /** Ends the active tour immediately without marking it seen — it resumes naturally later. */
+  /** Ends the active tour immediately without marking it seen; it resumes naturally later. */
   cancelTour: () => void;
   isTourActive: boolean;
   hasSeenWalkthrough: (id: string) => boolean;
@@ -67,7 +67,7 @@ interface ProductTourContextValue {
    * False until `seenIds` has been read from localStorage for the current
    * user. ProductTourProvider wraps the whole app, so its own effects run
    * AFTER page-level effects on mount (React fires child effects before
-   * parent effects) — a page's useWalkthroughAutoTrigger must wait for this
+   * parent effects), so a page's useWalkthroughAutoTrigger must wait for this
    * before trusting hasSeenWalkthrough, or it'll see the empty initial Set
    * and re-launch tours the user already completed, every load.
    */
@@ -116,7 +116,7 @@ function waitForTarget(selector: string, timeoutMs: number): Promise<void> {
 // Cross-page steps navigate then wait for the next page's lazy-loaded target
 // to actually mount, all inside the `before` hook. This can't be left to
 // react-joyride's own `targetWaitTimeout` polling: that polling path only
-// runs for steps with NO `before` hook — when a `before` hook is present,
+// runs for steps with NO `before` hook. When a `before` hook is present,
 // v3 checks for the target synchronously the instant the hook's promise
 // resolves, which is before React has committed the route change, so it
 // reads "not found" and silently skips every step in a cascade.
@@ -128,12 +128,12 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
   const [run, setRun] = useState(false);
   const [activeWalkthroughIds, setActiveWalkthroughIds] = useState<string[]>([]);
   // Seen state lives in tour_progress (per-account, server-side) instead of
-  // localStorage — it used to be scoped to one browser, so logging out and
+  // localStorage. It used to be scoped to one browser, so logging out and
   // back in (or switching devices) reset every tour to unseen. Can't read
   // this from a useState lazy initializer: user.id isn't resolved yet on the
   // very first render (auth loads asynchronously), so that initializer would
   // run once against an empty/undefined id and never re-fetch once the real
-  // id showed up — every walkthrough would look "unseen" for the rest of the
+  // id showed up, every walkthrough would look "unseen" for the rest of the
   // session regardless of history.
   const [seenIds, setSeenIds] = useState<Set<string>>(new Set());
   const [hasLoadedSeenWalkthroughs, setHasLoadedSeenWalkthroughs] = useState(false);
@@ -170,7 +170,7 @@ export function ProductTourProvider({ children }: { children: ReactNode }) {
       });
       if (user?.id) {
         // Optimistic local update above already lets the UI move on
-        // immediately; this persists it. Not retried on failure — same
+        // immediately; this persists it. Not retried on failure, same
         // fire-and-forget characteristic as the localStorage write it
         // replaces (which also had no failure mode of its own).
         supabase

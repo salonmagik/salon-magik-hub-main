@@ -212,7 +212,7 @@ function RootRoute() {
 }
 
 const App = () => {
-  // A route rendered without throwing — clear the chunk-reload guard so a
+  // A route rendered without throwing: clear the chunk-reload guard so a
   // later transient chunk-load failure still gets its one auto-retry.
   useEffect(() => {
     sessionStorage.removeItem("salon-admin-chunk-reload");

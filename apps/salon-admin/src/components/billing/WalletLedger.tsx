@@ -143,7 +143,7 @@ export function WalletLedger({ walletType, walletId, currency = "n/a" }: WalletL
                       {entry.reference_type}: {entry.reference_id.substring(0, 8)}
                     </span>
                   ) : (
-                    <span>—</span>
+                    <span>N/A</span>
                   )}
                 </TableCell>
               </TableRow>

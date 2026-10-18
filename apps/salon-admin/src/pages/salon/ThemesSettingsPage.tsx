@@ -808,7 +808,7 @@ export default function ThemesSettingsPage() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Hero copy and about section — shown when the e-commerce theme is active.
+                      Hero copy and about section, shown when the e-commerce theme is active.
                     </p>
 
                     {hasPurchasedEcommerce && (
@@ -913,7 +913,7 @@ export default function ThemesSettingsPage() {
                     <div className="space-y-1">
                       <Label className="text-xs">About Section</Label>
                       <Textarea
-                        placeholder="Tell your story — appears in the footer of your public storefront…"
+                        placeholder="Tell your story, appears in the footer of your public storefront…"
                         value={settings.aboutText}
                         onChange={(e) => setSettings((p) => ({ ...p, aboutText: e.target.value }))}
                         rows={3}
@@ -1023,7 +1023,7 @@ export default function ThemesSettingsPage() {
         detail={
           <p className="text-sm text-muted-foreground">
             <span className="font-medium text-foreground">Next step: apply the theme.</span>{" "}
-            Purchasing a theme doesn't activate it automatically — click{" "}
+            Purchasing a theme doesn't activate it automatically. Click{" "}
             <strong>Apply now</strong> to switch your public booking page to the e-commerce layout.
           </p>
         }

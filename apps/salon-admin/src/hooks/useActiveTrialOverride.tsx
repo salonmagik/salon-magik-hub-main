@@ -4,8 +4,8 @@ import { supabase } from "@/lib/supabase";
 /**
  * Backoffice's "Tenant Gifted Trials" panel writes to tenant_trial_overrides.
  * is_tenant_operational() honors an active override on the backend (see the
- * 2026-08-03 migration), but every trial-countdown surface in salon-admin —
- * the sidebar badge, banners, blocking modal, Settings tab — used to read
+ * 2026-08-03 migration), but every trial-countdown surface in salon-admin
+ * (the sidebar badge, banners, blocking modal, Settings tab) used to read
  * tenants.trial_ends_at directly, so a gifted override had zero visible
  * effect for the tenant. Callers should prefer this override's ends_at over
  * the tenant's own trial_ends_at whenever one is active.

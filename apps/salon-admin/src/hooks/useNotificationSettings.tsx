@@ -154,11 +154,11 @@ export function useNotificationSettings(locationId: string | null = null) {
     }
   };
 
-  // A branch "override" is simply a row with that location_id — removing it
+  // A branch "override" is simply a row with that location_id, so removing it
   // deletes the row outright so the branch falls back to inheriting the
   // tenant-wide default again. Goes through a SECURITY DEFINER RPC (not a
-  // direct table delete) so it gets a real role/module permission check —
-  // the table's own RLS only checks tenant membership, which isn't enough
+  // direct table delete) so it gets a real role/module permission check,
+  // since the table's own RLS only checks tenant membership, which isn't enough
   // to safely gate a delete.
   const removeLocationOverride = async (locationId: string): Promise<boolean> => {
     if (!currentTenant?.id) {

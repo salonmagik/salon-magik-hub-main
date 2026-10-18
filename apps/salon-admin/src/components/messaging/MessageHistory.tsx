@@ -218,7 +218,7 @@ export function MessageHistory({ customerId }: MessageHistoryProps) {
                     : message.message
                   : message.template
                     ? `WhatsApp template: ${message.template.template_name}`
-                    : "—";
+                    : "N/A";
 
               return (
                 <Collapsible key={message.id} open={isExpanded} onOpenChange={() => toggleExpanded(message.id)}>
@@ -301,7 +301,7 @@ export function MessageHistory({ customerId }: MessageHistoryProps) {
                           <div>
                             <h5 className="font-medium text-sm mb-1">Recipient</h5>
                             <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-md">
-                              {message.recipient ?? "—"}
+                              {message.recipient ?? "N/A"}
                             </p>
                           </div>
                         )}

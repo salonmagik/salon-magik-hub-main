@@ -158,7 +158,7 @@ export default function SalonsOverviewPage() {
         {isLoading ? <div className="business-overview__loading">Loading your overview…</div> : error ? <div className="business-overview__error"><AlertCircle /><span>Failed to load branch data.</span><Button variant="outline" onClick={() => refetch()}>Try again</Button></div> : <>
           {attentionCount === 0 ? (
             <div className="flex items-center gap-2 rounded-[14px] border border-border/60 shadow-sm bg-white px-4 py-4 mb-5 text-sm text-foreground">
-              <Check className="h-4 w-4 text-green-600" /> All caught up — nothing needs your attention right now.
+              <Check className="h-4 w-4 text-green-600" /> All caught up, nothing needs your attention right now.
             </div>
           ) : (
             <section className="rounded-[14px] border border-border/60 shadow-sm bg-white px-4 py-3 mb-5">
@@ -166,9 +166,9 @@ export default function SalonsOverviewPage() {
                 Needs attention
                 <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive/10 px-1.5 text-xs font-semibold text-destructive">{attentionCount}</span>
               </h2>
-              {aggregate && aggregate.pending > 0 && <AttentionRow tone="amber" title={`${aggregate.pending} pending approvals`} description="Awaiting your response — VI Branch, Main Location" action="Review" loading={reviewLoading && reviewBucket === "pending"} onClick={() => void loadReviewAppointments("pending")} />}
-              {aggregate && aggregate.unpaid > 0 && <AttentionRow tone="red" title={`${aggregate.unpaid} unpaid balance${aggregate.unpaid === 1 ? "" : "s"}`} description="Not fully paid or refunded — Main Location" action="Review" loading={reviewLoading && reviewBucket === "unpaid"} onClick={() => void loadReviewAppointments("unpaid")} />}
-              {pausedBranches.length > 0 && <AttentionRow tone="gray" title={`${pausedBranches.length} paused branch${pausedBranches.length === 1 ? "" : "es"}`} description={`${pausedBranches[0]?.label || "Branch"} — not taking new bookings`} action="Revive" onClick={() => pausedBranches[0]?.locationId && handleRevive(pausedBranches[0].locationId)} />}
+              {aggregate && aggregate.pending > 0 && <AttentionRow tone="amber" title={`${aggregate.pending} pending approvals`} description="Awaiting your response: VI Branch, Main Location" action="Review" loading={reviewLoading && reviewBucket === "pending"} onClick={() => void loadReviewAppointments("pending")} />}
+              {aggregate && aggregate.unpaid > 0 && <AttentionRow tone="red" title={`${aggregate.unpaid} unpaid balance${aggregate.unpaid === 1 ? "" : "s"}`} description="Not fully paid or refunded: Main Location" action="Review" loading={reviewLoading && reviewBucket === "unpaid"} onClick={() => void loadReviewAppointments("unpaid")} />}
+              {pausedBranches.length > 0 && <AttentionRow tone="gray" title={`${pausedBranches.length} paused branch${pausedBranches.length === 1 ? "" : "es"}`} description={`${pausedBranches[0]?.label || "Branch"}: not taking new bookings`} action="Revive" onClick={() => pausedBranches[0]?.locationId && handleRevive(pausedBranches[0].locationId)} />}
               {pausedBranches.length > 0 && currentRole === "owner" && (
                 <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-3 mt-1 text-sm">
                   <span>Revive {pausedBranches[0]?.label || "this branch"} so it can take bookings again?</span>
@@ -217,7 +217,7 @@ export default function SalonsOverviewPage() {
               <div className={cn(DIALOG_BODY_PADDING, "grid grid-cols-3 gap-4")}>
                 <div>
                   <p className="text-xs text-muted-foreground">Inflow</p>
-                  <p className="mt-1 text-sm font-semibold">{canViewRevenue ? formatCurrency(selectedLocation.revenue, selectedLocation.currency) : "—"}</p>
+                  <p className="mt-1 text-sm font-semibold">{canViewRevenue ? formatCurrency(selectedLocation.revenue, selectedLocation.currency) : "N/A"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Bookings</p>
@@ -332,7 +332,7 @@ function BranchCard({ location, canViewRevenue, top, needsAttention, onClick }: 
 			<div className="flex gap-5 mt-3">
 				<div className="flex flex-col gap-0.5">
 					<span className="text-xs text-muted-foreground">Inflow</span>
-					<span className="text-sm font-semibold">{canViewRevenue ? formatCurrency(location.revenue, location.currency) : "—"}</span>
+					<span className="text-sm font-semibold">{canViewRevenue ? formatCurrency(location.revenue, location.currency) : "N/A"}</span>
 				</div>
 				<div className="flex flex-col gap-0.5">
 					<span className="text-xs text-muted-foreground">Bookings</span>

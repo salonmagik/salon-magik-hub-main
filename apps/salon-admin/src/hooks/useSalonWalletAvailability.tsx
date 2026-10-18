@@ -67,7 +67,7 @@ export function useSalonWalletAvailability(tenantId?: string, locationId?: strin
   }, [tenantId, locationId, fetchAvailability]);
 
   // "Available" is computed from both the wallet balance and any pending
-  // withdrawals — a withdrawal's status changing (e.g. the transfer.success/
+  // withdrawals: a withdrawal's status changing (e.g. the transfer.success/
   // failed webhook resolving it, with no action from whoever's looking at
   // this page) needs to be reflected without a manual refresh. Same
   // multi-mount-collision fix as useNotifications/useWithdrawals: this hook

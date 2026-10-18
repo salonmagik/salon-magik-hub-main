@@ -9,7 +9,7 @@ export interface PromoTrialBonusConfig {
 }
 
 /**
- * Reads the promo_trial_bonus platform_settings row — the single source of
+ * Reads the promo_trial_bonus platform_settings row, the single source of
  * truth for whether the "apply a promo code for extra trial days" incentive
  * is currently on, and its numbers. Backoffice can flip `enabled` or change
  * the day counts at any time with zero code changes on this side; every
@@ -41,7 +41,7 @@ export function usePromoTrialBonusConfig() {
 
 /**
  * Whether THIS tenant is currently within the promo-bonus eligibility
- * window, hasn't already claimed the bonus, and the incentive is enabled —
+ * window, hasn't already claimed the bonus, and the incentive is enabled,
  * i.e. whether any UI should mention/offer it right now.
  */
 export function usePromoTrialBonusEligibility() {

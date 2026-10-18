@@ -28,7 +28,7 @@ export const CUSTOMER_TAG_META: Record<
   vip: {
     label: "VIP",
     className: "bg-amber-100 text-amber-800",
-    description: "Marked manually by your team — click the star on a customer to toggle it.",
+    description: "Marked manually by your team. Click the star on a customer to toggle it.",
   },
   big_spender: {
     label: "Big spender",

@@ -84,7 +84,7 @@ export function useRefunds() {
       }
 
       // Routed through the edge function (not the RPC directly) so the
-      // refund-clawback safeguard applies to the approval-queue path too —
+      // refund-clawback safeguard applies to the approval-queue path too:
       // a blocked refund surfaces here as an error and the request stays
       // pending rather than being marked completed.
       const { data, error } = await supabase.functions.invoke("refund-via-paystack", {

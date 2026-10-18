@@ -117,7 +117,7 @@ export function TransactionDetailDialog({
       setIsLoading(true);
 
       // Packages are resolved first since the FK runs straight from the
-      // transaction to the entitlement — no appointment hop needed, and a
+      // transaction to the entitlement, no appointment hop needed, and a
       // package purchase still carries an appointment_id (it's issued
       // through an unscheduled appointment), so checking this ahead of the
       // appointment branch below is what keeps the two from colliding.

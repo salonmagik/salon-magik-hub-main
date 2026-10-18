@@ -8,12 +8,12 @@ import { ApplyPromoCodeDialog } from "./ApplyPromoCodeDialog";
 /**
  * Persistent (dismissible-but-reappears-next-session) nudge shown while a
  * tenant is still within the promo-bonus eligibility window. Lives in the
- * content area, below the header's own trial countdown chip — never
+ * content area, below the header's own trial countdown chip; it never
  * touches the sidebar or header.
  *
  * Applying a promo code is billing-adjacent, so this only renders for
  * roles with the promo_trial_bonus permission (owner + manager by default,
- * toggleable per-role/per-user from Staff → Roles & Permissions) — the
+ * toggleable per-role/per-user from Staff → Roles & Permissions). The
  * RPCs enforce the same gate server-side regardless of this check.
  */
 export function PromoTrialBonusBanner() {
@@ -28,7 +28,7 @@ export function PromoTrialBonusBanner() {
   return (
     <>
       <div className="mb-4 rounded-[14px] bg-gradient-to-br from-primary to-[#4A3878] text-white shadow-sm sm:flex sm:items-center sm:gap-3.5 sm:p-4">
-        {/* Collapsed row on mobile — tap to expand. Row layout unchanged from sm: up. */}
+        {/* Collapsed row on mobile: tap to expand. Row layout unchanged from sm: up. */}
         <div
           role="button"
           tabIndex={0}
@@ -42,7 +42,7 @@ export function PromoTrialBonusBanner() {
             <Gift className="h-3.5 w-3.5" />
           </div>
           <p className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
-            Promo code available — {daysLeftInWindow} day{daysLeftInWindow === 1 ? "" : "s"} left
+            Promo code available: {daysLeftInWindow} day{daysLeftInWindow === 1 ? "" : "s"} left
           </p>
           <ChevronDown className={cn("h-4 w-4 flex-shrink-0 text-white/75 transition-transform", expanded && "rotate-180")} />
           <button
@@ -71,7 +71,7 @@ export function PromoTrialBonusBanner() {
           </button>
         </div>
 
-        {/* sm: and up — original always-expanded single row */}
+        {/* sm: and up: original always-expanded single row */}
         <div className="hidden h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] bg-white/15 sm:flex">
           <Gift className="h-4 w-4" />
         </div>

@@ -43,7 +43,7 @@ const CANCELLATION_REASONS: Array<{ value: string; label: string }> = [
 /**
  * Reason picker + confirmation for owner-initiated end-of-period
  * cancellation (requirements 1-3). Confirm stays disabled until a reason is
- * chosen — the note is optional.
+ * chosen; the note is optional.
  */
 export function CancelSubscriptionDialog({
 	open,

@@ -494,7 +494,7 @@ export default function HelpPage() {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Contact — merged from the previous two duplicate cards, both of which linked to the same address */}
+            {/* Contact: merged from the previous two duplicate cards, both of which linked to the same address */}
             <Card className="border-primary/20">
               <CardContent className="p-6 text-center">
                 <Mail className="w-10 h-10 text-primary mx-auto mb-3" />

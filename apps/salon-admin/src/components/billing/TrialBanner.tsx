@@ -30,7 +30,7 @@ export function TrialBanner() {
 
   const canAccessSettings = hasPermission("settings");
 
-  // Hard-expired (grace period also elapsed) → blocking modal, no way out —
+  // Hard-expired (grace period also elapsed) → blocking modal, no way out,
   // except on the subscription page itself, which needs free interaction to
   // let the owner actually review pricing and complete the upgrade there
   // instead of being dropped straight into Paystack checkout with no review
@@ -80,7 +80,7 @@ export function TrialBanner() {
               </div>
               <DialogTitle>Your trial has ended</DialogTitle>
               <DialogDescription>
-                Your Salon Magik trial has expired. All your data is safe — upgrade to restore full access in under 2 minutes.
+                Your Salon Magik trial has expired. All your data is safe, upgrade to restore full access in under 2 minutes.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="flex-col gap-2 sm:flex-col">

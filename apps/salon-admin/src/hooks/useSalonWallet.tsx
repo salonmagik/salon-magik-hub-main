@@ -47,10 +47,10 @@ export function useSalonWallet(tenantId?: string, locationId?: string | null) {
   }, [tenantId, locationId, fetchWallet]);
 
   // The wallet balance is debited server-side once a withdrawal actually
-  // completes (via the transfer.success webhook) — with nobody re-triggering
+  // completes (via the transfer.success webhook). With nobody re-triggering
   // a fetch, "Total Balance" stayed stale until a manual page refresh even
   // though the completion notification arrived instantly. Same multi-mount
-  // collision fix as useNotifications/useWithdrawals — unique channel name
+  // collision fix as useNotifications/useWithdrawals: unique channel name
   // per instance, since PayoutsPage and WithdrawalDialog both use this hook
   // at once.
   const instanceIdRef = useRef(generateUUID());

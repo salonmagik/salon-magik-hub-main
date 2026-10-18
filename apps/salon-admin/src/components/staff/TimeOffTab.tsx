@@ -236,7 +236,7 @@ export function TimeOffTab({
                     <div>
                       <p className="font-medium">{staffNames.get(item.user_id) || "Team member"}</p>
                       <p className="text-xs text-muted-foreground">
-                        {meta.label} · {item.starts_on} – {item.ends_on} · {item.days_used} day{item.days_used === 1 ? "" : "s"}
+                        {meta.label} · {item.starts_on} to {item.ends_on} · {item.days_used} day{item.days_used === 1 ? "" : "s"}
                       </p>
                       {item.note && <p className="mt-1 text-xs text-muted-foreground">"{item.note}"</p>}
                     </div>

@@ -169,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   ): Promise<{ user: User | null; retryable: boolean }> => {
     const { data, error } = await supabase.auth.getUser(session.access_token);
     if (error) {
-      // AuthRetryableFetchError means we couldn't reach the network at all —
+      // AuthRetryableFetchError means we couldn't reach the network at all,
       // not that the session/token is actually invalid. Treating a transient
       // connectivity blip the same as a real auth failure was forcing users
       // offline on flaky wifi/mobile connections.
@@ -177,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!isRetryable) {
         console.error("Failed to verify auth session against server:", error);
       } else {
-        console.warn("Network error verifying auth session — keeping current session:", error.message);
+        console.warn("Network error verifying auth session, keeping current session:", error.message);
       }
       return { user: null, retryable: isRetryable };
     }
@@ -547,7 +547,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 return;
               }
               // On a retryable network error, fall back to the
-              // already-trusted local session user — we just couldn't
+              // already-trusted local session user; we just couldn't
               // re-verify against the server this tick.
               const verifiedUser = verifiedUserResult ?? session.user;
 
@@ -610,7 +610,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 currentTenant,
                 isLoading: false,
                 isAuthenticated: true,
-                // Preserve true once earned — a transient fetch error (empty tenants) must not redirect back to onboarding
+                // Preserve true once earned: a transient fetch error (empty tenants) must not redirect back to onboarding
                 hasCompletedOnboarding: tenants.length > 0 || prev.hasCompletedOnboarding,
                 requiresPasswordChange: session.user.user_metadata?.requires_password_change === true,
                 activeContextType: contextState.activeContextType,
@@ -630,7 +630,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   : false,
               }));
 
-              // Fire-and-forget server side effects — do not block setState
+              // Fire-and-forget server side effects, do not block setState
               if (currentTenant) {
                 void syncServerContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
                 void logAuditEvent(currentTenant.id, "auth.login", "auth", session.user.id, {
@@ -668,7 +668,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         // On a retryable network error, fall back to the already-trusted
         // local session user instead of leaving the app stuck on its initial
-        // loading screen — we just couldn't re-verify against the server
+        // loading screen; we just couldn't re-verify against the server
         // this tick, the session itself is still valid.
         const verifiedUser = verifiedUserResult ?? session.user;
 
@@ -751,7 +751,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             : false,
         });
 
-        // Fire-and-forget server side effects — do not block setState
+        // Fire-and-forget server side effects, do not block setState
         if (currentTenant) {
           void syncServerContext(currentTenant.id, contextState.activeContextType, contextState.activeLocationId);
           void logAuditEvent(currentTenant.id, "auth.login", "auth", session.user.id, {

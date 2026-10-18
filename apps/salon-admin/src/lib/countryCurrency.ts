@@ -1,4 +1,4 @@
-// Locations carry `country` (ISO code) but not their own `currency` — this
+// Locations carry `country` (ISO code) but not their own `currency`, so this
 // maps the countries the platform actually operates in to their currency so
 // per-branch money can be grouped/formatted correctly for chain tenants that
 // span more than one country. Falls back to the tenant's own currency for

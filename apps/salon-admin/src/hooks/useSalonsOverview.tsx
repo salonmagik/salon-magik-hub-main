@@ -53,7 +53,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
   const [error, setError] = useState<Error | null>(null);
   // This hook mounts more than once at a time (e.g. PayoutsPage and the
   // PayoutDestinationsManager it renders inside its Accounts tab both call
-  // it for the same tenant) — a hardcoded channel name meant a second
+  // it for the same tenant), so a hardcoded channel name meant a second
   // instance's .subscribe() collided with the first's already-joined
   // channel of the same topic, throwing "cannot add postgres_changes
   // callbacks ... after subscribe()". Each instance needs its own channel.
@@ -112,7 +112,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
         appointmentsQuery = appointmentsQuery.in("location_id", scopedLocationIds);
       }
 
-      // Pending approvals (not date-scoped — always show current backlog)
+      // Pending approvals (not date-scoped, always show current backlog)
       let pendingApprovalsQuery = supabase
         .from("appointments")
         .select("location_id")
@@ -124,7 +124,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
         pendingApprovalsQuery = pendingApprovalsQuery.in("location_id", scopedLocationIds);
       }
 
-      // Unpaid balances (not date-scoped — always show current backlog)
+      // Unpaid balances (not date-scoped, always show current backlog)
       let unpaidBalancesQuery = supabase
         .from("appointments")
         .select("location_id")

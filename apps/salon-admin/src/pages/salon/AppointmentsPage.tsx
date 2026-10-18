@@ -209,7 +209,7 @@ export default function AppointmentsPage() {
   const [proposedEndTime, setProposedEndTime] = useState("");
   const [approvalSubmitting, setApprovalSubmitting] = useState(false);
 
-  // Date range state — initialize immediately so the first query is always filtered.
+  // Date range state: initialize immediately so the first query is always filtered.
   const [dateRangePreset, setDateRangePreset] = useState<DateRangePreset>("this_week");
   const [startDate, setStartDate] = useState<string>(() =>
     format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd")
@@ -687,7 +687,7 @@ export default function AppointmentsPage() {
       const cancelledRows = approvalGroupAppointments.filter((r) => approvalDecisionMap[r.id] === "cancel");
       const rescheduledRows = approvalGroupAppointments.filter((r) => approvalDecisionMap[r.id] === "reschedule");
 
-      // Legacy single-appointment reschedule mode (from footer "Reschedule instead" path — still supported)
+      // Legacy single-appointment reschedule mode (from footer "Reschedule instead" path, still supported)
       if (approvalDialogAction === "reschedule" && rescheduledRows.length === 0) {
         if (!proposedStartDate || !proposedStartTime || !proposedEndDate || !proposedEndTime) {
           throw new Error("Choose the proposed date and time range first.");
@@ -724,7 +724,7 @@ export default function AppointmentsPage() {
           "Reschedule requested",
           "The salon has proposed a new date and time for your booking. Review the request in your booking details.",
         );
-        // Email sending is best-effort — if it fails the DB record is already saved
+        // Email sending is best-effort: if it fails the DB record is already saved
         try {
           await sendApprovalEmail("reschedule_proposed", [selectedAppointment.id], approvalMessage || undefined);
         } catch (emailErr) {
@@ -780,7 +780,7 @@ export default function AppointmentsPage() {
             await supabase.from("appointments").update({ approval_reason: approvalReasonMap[row.id] } as any).eq("id", row.id).eq("tenant_id", currentTenant.id);
             await createCustomerNotification(row, "Booking item declined", approvalReasonMap[row.id]);
           }
-          // Email is best-effort — the decline itself is already saved above,
+          // Email is best-effort: the decline itself is already saved above,
           // so a failed notification shouldn't surface as a failed decline.
           try {
             await sendApprovalEmail(approvedRows.length > 0 ? "partially_declined" : "declined", declinedRows.map((r) => r.id), approvalMessage || undefined);
@@ -845,7 +845,7 @@ export default function AppointmentsPage() {
       if (notificationFailures.length > 0) {
         toast({
           title: "Saved, but a notification email failed",
-          description: "Your decision was recorded — the customer's in-app notification went out, but the email couldn't be sent. Consider reaching out directly.",
+          description: "Your decision was recorded. The customer's in-app notification went out, but the email couldn't be sent. Consider reaching out directly.",
           variant: "destructive",
         });
       }
@@ -919,7 +919,7 @@ export default function AppointmentsPage() {
   };
 
   const formatTime = (dateString: string | null) => {
-    if (!dateString) return "—";
+    if (!dateString) return "N/A";
     return new Date(dateString).toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
@@ -1024,7 +1024,7 @@ export default function AppointmentsPage() {
         case "week": {
           const wStart = startOfWeek(calendarDate, { weekStartsOn: 1 });
           const wEnd = endOfWeek(calendarDate, { weekStartsOn: 1 });
-          return `${format(wStart, "MMM d")} – ${format(wEnd, "MMM d, yyyy")}`;
+          return `${format(wStart, "MMM d")} to ${format(wEnd, "MMM d, yyyy")}`;
         }
         case "month": return format(calendarDate, "MMMM yyyy");
       }
@@ -1048,7 +1048,7 @@ export default function AppointmentsPage() {
             </p>
           </div>
           {/* The header's own copy-booking-link icon (TenantSwitcher) already covers
-              this on every page — this page doesn't need a second copy. */}
+              this on every page, so this page doesn't need a second copy. */}
           <div className="flex gap-2 flex-shrink-0 flex-wrap justify-end">
             {/* Desktop actions (mobile/tablet use the floating + button) */}
             <div className="hidden lg:flex gap-2">
@@ -1221,7 +1221,7 @@ export default function AppointmentsPage() {
             <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
                 <p className="text-xs text-muted-foreground sm:text-sm">Refunded</p>
-                <p className="mt-1 font-serif text-xl font-semibold text-muted-foreground sm:text-2xl">—</p>
+                <p className="mt-1 font-serif text-xl font-semibold text-muted-foreground sm:text-2xl">N/A</p>
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-muted">
                 <RotateCcw className="h-5 w-5 text-muted-foreground" />
@@ -1385,7 +1385,7 @@ export default function AppointmentsPage() {
         {/* Filters */}
         {!(activeTab === "scheduled" && scheduledView === "calendar") && (
         <div className="flex flex-wrap items-center gap-3 sm:gap-3">
-          {/* Search — full width on mobile, half on desktop */}
+          {/* Search: full width on mobile, half on desktop */}
           <div className="relative flex-1 sm:flex-none sm:w-1/2">
             <Input
               placeholder="Search customer or recipient…"
@@ -1419,7 +1419,7 @@ export default function AppointmentsPage() {
             <SlidersHorizontal className="w-4 h-4" />
           </button>
 
-          {/* Status + refresh — pushed to the far right on desktop, collapsible on mobile */}
+          {/* Status + refresh: pushed to the far right on desktop, collapsible on mobile */}
           <div className={cn(
             "items-center gap-2 sm:gap-3 sm:ml-auto",
             filtersExpanded ? "flex w-full sm:w-auto" : "hidden sm:flex"
@@ -1654,7 +1654,7 @@ export default function AppointmentsPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-muted-foreground">—</span>
+                            <span className="text-muted-foreground">N/A</span>
                           )}
                         </TableCell>
                         <TableCell>

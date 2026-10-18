@@ -13,15 +13,15 @@ import {
 } from "@/lib/walkthroughs";
 
 // Mounted once per trigger page. Two ways a walkthrough starts:
-// 1. First visit — every not-yet-seen walkthrough registered to this page is
+// 1. First visit: every not-yet-seen walkthrough registered to this page is
 //    concatenated into one run (e.g. Services page auto-plays create-service,
 //    create-product, create-voucher back to back on a brand-new account).
-// 2. Replay from Help — the page was reached via `?walkthrough=<id>`, which
+// 2. Replay from Help: the page was reached via `?walkthrough=<id>`, which
 //    forces just that one id to run regardless of seen state.
 //
 // `extra` lets a page contribute dynamically-built entries alongside the
 // static registry ones (SalonDashboard passes its live, per-tenant setup
-// checklist rows here — those can't be static registry entries since which
+// checklist rows here; those can't be static registry entries since which
 // ones exist depends on what's still incomplete). `extraLoading` holds off
 // the first run until that dynamic data is ready.
 export function useWalkthroughAutoTrigger(
@@ -43,7 +43,7 @@ export function useWalkthroughAutoTrigger(
   useEffect(() => {
     if (permissionsLoading || dataFlagsLoading || extraLoading || !currentTenant?.id) return;
     // Wait for hasSeenWalkthrough's backing state to actually load from
-    // localStorage — see hasLoadedSeenWalkthroughs' doc comment. Without
+    // localStorage; see hasLoadedSeenWalkthroughs' doc comment. Without
     // this, a fast-resolving permissions/tenant load lets this effect run
     // while seenIds is still its empty initial Set, so every walkthrough
     // looks unseen and the tour replays even though it's already recorded.

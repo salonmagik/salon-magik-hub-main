@@ -91,7 +91,7 @@ export function SalonWalletCard() {
                     <p className="text-xs text-amber-700 cursor-default">
                       + {formatCurrency(availability!.pending, wallet?.currency)} still settling
                       {availability?.nextSettlementAt
-                        ? ` — by ${new Date(availability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}`
+                        ? ` by ${new Date(availability.nextSettlementAt).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}`
                         : ""}
                     </p>
                   </TooltipTrigger>

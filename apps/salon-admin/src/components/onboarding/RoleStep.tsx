@@ -1,7 +1,7 @@
 import { cn } from "@shared/utils";
 import { Crown, ShieldCheck, UserCheck, type LucideIcon } from "lucide-react";
 
-// Only roles that can administer a business can start onboarding — a tenant
+// Only roles that can administer a business can start onboarding. A tenant
 // created by a receptionist/staff account has no one with billing or team
 // access, and the owner invite silently fails since only owner/manager/
 // supervisor have staff-invite permission by default. Those two roles join

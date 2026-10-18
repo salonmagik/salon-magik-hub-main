@@ -52,7 +52,7 @@ export function TurnstileWidget({ onVerify, onExpire }: TurnstileWidgetProps) {
 
   useEffect(() => {
     if (!siteKey) {
-      console.error("VITE_TURNSTILE_SITE_KEY is not set — signup CAPTCHA cannot render.");
+      console.error("VITE_TURNSTILE_SITE_KEY is not set, so signup CAPTCHA cannot render.");
       return;
     }
 

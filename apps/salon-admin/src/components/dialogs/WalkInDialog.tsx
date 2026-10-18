@@ -218,7 +218,7 @@ export function WalkInDialog({ open, onOpenChange, onSuccess }: WalkInDialogProp
               </div>
             </div>
 
-            {/* Branch Selection — shown when user has access to more than one branch */}
+            {/* Branch Selection: shown when user has access to more than one branch */}
             {accessibleLocations.length > 1 && (
               <div className="space-y-2">
                 <Label>

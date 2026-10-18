@@ -99,7 +99,7 @@ export default function AuditLogPage() {
   );
 
   // "Load More" only appears once the table's own scroll has actually
-  // reached bottom — otherwise it sits below rows the user hasn't scrolled
+  // reached bottom; otherwise it sits below rows the user hasn't scrolled
   // through yet, as if there's nothing left above it to see.
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
   const tableViewportRef = useRef<HTMLDivElement>(null);
@@ -111,7 +111,7 @@ export default function AuditLogPage() {
     checkScrolledToBottom(event.currentTarget);
   };
   // A short list that doesn't overflow the viewport at all counts as
-  // "scrolled to bottom" too — there's nothing further to scroll through.
+  // "scrolled to bottom" too, since there's nothing further to scroll through.
   useEffect(() => {
     if (tableViewportRef.current) checkScrolledToBottom(tableViewportRef.current);
   }, [logs]);
@@ -312,7 +312,7 @@ export default function AuditLogPage() {
                   horizontal ScrollAreaScrollbar is mounted (its own source
                   computes overflowX from scrollbarXEnabled, defaulting to
                   "hidden"), which clips wide content instead of letting it
-                  scroll — no CSS override can beat that inline style. A
+                  scroll; no CSS override can beat that inline style. A
                   native overflow-y-auto outer / overflow-x-auto inner pair
                   gives real horizontal scrolling on narrow viewports while
                   scrollbar-hide keeps both bars invisible.

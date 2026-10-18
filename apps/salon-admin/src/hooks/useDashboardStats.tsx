@@ -358,7 +358,7 @@ export function useDashboardStats() {
           const servicesData = a.services as { service_name: string }[] | null;
           return {
             id: a.id,
-            time: a.scheduled_start ? formatTime(a.scheduled_start) : "—",
+            time: a.scheduled_start ? formatTime(a.scheduled_start) : "N/A",
             customer: customerData?.full_name || "Unknown",
             service: servicesData?.[0]?.service_name || "Service",
             staffFirstName: a.assigned_staff_id ? (staffMap[a.assigned_staff_id] || null) : null,
@@ -450,7 +450,7 @@ export function useDashboardStats() {
             id: customer?.id || a.customer_id,
             name: customer?.full_name || "Customer",
             daysSinceVisit: daysDiff,
-            usualService: services?.[0]?.service_name || "—",
+            usualService: services?.[0]?.service_name || "N/A",
             clientStatus: daysDiff >= 75 ? "inactive" as const : "going_quiet" as const,
           };
         });

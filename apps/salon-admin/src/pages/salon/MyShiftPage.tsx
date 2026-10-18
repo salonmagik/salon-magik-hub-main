@@ -327,7 +327,7 @@ export default function MyShiftPage() {
                   <div>
                     <p className="text-sm font-medium">{leaveMeta[item.leave_type].label}</p>
                     <p className="text-xs text-muted-foreground">
-                      {item.starts_on} – {item.ends_on} · {item.days_used} day{item.days_used === 1 ? "" : "s"}
+                      {item.starts_on} to {item.ends_on} · {item.days_used} day{item.days_used === 1 ? "" : "s"}
                     </p>
                     {item.status === "rejected" && item.rejection_reason && (
                       <p className="mt-1 text-xs text-rose-700">Declined: {item.rejection_reason}</p>

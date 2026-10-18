@@ -211,7 +211,7 @@ export function BookingThemePreview({
               <div className="space-y-5">
                 <div>
                   <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-gray-400">Sort By</p>
-                  <div className="h-6 rounded border border-black/12 bg-white px-2 text-[10px] leading-6 text-gray-500">Name A–Z ▾</div>
+                  <div className="h-6 rounded border border-black/12 bg-white px-2 text-[10px] leading-6 text-gray-500">Name A-Z ▾</div>
                 </div>
                 {!isModeRestricted && (
                   <div className="border-t border-black/8 pt-4">

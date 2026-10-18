@@ -81,7 +81,7 @@ const ACTION_GROUPS: ActionGroup[] = [
 
 // Bottom-nav viewports (<lg, matching SalonSidebar's own breakpoint for the
 // mobile bottom nav / quick-action FAB) get this as a bottom sheet instead
-// of the centered dialog desktop uses — the FAB's whole point is to behave
+// of the centered dialog desktop uses, since the FAB's whole point is to behave
 // like the "More" sheet next to it, not pop a desktop-style modal.
 function useIsBelowLg() {
   const [isBelowLg, setIsBelowLg] = useState(false);

@@ -158,7 +158,7 @@ export default function CashflowPage() {
   const currency = currentTenant?.currency || "USD";
 
   // Chain tenants can span more than one country. The page always shows
-  // exactly one country's worth of transactions — no combined "all
+  // exactly one country's worth of transactions. There is no combined "all
   // countries" view, since amounts in different currencies can't be
   // summed. Only shown when the tenant actually has branches in more than
   // one country; single-country tenants see no change.
@@ -213,7 +213,7 @@ export default function CashflowPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [transactions, dateRange, isOwnerHub, effectiveCountry, searchQuery, activeTab]);
 
-  // "Today's Inflow" and pending-refund totals are money — they must respect
+  // "Today's Inflow" and pending-refund totals are money, so they must respect
   // the country filter and never sum two currencies together, same as
   // Business Overview. Store Credit is intentionally excluded: customer
   // purses/wallets have no country dimension in the schema (one balance per
@@ -264,7 +264,7 @@ export default function CashflowPage() {
   const handleExport = (fileFormat: "csv" | "xlsx") => {
     const data = filteredTransactions.map((txn) => ({
       Date: fileFormat === "csv" ? format(new Date(txn.created_at), "yyyy-MM-dd HH:mm") : new Date(txn.created_at),
-      Branch: txn.appointment?.location?.name || "—",
+      Branch: txn.appointment?.location?.name || "N/A",
       Customer: txn.customer?.full_name || "Guest",
       Type: txn.type,
       Method: txn.method,
@@ -276,7 +276,7 @@ export default function CashflowPage() {
         ["Date", "Branch", "Customer", "Type", "Method", "Amount", "Status"],
         ...filteredTransactions.map((txn) => [
           format(new Date(txn.created_at), "yyyy-MM-dd HH:mm"),
-          txn.appointment?.location?.name || "—",
+          txn.appointment?.location?.name || "N/A",
           txn.customer?.full_name || "Guest",
           txn.type, txn.method,
           Number(txn.amount).toFixed(2),
@@ -539,8 +539,8 @@ export default function CashflowPage() {
     </div>
   );
 
-  // ─── Stats + pending-refunds banner — same for Business Hub and branch
-  // context, just sourced from country-scoped vs plain totals. ──────────────
+  // Stats + pending-refunds banner: same for Business Hub and branch
+  // context, just sourced from country-scoped vs plain totals.
   const statCards = [
     {
       title: "Today's Inflow",
@@ -570,15 +570,15 @@ export default function CashflowPage() {
       color: "text-primary",
       bg: "bg-primary/10",
       description: isOwnerHub
-        ? "Every customer's combined salon balance — paid funds plus salon-issued credit, added together. Not split by country: customer balances are tracked per tenant, not per branch."
-        : "Every customer's combined salon balance — paid funds plus salon-issued credit, added together.",
+        ? "Every customer's combined salon balance, paid funds plus salon-issued credit, added together. Not split by country: customer balances are tracked per tenant, not per branch."
+        : "Every customer's combined salon balance, paid funds plus salon-issued credit, added together.",
       subtitle: isOwnerHub && availableCountries.length > 1 ? "All branches" : undefined,
     },
   ];
 
   const renderStatsAndBanner = () => (
     <>
-      {/* Stats — md: breakpoint (not sm:) so a card's label never wraps to
+      {/* Stats: md: breakpoint (not sm:) so a card's label never wraps to
           two lines in the 640-767px range, where a 3-col grid would otherwise
           squeeze "Pending Refunds" into a column too narrow for one line. */}
       <div className="scrollbar-hide flex snap-x gap-3 overflow-x-auto overscroll-x-contain pb-1 [&>*]:min-w-[190px] [&>*]:shrink-0 [&>*]:snap-start md:grid md:grid-cols-3 md:gap-4 md:overflow-visible md:pb-0 md:[&>*]:min-w-0">
@@ -641,9 +641,9 @@ export default function CashflowPage() {
     </>
   );
 
-  // ─── Tabs + content — one shared row (All / Inflow / Refunds / Store
+  // Tabs + content: one shared row (All / Inflow / Refunds / Store
   // credit / Cash / Customer balances) for both Business Hub and branch
-  // context, instead of Business Hub's old separate two-level tabs. ────────
+  // context, instead of Business Hub's old separate two-level tabs.
   const renderTabsAndContent = () => (
     <Tabs value={activeTab} onValueChange={setActiveTab}>
       <TabsList

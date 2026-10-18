@@ -27,7 +27,7 @@ import { CUSTOM_DOMAINS_ENABLED } from "@/lib/customDomainFeature";
 
 // ─── Setup checklist metadata ───────────────────────────────────────────────
 // Lives here (not in SalonDashboard.tsx) so both SalonDashboard.tsx and
-// HelpPage.tsx can import it without a circular dependency — both already
+// HelpPage.tsx can import it without a circular dependency; both already
 // call useDashboardStats() for their own rendering, so building checklist
 // walkthrough steps from it costs nothing extra.
 export const CHECKLIST_META: Record<
@@ -84,7 +84,7 @@ export interface WalkthroughExtraEntry {
   buildStep: (opts: { isDesktop: boolean }) => ProductTourStepInput;
 }
 
-// One step per still-incomplete checklist row — dynamic because which rows
+// One step per still-incomplete checklist row, dynamic because which rows
 // exist depends on this tenant's live setup state, unlike every other
 // walkthrough in the registry.
 export function buildChecklistWalkthroughs(
@@ -100,7 +100,7 @@ export function buildChecklistWalkthroughs(
         target: `[data-tour-id="tour-checklist-${item.id}"]`,
         title: item.label,
         content: CHECKLIST_META[item.id].description || `Finish setting up: ${item.label}.`,
-        // Same-page, conditionally-rendered target — skip past it quickly
+        // Same-page, conditionally-rendered target: skip past it quickly
         // rather than stalling for the default 6s if it's not there.
         waitTimeoutMs: 1500,
       }),
@@ -111,7 +111,7 @@ export type WalkthroughDataRequirement = "customers" | "catalog";
 
 // Which page component's mount-effect is responsible for auto-triggering a
 // walkthrough on first visit. Distinct from `section`, which is just the
-// grouping label shown on the Help page — several Business Hub pageKeys
+// grouping label shown on the Help page: several Business Hub pageKeys
 // share one "Business settings" section there.
 export type WalkthroughPageKey =
   | "dashboard"
@@ -142,20 +142,20 @@ export interface WalkthroughDef {
   sectionIcon: ElementType;
   label: string;
   description: string;
-  /** hasPermission(module) gate — omit for walkthroughs available to anyone who can reach the page. */
+  /** hasPermission(module) gate; omit for walkthroughs available to anyone who can reach the page. */
   permission?: string;
   /** Business Hub items: gated on canUseOwnerHub rather than a single permission module. */
   requiresOwnerHub?: boolean;
   /** My Shift item: gated on the Staff Operations addon being enabled for this tenant. */
   requiresStaffOperations?: boolean;
-  /** Data-existence gate — hidden until the tenant has at least one of these. */
+  /** Data-existence gate; hidden until the tenant has at least one of these. */
   requires?: WalkthroughDataRequirement;
   buildStep: (opts: { isDesktop: boolean }) => ProductTourStepInput;
 }
 
 export const WALKTHROUGHS: WalkthroughDef[] = [
   // ── Dashboard ──────────────────────────────────────────────────────────
-  // The setup checklist itself is NOT here — its rows are dynamic (which
+  // The setup checklist itself is NOT here; its rows are dynamic (which
   // ones exist depends on what's still incomplete for this tenant), so it's
   // built at runtime from live useDashboardStats() data. See
   // buildChecklistWalkthroughs() below, used by SalonDashboard.tsx and
@@ -174,7 +174,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       path: "/salon",
       target: isDesktop ? '[data-tour-id="tour-quick-create"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Quick Create",
-      content: "Jump straight into booking an appointment, adding a customer, or recording a sale — from any page.",
+      content: "Jump straight into booking an appointment, adding a customer, or recording a sale, from any page.",
     }),
   },
   {
@@ -209,7 +209,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       target: isDesktop ? '[data-tour-id="tour-add-service"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Add your services",
       content: isDesktop
-        ? "This is where you build your service menu — set prices, durations, and staff assignments so bookings know what to schedule."
+        ? "This is where you build your service menu: set prices, durations, and staff assignments so bookings know what to schedule."
         : "Tap here, then choose \"Add service\" to build your service menu.",
     }),
   },
@@ -227,7 +227,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       target: isDesktop ? '[data-tour-id="tour-add-product"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Add your products",
       content: isDesktop
-        ? "Sell retail items alongside your services — set a price and stock level."
+        ? "Sell retail items alongside your services: set a price and stock level."
         : "Tap here, then choose \"Add product\" to sell retail items alongside your services.",
     }),
   },
@@ -245,7 +245,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       target: isDesktop ? '[data-tour-id="tour-add-voucher"]' : '[data-tour-id="tour-quick-create-mobile"]',
       title: "Create a voucher",
       content: isDesktop
-        ? "Gift vouchers your customers can buy or redeem — set a value and expiry."
+        ? "Gift vouchers your customers can buy or redeem: set a value and expiry."
         : "Tap here, then choose \"Create voucher\" to set up a gift voucher.",
     }),
   },
@@ -429,7 +429,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
   },
 
   // ── Messaging ───────────────────────────────────────────────────────────
-  // Deliberately not `requires: "customers"` — the other three entries here
+  // Deliberately not `requires: "customers"`: the other three entries here
   // are, so on a brand-new account with zero customers this page would
   // never trigger any tour at all (getAvailableWalkthroughsForPage filters
   // all of them out, and useWalkthroughAutoTrigger bails when the list is
@@ -567,7 +567,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       path: "/salon/overview",
       target: '[data-tour-id="tour-hub-quick-actions"]',
       title: "Quick actions",
-      content: "Jump straight to new bookings, pending approvals, unpaid balances, or messaging — for any branch.",
+      content: "Jump straight to new bookings, pending approvals, unpaid balances, or messaging, for any branch.",
       waitTimeoutMs: 1500,
     }),
   },
@@ -590,7 +590,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
 
   // Deliberately its own pageKey, not bundled into "hub-overview" above.
   // Staff land in the business hub first after onboarding and need to be
-  // pointed at the switcher to reach an actual branch — but that guidance
+  // pointed at the switcher to reach an actual branch, but that guidance
   // has to show *after* the hub-overview tour ends, whether the user
   // finished it or skipped it. Bundling it as one more hub-overview step
   // wouldn't do that: react-joyride's "Skip" aborts every remaining step in
@@ -823,7 +823,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       path: "/salon/subscription",
       target: '[data-tour-id="tour-subscription-seats"]',
       title: "Branches & team seats",
-      content: "Tell us how many branches and team seats you need — we'll put you on the right plan automatically.",
+      content: "Tell us how many branches and team seats you need, and we'll put you on the right plan automatically.",
     }),
   },
   {
@@ -839,7 +839,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       path: "/salon/staff",
       target: '[data-tour-id="tour-staff-operations"]',
       title: "Staff Operations",
-      content: "Track staff check-ins, time-off requests, and leave allowances here. Available on Studio and Chain plans — upgrade from here if you're on Solo.",
+      content: "Track staff check-ins, time-off requests, and leave allowances here. Available on Studio and Chain plans: upgrade from here if you're on Solo.",
     }),
   },
   {
@@ -855,7 +855,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       path: "/salon/themes-settings",
       target: '[data-tour-id="tour-theme-default"]',
       title: "Default theme",
-      content: "Your free storefront theme — always available, no purchase needed.",
+      content: "Your free storefront theme, always available, no purchase needed.",
     }),
   },
   {
@@ -905,7 +905,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       path: "/salon/branch-settings?tab=hours",
       target: '[data-tour-id="tour-settings-hours"]',
       title: "Branch hours",
-      content: "Set this branch's open days and operating hours — used for online booking availability.",
+      content: "Set this branch's open days and operating hours, used for online booking availability.",
     }),
   },
 
@@ -1004,7 +1004,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       path: "/salon/reports",
       target: '[data-tour-id="tour-reports-segments"]',
       title: "Customer segments",
-      content: "See who your customers are — VIPs, big spenders, regulars — and what each group is worth.",
+      content: "See who your customers are: VIPs, big spenders, regulars, and what each group is worth.",
     }),
   },
 
@@ -1038,7 +1038,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
       path: "/salon/audit-log",
       target: '[data-tour-id="tour-audit-log-table"]',
       title: "Activity history",
-      content: "Every recorded action, in plain language — what happened, where, who did it, and when.",
+      content: "Every recorded action, in plain language: what happened, where, who did it, and when.",
     }),
   },
 
@@ -1049,7 +1049,7 @@ export const WALKTHROUGHS: WalkthroughDef[] = [
     section: "All Notifications",
     sectionIcon: Bell,
     label: "Filtering notifications",
-    description: "All, unread, or urgent — across every branch",
+    description: "All, unread, or urgent, across every branch",
     buildStep: () => ({
       id: "all-notifications.filters",
       path: "/salon/all-notifications",

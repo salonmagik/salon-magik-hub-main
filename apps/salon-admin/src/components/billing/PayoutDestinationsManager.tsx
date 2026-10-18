@@ -29,15 +29,15 @@ interface PayoutDestinationsManagerProps {
   countryFilter?: string;
 }
 
-// Renders flat — no outer Card — intended to be embedded inside a settings section.
+// Renders flat, no outer Card, intended to be embedded inside a settings section.
 export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsManagerProps = {}) {
   const { currentTenant } = useAuth();
   const { destinations: allDestinations, isLoading, createDestination, deleteDestination, setDefaultDestination, unblockDestination, refetch: refetchDestinations } = usePayoutDestinations(currentTenant?.id);
   const destinations = countryFilter ? allDestinations.filter((d) => d.country === countryFilter) : allDestinations;
   const { locations } = useSalonsOverview("today");
 
-  // A destination lists every branch it explicitly serves in location_ids —
-  // no more implicit "default covers whatever's left" fallback. "General"
+  // A destination lists every branch it explicitly serves in location_ids.
+  // There is no more implicit "default covers whatever's left" fallback. "General"
   // (the central/unassigned wallet) is governed separately by is_default,
   // independent of which specific branches are also listed.
   const getBranchTags = (dest: PayoutDestination): string[] => [
@@ -231,7 +231,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
         </div>
       )}
 
-      {/* Empty state — only shown when no destinations and no form */}
+      {/* Empty state: only shown when no destinations and no form */}
       {destinations.length === 0 && !showForm && (
         <p className="text-sm text-muted-foreground py-2">
           {countryFilter && allDestinations.length > 0
@@ -260,7 +260,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
                 <SelectTrigger id="type"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="bank">Bank Account</SelectItem>
-                  {/* Paystack doesn't support mobile money payouts in Nigeria — only Ghana. */}
+                  {/* Paystack doesn't support mobile money payouts in Nigeria, only Ghana. */}
                   {country !== "NG" && <SelectItem value="mobile_money">Mobile Money</SelectItem>}
                 </SelectContent>
               </Select>
@@ -347,7 +347,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
         title="Remove payout account?"
         description={
           deleteTarget
-            ? `${deleteTarget.destination_type === "bank" ? deleteTarget.bank_name : deleteTarget.momo_provider} — ${deleteTarget.destination_type === "bank" ? deleteTarget.account_number : deleteTarget.momo_number} will no longer be available to receive withdrawals.`
+            ? `${deleteTarget.destination_type === "bank" ? deleteTarget.bank_name : deleteTarget.momo_provider}: ${deleteTarget.destination_type === "bank" ? deleteTarget.account_number : deleteTarget.momo_number} will no longer be available to receive withdrawals.`
             : ""
         }
         confirmLabel="Remove"
@@ -362,7 +362,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
           <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
             <p className="text-sm text-muted-foreground">
               {changeBranchTarget?.destination_type === "bank" ? changeBranchTarget.bank_name : changeBranchTarget?.momo_provider}
-              {" — "}
+              {": "}
               {changeBranchTarget?.destination_type === "bank" ? changeBranchTarget.account_number : changeBranchTarget?.momo_number}
             </p>
             <div className="space-y-2">
@@ -385,7 +385,7 @@ export function PayoutDestinationsManager({ countryFilter }: PayoutDestinationsM
                 </div>
               )}
               {changeBranchValue.length === 0 && (
-                <p className="text-xs text-muted-foreground">Not assigned to any branch — it'll only appear if picked for one during a withdrawal.</p>
+                <p className="text-xs text-muted-foreground">Not assigned to any branch. It'll only appear if picked for one during a withdrawal.</p>
               )}
             </div>
           </div>
@@ -443,7 +443,7 @@ function DestinationRow({ destination, branchTags, onDelete, onChangeBranch, onT
                 disabled={isUnblocking}
                 className="text-xs text-primary underline underline-offset-2 disabled:opacity-50"
               >
-                {isUnblocking ? "Unblocking…" : "I've fixed this — unblock"}
+                {isUnblocking ? "Unblocking…" : "I've fixed this, unblock"}
               </button>
             </div>
           )}
@@ -472,7 +472,7 @@ function DestinationRow({ destination, branchTags, onDelete, onChangeBranch, onT
             ) : (
               <div className="pt-1">
                 <button type="button" onClick={() => onChangeBranch(destination)} className="text-xs italic text-muted-foreground underline underline-offset-2">
-                  Not assigned to a branch — assign
+                  Not assigned to a branch, assign
                 </button>
               </div>
             )

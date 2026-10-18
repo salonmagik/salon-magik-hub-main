@@ -89,7 +89,7 @@ export default function LoginPage() {
   const googleOAuthIntent = readGoogleOAuthIntent();
   const promoCodeFromUrl = searchParams.get("promo");
   const reviewSessions = searchParams.get("review-sessions") === "true";
-  // Only a same-origin relative path is accepted — anything else (an absolute
+  // Only a same-origin relative path is accepted; anything else (an absolute
   // URL, or a "//host" protocol-relative one a browser would treat as
   // absolute) is rejected so this can't be turned into an open redirect via
   // a crafted ?redirect= link.
@@ -209,7 +209,7 @@ export default function LoginPage() {
     try {
       persistRememberMePreference(rememberMe);
       persistRememberedEmail(email, rememberMe);
-      // Trim both fields — copying credentials out of an invitation email
+      // Trim both fields: copying credentials out of an invitation email
       // (especially a generated password ending in punctuation) easily grabs
       // an invisible leading/trailing space, which reads to the user as
       // "the password is wrong" even though what they typed was correct.
@@ -261,7 +261,7 @@ export default function LoginPage() {
       persistRememberMePreference(rememberMe);
       persistRememberedEmail("", false);
 
-      // Send OTP via Arkesel (custom flow — not Supabase native phone auth)
+      // Send OTP via Arkesel (custom flow, not Supabase native phone auth)
       const { data, error } = await supabase.functions.invoke("send-phone-otp", {
         body: { phone },
       });
@@ -319,7 +319,7 @@ export default function LoginPage() {
         return;
       }
 
-      // Edge function returns session tokens — set them directly
+      // Edge function returns session tokens; set them directly
       const { error: sessionError } = await supabase.auth.setSession({
         access_token: data.access_token,
         refresh_token: data.refresh_token,

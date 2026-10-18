@@ -221,7 +221,7 @@ export default function SignupPage() {
 
   const validation = useMemo(() => validateSignup(formData, acceptTerms), [formData, acceptTerms]);
   // Only require a solved CAPTCHA when the site key is actually configured
-  // for this environment — keeps local dev (no Turnstile keys set) usable
+  // for this environment, keeping local dev (no Turnstile keys set) usable
   // without silently locking out signup.
   const captchaSiteKeyConfigured = Boolean(import.meta.env.VITE_TURNSTILE_SITE_KEY);
   const isFormValid =

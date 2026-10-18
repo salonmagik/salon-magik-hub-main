@@ -348,7 +348,7 @@ export async function seedDefaultPermissions(tenantId: string): Promise<void> {
   });
 
   // Routed through an RPC (not a direct insert) because the inserting user may not
-  // be the tenant's owner during onboarding — see seed_default_role_permissions
+  // be the tenant's owner during onboarding; see seed_default_role_permissions
   // migration for why this can't just be a broadened RLS policy.
   const { error } = await (supabase.rpc as any)("seed_default_role_permissions", {
     p_tenant_id: tenantId,
