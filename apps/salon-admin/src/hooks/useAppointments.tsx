@@ -181,7 +181,7 @@ export function useAppointmentActions() {
 
   const createAppointment = async (data: {
     customerId: string;
-    services: { serviceId: string; serviceName: string; price: number; duration: number }[];
+    services: { serviceId: string; serviceName: string; price: number; duration: number; packageCovered?: boolean }[];
     scheduledStart?: string;
     scheduledEnd?: string;
     locationId: string;
@@ -198,7 +198,7 @@ export function useAppointmentActions() {
 
     setIsSubmitting(true);
     try {
-      const totalAmount = data.services.reduce((sum, s) => sum + s.price, 0);
+      const totalAmount = data.services.reduce((sum, s) => sum + (s.packageCovered ? 0 : s.price), 0);
       const isWalkIn = data.isWalkIn || false;
       
       // For walk-ins: if no scheduledStart provided, start immediately (unscheduled)
@@ -261,9 +261,10 @@ export function useAppointmentActions() {
         status: "scheduled" as AppointmentStatus,
       }));
 
-      const { error: servicesError } = await supabase
+      const { data: appointmentServices, error: servicesError } = await supabase
         .from("appointment_services")
-        .insert(servicesToInsert);
+        .insert(servicesToInsert)
+        .select();
 
       if (servicesError) throw servicesError;
 
@@ -320,8 +321,8 @@ export function useAppointmentActions() {
       
       // Send confirmation email (fire-and-forget)
       sendAppointmentNotification(appointment.id, "scheduled");
-      
-      return appointment;
+
+      return { ...appointment, appointmentServices: appointmentServices || [] };
     } catch (err) {
       console.error("Error creating appointment:", err);
       toast({ title: "Error", description: "Failed to create appointment", variant: "destructive" });

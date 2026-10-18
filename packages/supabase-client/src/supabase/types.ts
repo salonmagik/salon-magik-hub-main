@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.1"
   }
   graphql_public: {
     Tables: {
@@ -346,6 +346,67 @@ export type Database = {
           },
         ]
       }
+      appointment_reminder_sends: {
+        Row: {
+          appointment_id: string
+          attempt_count: number
+          created_at: string
+          failed_at: string | null
+          id: string
+          last_attempt_at: string | null
+          offset_minutes: number
+          sent_at: string | null
+          tenant_id: string
+          updated_at: string
+        }
+        Insert: {
+          appointment_id: string
+          attempt_count?: number
+          created_at?: string
+          failed_at?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          offset_minutes: number
+          sent_at?: string | null
+          tenant_id: string
+          updated_at?: string
+        }
+        Update: {
+          appointment_id?: string
+          attempt_count?: number
+          created_at?: string
+          failed_at?: string | null
+          id?: string
+          last_attempt_at?: string | null
+          offset_minutes?: number
+          sent_at?: string | null
+          tenant_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "appointment_reminder_sends_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_reminder_sends_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointment_reminder_sends_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       appointment_services: {
         Row: {
           appointment_id: string
@@ -436,6 +497,7 @@ export type Database = {
           is_gifted: boolean
           is_unscheduled: boolean
           is_walk_in: boolean
+          last_reminder_attempt_at: string | null
           last_reminder_sent_at: string | null
           location_id: string
           notes: string | null
@@ -445,6 +507,8 @@ export type Database = {
           proposed_message: string | null
           proposed_start: string | null
           purse_amount_used: number
+          reminder_attempt_count: number
+          reminder_failed_at: string | null
           reschedule_count: number
           scheduled_end: string | null
           scheduled_start: string | null
@@ -478,6 +542,7 @@ export type Database = {
           is_gifted?: boolean
           is_unscheduled?: boolean
           is_walk_in?: boolean
+          last_reminder_attempt_at?: string | null
           last_reminder_sent_at?: string | null
           location_id: string
           notes?: string | null
@@ -487,6 +552,8 @@ export type Database = {
           proposed_message?: string | null
           proposed_start?: string | null
           purse_amount_used?: number
+          reminder_attempt_count?: number
+          reminder_failed_at?: string | null
           reschedule_count?: number
           scheduled_end?: string | null
           scheduled_start?: string | null
@@ -520,6 +587,7 @@ export type Database = {
           is_gifted?: boolean
           is_unscheduled?: boolean
           is_walk_in?: boolean
+          last_reminder_attempt_at?: string | null
           last_reminder_sent_at?: string | null
           location_id?: string
           notes?: string | null
@@ -529,6 +597,8 @@ export type Database = {
           proposed_message?: string | null
           proposed_start?: string | null
           purse_amount_used?: number
+          reminder_attempt_count?: number
+          reminder_failed_at?: string | null
           reschedule_count?: number
           scheduled_end?: string | null
           scheduled_start?: string | null
@@ -1079,6 +1149,13 @@ export type Database = {
           tenant_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "billing_dunning_notices_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "billing_dunning_notices_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -1991,6 +2068,7 @@ export type Database = {
           id: string
           package_id: string
           purchased_transaction_id: string | null
+          source_appointment_id: string | null
           starts_at: string
           status: string
           tenant_id: string
@@ -2004,6 +2082,7 @@ export type Database = {
           id?: string
           package_id: string
           purchased_transaction_id?: string | null
+          source_appointment_id?: string | null
           starts_at?: string
           status?: string
           tenant_id: string
@@ -2017,6 +2096,7 @@ export type Database = {
           id?: string
           package_id?: string
           purchased_transaction_id?: string | null
+          source_appointment_id?: string | null
           starts_at?: string
           status?: string
           tenant_id?: string
@@ -2049,6 +2129,13 @@ export type Database = {
             columns: ["purchased_transaction_id"]
             isOneToOne: false
             referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_package_entitlements_source_appointment_id_fkey"
+            columns: ["source_appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
             referencedColumns: ["id"]
           },
           {
@@ -2555,6 +2642,8 @@ export type Database = {
           description: string
           id: string
           invoice_id: string
+          is_package_covered: boolean
+          package_name: string | null
           product_id: string | null
           quantity: number
           service_id: string | null
@@ -2566,6 +2655,8 @@ export type Database = {
           description: string
           id?: string
           invoice_id: string
+          is_package_covered?: boolean
+          package_name?: string | null
           product_id?: string | null
           quantity?: number
           service_id?: string | null
@@ -2577,6 +2668,8 @@ export type Database = {
           description?: string
           id?: string
           invoice_id?: string
+          is_package_covered?: boolean
+          package_name?: string | null
           product_id?: string | null
           quantity?: number
           service_id?: string | null
@@ -2885,6 +2978,48 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      local_refund_operations: {
+        Row: {
+          amount: number
+          created_at: string
+          idempotency_key: string
+          refund_id: string
+          refund_type: Database["public"]["Enums"]["refund_type"]
+          transaction_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          idempotency_key: string
+          refund_id: string
+          refund_type: Database["public"]["Enums"]["refund_type"]
+          transaction_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          idempotency_key?: string
+          refund_id?: string
+          refund_type?: Database["public"]["Enums"]["refund_type"]
+          transaction_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "local_refund_operations_refund_id_fkey"
+            columns: ["refund_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "local_refund_operations_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -3376,8 +3511,8 @@ export type Database = {
           id: string
           in_app_transaction_alerts: boolean
           location_id: string | null
-          reminder_hours_before: number
           reminder_extra_minutes_before: number | null
+          reminder_hours_before: number
           sms_appointment_reminders: boolean
           tenant_id: string
           updated_at: string
@@ -3393,8 +3528,8 @@ export type Database = {
           id?: string
           in_app_transaction_alerts?: boolean
           location_id?: string | null
-          reminder_hours_before?: number
           reminder_extra_minutes_before?: number | null
+          reminder_hours_before?: number
           sms_appointment_reminders?: boolean
           tenant_id: string
           updated_at?: string
@@ -3410,13 +3545,20 @@ export type Database = {
           id?: string
           in_app_transaction_alerts?: boolean
           location_id?: string | null
-          reminder_hours_before?: number
           reminder_extra_minutes_before?: number | null
+          reminder_hours_before?: number
           sms_appointment_reminders?: boolean
           tenant_id?: string
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "notification_settings_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notification_settings_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -3429,13 +3571,6 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notification_settings_location_id_fkey"
-            columns: ["location_id"]
-            isOneToOne: false
-            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]
@@ -3513,6 +3648,7 @@ export type Database = {
       package_entitlement_reservations: {
         Row: {
           appointment_id: string
+          appointment_service_id: string | null
           consumed_at: string | null
           created_at: string
           customer_id: string
@@ -3525,6 +3661,7 @@ export type Database = {
         }
         Insert: {
           appointment_id: string
+          appointment_service_id?: string | null
           consumed_at?: string | null
           created_at?: string
           customer_id: string
@@ -3537,6 +3674,7 @@ export type Database = {
         }
         Update: {
           appointment_id?: string
+          appointment_service_id?: string | null
           consumed_at?: string | null
           created_at?: string
           customer_id?: string
@@ -3553,6 +3691,13 @@ export type Database = {
             columns: ["appointment_id"]
             isOneToOne: false
             referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "package_entitlement_reservations_appointment_service_id_fkey"
+            columns: ["appointment_service_id"]
+            isOneToOne: false
+            referencedRelation: "appointment_services"
             referencedColumns: ["id"]
           },
           {
@@ -3892,6 +4037,86 @@ export type Database = {
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      paystack_refunds: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          debit_key: string
+          id: string
+          provider_amount: number | null
+          provider_id: string | null
+          reason: string
+          refund_transaction_id: string | null
+          request_id: string | null
+          status: string
+          transaction_id: string
+          updated_at: string
+          wallet_debit_entry_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency: string
+          debit_key: string
+          id?: string
+          provider_amount?: number | null
+          provider_id?: string | null
+          reason: string
+          refund_transaction_id?: string | null
+          request_id?: string | null
+          status?: string
+          transaction_id: string
+          updated_at?: string
+          wallet_debit_entry_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          debit_key?: string
+          id?: string
+          provider_amount?: number | null
+          provider_id?: string | null
+          reason?: string
+          refund_transaction_id?: string | null
+          request_id?: string | null
+          status?: string
+          transaction_id?: string
+          updated_at?: string
+          wallet_debit_entry_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paystack_refunds_refund_transaction_id_fkey"
+            columns: ["refund_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paystack_refunds_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "refund_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paystack_refunds_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "paystack_refunds_wallet_debit_entry_id_fkey"
+            columns: ["wallet_debit_entry_id"]
+            isOneToOne: false
+            referencedRelation: "wallet_ledger_entries"
             referencedColumns: ["id"]
           },
         ]
@@ -4438,6 +4663,92 @@ export type Database = {
         }
         Relationships: []
       }
+      product_announcement_events: {
+        Row: {
+          announcement_id: string
+          created_at: string
+          event_type: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          announcement_id: string
+          created_at?: string
+          event_type: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          announcement_id?: string
+          created_at?: string
+          event_type?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_announcement_events_announcement_id_fkey"
+            columns: ["announcement_id"]
+            isOneToOne: false
+            referencedRelation: "product_announcements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      product_announcements: {
+        Row: {
+          body: string | null
+          created_at: string
+          created_by_id: string | null
+          cta_label: string | null
+          cta_url: string | null
+          expires_at: string | null
+          icon: string
+          id: string
+          platforms: string[]
+          publish_at: string | null
+          status: string
+          summary: string
+          title: string
+          updated_at: string
+          updated_by_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          created_by_id?: string | null
+          cta_label?: string | null
+          cta_url?: string | null
+          expires_at?: string | null
+          icon?: string
+          id?: string
+          platforms?: string[]
+          publish_at?: string | null
+          status?: string
+          summary: string
+          title: string
+          updated_at?: string
+          updated_by_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          created_by_id?: string | null
+          cta_label?: string | null
+          cta_url?: string | null
+          expires_at?: string | null
+          icon?: string
+          id?: string
+          platforms?: string[]
+          publish_at?: string | null
+          status?: string
+          summary?: string
+          title?: string
+          updated_at?: string
+          updated_by_id?: string | null
+        }
+        Relationships: []
+      }
       product_locations: {
         Row: {
           created_at: string
@@ -4614,6 +4925,93 @@ export type Database = {
         }
         Relationships: []
       }
+      refund_block_events: {
+        Row: {
+          appointment_id: string | null
+          attempted_amount: number
+          attempted_by_id: string | null
+          block_code: string
+          created_at: string
+          currency: string
+          id: string
+          reason: string | null
+          refund_request_id: string | null
+          refund_type: Database["public"]["Enums"]["refund_type"]
+          shortfall: number
+          tenant_id: string
+          transaction_id: string | null
+          wallet_balance_at_attempt: number
+        }
+        Insert: {
+          appointment_id?: string | null
+          attempted_amount: number
+          attempted_by_id?: string | null
+          block_code?: string
+          created_at?: string
+          currency: string
+          id?: string
+          reason?: string | null
+          refund_request_id?: string | null
+          refund_type: Database["public"]["Enums"]["refund_type"]
+          shortfall: number
+          tenant_id: string
+          transaction_id?: string | null
+          wallet_balance_at_attempt: number
+        }
+        Update: {
+          appointment_id?: string | null
+          attempted_amount?: number
+          attempted_by_id?: string | null
+          block_code?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          reason?: string | null
+          refund_request_id?: string | null
+          refund_type?: Database["public"]["Enums"]["refund_type"]
+          shortfall?: number
+          tenant_id?: string
+          transaction_id?: string | null
+          wallet_balance_at_attempt?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "refund_block_events_appointment_id_fkey"
+            columns: ["appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_block_events_refund_request_id_fkey"
+            columns: ["refund_request_id"]
+            isOneToOne: false
+            referencedRelation: "refund_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_block_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "public_booking_tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_block_events_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "refund_block_events_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       refund_requests: {
         Row: {
           amount: number
@@ -4717,93 +5115,6 @@ export type Database = {
             columns: ["wallet_debit_entry_id"]
             isOneToOne: false
             referencedRelation: "wallet_ledger_entries"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      refund_block_events: {
-        Row: {
-          appointment_id: string | null
-          attempted_amount: number
-          attempted_by_id: string | null
-          block_code: string
-          created_at: string
-          currency: string
-          id: string
-          reason: string | null
-          refund_request_id: string | null
-          refund_type: Database["public"]["Enums"]["refund_type"]
-          shortfall: number
-          tenant_id: string
-          transaction_id: string | null
-          wallet_balance_at_attempt: number
-        }
-        Insert: {
-          appointment_id?: string | null
-          attempted_amount: number
-          attempted_by_id?: string | null
-          block_code?: string
-          created_at?: string
-          currency: string
-          id?: string
-          reason?: string | null
-          refund_request_id?: string | null
-          refund_type: Database["public"]["Enums"]["refund_type"]
-          shortfall: number
-          tenant_id: string
-          transaction_id?: string | null
-          wallet_balance_at_attempt: number
-        }
-        Update: {
-          appointment_id?: string | null
-          attempted_amount?: number
-          attempted_by_id?: string | null
-          block_code?: string
-          created_at?: string
-          currency?: string
-          id?: string
-          reason?: string | null
-          refund_request_id?: string | null
-          refund_type?: Database["public"]["Enums"]["refund_type"]
-          shortfall?: number
-          tenant_id?: string
-          transaction_id?: string | null
-          wallet_balance_at_attempt?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "refund_block_events_appointment_id_fkey"
-            columns: ["appointment_id"]
-            isOneToOne: false
-            referencedRelation: "appointments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "refund_block_events_refund_request_id_fkey"
-            columns: ["refund_request_id"]
-            isOneToOne: false
-            referencedRelation: "refund_requests"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "refund_block_events_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "public_booking_tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "refund_block_events_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "refund_block_events_transaction_id_fkey"
-            columns: ["transaction_id"]
-            isOneToOne: false
-            referencedRelation: "transactions"
             referencedColumns: ["id"]
           },
         ]
@@ -5630,39 +5941,43 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "salon_wallets_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
         ]
       }
       salon_withdrawals: {
         Row: {
-          transfer_fee: number
-          stamp_duty: number
-          fee_version: string | null
-          fee_outcome: string | null
-          fee_reconciliation_required: boolean
-          wallet_debited: number
           amount: number
           currency: string
-          location_id: string | null
           failure_reason: string | null
+          fee_outcome: string | null
+          fee_reconciliation_required: boolean
+          fee_version: string | null
           id: string
+          location_id: string | null
           payout_destination_id: string
           paystack_reference: string | null
           paystack_transfer_code: string | null
           requested_at: string | null
           salon_wallet_id: string
+          stamp_duty: number
           status: Database["public"]["Enums"]["withdrawal_status"] | null
           tenant_id: string
+          transfer_fee: number
+          wallet_debited: number
         }
         Insert: {
-          transfer_fee?: number
-          stamp_duty?: number
-          fee_version?: string | null
-          fee_outcome?: string | null
-          fee_reconciliation_required?: boolean
-          wallet_debited?: number
           amount: number
           currency: string
           failure_reason?: string | null
+          fee_outcome?: string | null
+          fee_reconciliation_required?: boolean
+          fee_version?: string | null
           id?: string
           location_id?: string | null
           payout_destination_id: string
@@ -5670,19 +5985,19 @@ export type Database = {
           paystack_transfer_code?: string | null
           requested_at?: string | null
           salon_wallet_id: string
+          stamp_duty?: number
           status?: Database["public"]["Enums"]["withdrawal_status"] | null
           tenant_id: string
+          transfer_fee?: number
+          wallet_debited?: number
         }
         Update: {
-          transfer_fee?: number
-          stamp_duty?: number
-          fee_version?: string | null
-          fee_outcome?: string | null
-          fee_reconciliation_required?: boolean
-          wallet_debited?: number
           amount?: number
           currency?: string
           failure_reason?: string | null
+          fee_outcome?: string | null
+          fee_reconciliation_required?: boolean
+          fee_version?: string | null
           id?: string
           location_id?: string | null
           payout_destination_id?: string
@@ -5690,8 +6005,11 @@ export type Database = {
           paystack_transfer_code?: string | null
           requested_at?: string | null
           salon_wallet_id?: string
+          stamp_duty?: number
           status?: Database["public"]["Enums"]["withdrawal_status"] | null
           tenant_id?: string
+          transfer_fee?: number
+          wallet_debited?: number
         }
         Relationships: [
           {
@@ -5720,6 +6038,13 @@ export type Database = {
             columns: ["salon_wallet_id"]
             isOneToOne: false
             referencedRelation: "salon_wallets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "salon_withdrawals_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
             referencedColumns: ["id"]
           },
         ]
@@ -7341,6 +7666,7 @@ export type Database = {
           allow_staff_selection: boolean
           auto_assign_staff: boolean
           auto_confirm_bookings: boolean | null
+          background_color: string | null
           banner_urls: string[] | null
           billing_cycle: string
           billing_grace_ends_at: string | null
@@ -7350,8 +7676,6 @@ export type Database = {
           booking_page_bio: string | null
           booking_status_message: string | null
           brand_color: string | null
-          secondary_color: string | null
-          background_color: string | null
           cancellation_grace_hours: number | null
           cancellation_reason: string | null
           cancellation_reason_note: string | null
@@ -7394,6 +7718,7 @@ export type Database = {
           platform_percentage_charge: number
           platform_service_charge_borne_by_customer: boolean
           require_staff_selection: boolean
+          secondary_color: string | null
           show_contact_on_booking: boolean | null
           slot_capacity_default: number
           slug: string | null
@@ -7419,6 +7744,7 @@ export type Database = {
           allow_staff_selection?: boolean
           auto_assign_staff?: boolean
           auto_confirm_bookings?: boolean | null
+          background_color?: string | null
           banner_urls?: string[] | null
           billing_cycle?: string
           billing_grace_ends_at?: string | null
@@ -7428,8 +7754,6 @@ export type Database = {
           booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
-          secondary_color?: string | null
-          background_color?: string | null
           cancellation_grace_hours?: number | null
           cancellation_reason?: string | null
           cancellation_reason_note?: string | null
@@ -7472,6 +7796,7 @@ export type Database = {
           platform_percentage_charge?: number
           platform_service_charge_borne_by_customer?: boolean
           require_staff_selection?: boolean
+          secondary_color?: string | null
           show_contact_on_booking?: boolean | null
           slot_capacity_default?: number
           slug?: string | null
@@ -7497,6 +7822,7 @@ export type Database = {
           allow_staff_selection?: boolean
           auto_assign_staff?: boolean
           auto_confirm_bookings?: boolean | null
+          background_color?: string | null
           banner_urls?: string[] | null
           billing_cycle?: string
           billing_grace_ends_at?: string | null
@@ -7506,8 +7832,6 @@ export type Database = {
           booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
-          secondary_color?: string | null
-          background_color?: string | null
           cancellation_grace_hours?: number | null
           cancellation_reason?: string | null
           cancellation_reason_note?: string | null
@@ -7550,6 +7874,7 @@ export type Database = {
           platform_percentage_charge?: number
           platform_service_charge_borne_by_customer?: boolean
           require_staff_selection?: boolean
+          secondary_color?: string | null
           show_contact_on_booking?: boolean | null
           slot_capacity_default?: number
           slug?: string | null
@@ -8347,6 +8672,13 @@ export type Database = {
             referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "wallet_ledger_entries_location_id_fkey"
+            columns: ["location_id"]
+            isOneToOne: false
+            referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
         ]
       }
       whatsapp_templates: {
@@ -8440,12 +8772,11 @@ export type Database = {
           allow_staff_selection: boolean | null
           auto_assign_staff: boolean | null
           auto_confirm_bookings: boolean | null
+          background_color: string | null
           banner_urls: string[] | null
           booking_page_bio: string | null
           booking_status_message: string | null
           brand_color: string | null
-          secondary_color: string | null
-          background_color: string | null
           cancellation_grace_hours: number | null
           contact_phone: string | null
           country: string | null
@@ -8467,6 +8798,7 @@ export type Database = {
             | Database["public"]["Enums"]["payment_setup_status"]
             | null
           require_staff_selection: boolean | null
+          secondary_color: string | null
           show_contact_on_booking: boolean | null
           slot_capacity_default: number | null
           slug: string | null
@@ -8479,12 +8811,11 @@ export type Database = {
           allow_staff_selection?: boolean | null
           auto_assign_staff?: boolean | null
           auto_confirm_bookings?: boolean | null
+          background_color?: string | null
           banner_urls?: string[] | null
           booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
-          secondary_color?: string | null
-          background_color?: string | null
           cancellation_grace_hours?: number | null
           contact_phone?: never
           country?: string | null
@@ -8506,6 +8837,7 @@ export type Database = {
             | Database["public"]["Enums"]["payment_setup_status"]
             | null
           require_staff_selection?: boolean | null
+          secondary_color?: string | null
           show_contact_on_booking?: boolean | null
           slot_capacity_default?: number | null
           slug?: string | null
@@ -8518,12 +8850,11 @@ export type Database = {
           allow_staff_selection?: boolean | null
           auto_assign_staff?: boolean | null
           auto_confirm_bookings?: boolean | null
+          background_color?: string | null
           banner_urls?: string[] | null
           booking_page_bio?: string | null
           booking_status_message?: string | null
           brand_color?: string | null
-          secondary_color?: string | null
-          background_color?: string | null
           cancellation_grace_hours?: number | null
           contact_phone?: never
           country?: string | null
@@ -8545,6 +8876,7 @@ export type Database = {
             | Database["public"]["Enums"]["payment_setup_status"]
             | null
           require_staff_selection?: boolean | null
+          secondary_color?: string | null
           show_contact_on_booking?: boolean | null
           slot_capacity_default?: number | null
           slug?: string | null
@@ -8638,6 +8970,10 @@ export type Database = {
           p_reason: string
           p_tenant_id: string
         }
+        Returns: string
+      }
+      advance_billing_anchor: {
+        Args: { p_billing_cycle: string; p_due_at: string }
         Returns: string
       }
       apply_plan_configuration: {
@@ -9114,6 +9450,10 @@ export type Database = {
         Args: { p_exclude_user_id: string; p_phone: string }
         Returns: boolean
       }
+      check_refund_recoverability: {
+        Args: { p_transaction_id: string }
+        Returns: Json
+      }
       claim_sales_promo_code: {
         Args: { p_code: string; p_surface?: string; p_tenant_id: string }
         Returns: Json
@@ -9126,6 +9466,29 @@ export type Database = {
         Args: { p_code: string; p_customer_id: string; p_tenant_id: string }
         Returns: string
       }
+      complete_local_refund: {
+        Args: {
+          p_actor_id: string
+          p_amount: number
+          p_key: string
+          p_reason: string
+          p_refund_type: Database["public"]["Enums"]["refund_type"]
+          p_request_id?: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
+      complete_messaging_credit_purchase: {
+        Args: {
+          p_amount: number
+          p_credits: number
+          p_currency: string
+          p_payment_intent_id: string
+          p_reference: string
+          p_tenant_id: string
+        }
+        Returns: Json
+      }
       complete_transaction_refund: {
         Args: {
           p_amount: number
@@ -9136,54 +9499,6 @@ export type Database = {
           p_wallet_debit_entry_id?: string
         }
         Returns: string
-      }
-      check_refund_recoverability: {
-        Args: { p_transaction_id: string }
-        Returns: Json
-      }
-      debit_salon_wallet_for_refund: {
-        Args: {
-          p_actor_id: string
-          p_amount: number
-          p_appointment_id?: string
-          p_idempotency_key: string
-          p_reason: string
-          p_refund_request_id?: string
-          p_refund_type: Database["public"]["Enums"]["refund_type"]
-          p_transaction_id: string
-        }
-        Returns: Json
-      }
-      reverse_refund_wallet_debit: {
-        Args: {
-          p_amount: number
-          p_currency: string
-          p_debit_idempotency_key: string
-          p_tenant_id: string
-          p_transaction_id: string
-        }
-        Returns: string
-      }
-      get_backoffice_blocked_refunds: {
-        Args: { p_limit?: number; p_offset?: number }
-        Returns: {
-          attempted_amount: number
-          attempted_by_email: string
-          attempted_by_id: string
-          block_code: string
-          created_at: string
-          currency: string
-          id: string
-          reason: string
-          refund_request_id: string
-          refund_type: string
-          shortfall: number
-          tenant_id: string
-          tenant_name: string
-          total_count: number
-          transaction_id: string
-          wallet_balance_at_attempt: number
-        }[]
       }
       compute_chain_price: {
         Args: {
@@ -9197,18 +9512,6 @@ export type Database = {
           requires_custom: boolean
           total_price: number
         }[]
-      }
-      advance_billing_anchor: {
-        Args: { p_billing_cycle: string; p_due_at: string }
-        Returns: string
-      }
-      request_subscription_cancellation: {
-        Args: { p_note: string; p_reason: string; p_tenant_id: string }
-        Returns: string
-      }
-      resume_subscription: {
-        Args: { p_tenant_id: string }
-        Returns: string
       }
       compute_current_addon_total: {
         Args: { p_tenant_id: string }
@@ -9360,10 +9663,10 @@ export type Database = {
           p_entry_type: Database["public"]["Enums"]["wallet_entry_type"]
           p_gateway_reference?: string
           p_idempotency_key: string
+          p_location_id?: string
           p_reference_id: string
           p_reference_type: string
           p_tenant_id: string
-          p_location_id?: string | null
         }
         Returns: string
       }
@@ -9371,6 +9674,7 @@ export type Database = {
         Args: { p_customer_id: string; p_tenant_id: string }
         Returns: number
       }
+      customer_identity_exists: { Args: { p_email: string }; Returns: boolean }
       debit_customer_purse_for_booking: {
         Args: {
           p_amount: number
@@ -9388,10 +9692,10 @@ export type Database = {
           p_currency: string
           p_entry_type: Database["public"]["Enums"]["wallet_entry_type"]
           p_idempotency_key: string
+          p_location_id?: string
           p_reference_id: string
           p_reference_type: string
           p_tenant_id: string
-          p_location_id?: string | null
         }
         Returns: string
       }
@@ -9405,6 +9709,34 @@ export type Database = {
         }
         Returns: string
       }
+      debit_salon_wallet_for_refund:
+        | {
+            Args: {
+              p_actor_id: string
+              p_amount: number
+              p_appointment_id?: string
+              p_idempotency_key: string
+              p_reason: string
+              p_refund_request_id?: string
+              p_refund_type: Database["public"]["Enums"]["refund_type"]
+              p_transaction_id: string
+            }
+            Returns: Json
+          }
+        | {
+            Args: {
+              p_actor_id: string
+              p_allow_negative?: boolean
+              p_amount: number
+              p_appointment_id?: string
+              p_idempotency_key: string
+              p_reason: string
+              p_refund_request_id?: string
+              p_refund_type: Database["public"]["Enums"]["refund_type"]
+              p_transaction_id: string
+            }
+            Returns: Json
+          }
       deduct_communication_credits: {
         Args: { p_amount: number; p_tenant_id: string }
         Returns: undefined
@@ -9436,6 +9768,14 @@ export type Database = {
         Args: { p_days: number }
         Returns: undefined
       }
+      finalize_fee_bearing_withdrawal: {
+        Args: {
+          p_outcome: string
+          p_transfer_fee_refunded?: boolean
+          p_withdrawal_id: string
+        }
+        Returns: undefined
+      }
       finalize_sales_conversion_from_webhook: {
         Args: {
           p_amount: number
@@ -9454,6 +9794,27 @@ export type Database = {
         Returns: number
       }
       get_auth_user_by_email: { Args: { lookup_email: string }; Returns: Json }
+      get_backoffice_blocked_refunds: {
+        Args: { p_limit?: number; p_offset?: number }
+        Returns: {
+          attempted_amount: number
+          attempted_by_email: string
+          attempted_by_id: string
+          block_code: string
+          created_at: string
+          currency: string
+          id: string
+          reason: string
+          refund_request_id: string
+          refund_type: string
+          shortfall: number
+          tenant_id: string
+          tenant_name: string
+          total_count: number
+          transaction_id: string
+          wallet_balance_at_attempt: number
+        }[]
+      }
       get_backoffice_comms_usage: {
         Args: never
         Returns: {
@@ -9571,6 +9932,24 @@ export type Database = {
           services_rescheduled: number
         }[]
       }
+      get_due_appointment_reminders: {
+        Args: { p_now?: string }
+        Returns: {
+          appointment_id: string
+          attempt_count: number
+          customer_email: string
+          customer_id: string
+          customer_name: string
+          customer_phone: string
+          email_enabled: boolean
+          offset_minutes: number
+          scheduled_start: string
+          sms_enabled: boolean
+          tenant_id: string
+          tenant_name: string
+          tenant_sms_sender_name: string
+        }[]
+      }
       get_effective_trial_window: {
         Args: { p_tenant_id: string }
         Returns: {
@@ -9642,7 +10021,7 @@ export type Database = {
         Returns: Json
       }
       get_salon_wallet_availability: {
-        Args: { p_tenant_id: string; p_location_id?: string | null }
+        Args: { p_location_id?: string; p_tenant_id: string }
         Returns: {
           available: number
           balance: number
@@ -9875,6 +10254,17 @@ export type Database = {
         Args: { p_item_id: string; p_item_type: string; p_tenant_id: string }
         Returns: boolean
       }
+      prepare_paystack_refund: {
+        Args: {
+          p_actor_id: string
+          p_amount: number
+          p_key: string
+          p_reason: string
+          p_request_id?: string
+          p_transaction_id: string
+        }
+        Returns: Json
+      }
       process_due_scheduled_plan_batches: { Args: never; Returns: number }
       purchase_tenant_extra_seats_and_log_billing: {
         Args: {
@@ -9883,6 +10273,10 @@ export type Database = {
           p_source: string
           p_tenant_id: string
         }
+        Returns: Json
+      }
+      purchase_tenant_staff_operations_addon_and_log_billing: {
+        Args: { p_reason?: string; p_source?: string; p_tenant_id: string }
         Returns: Json
       }
       purchase_tenant_theme_addon_and_log_billing: {
@@ -9894,6 +10288,18 @@ export type Database = {
         }
         Returns: Json
       }
+      reconcile_paystack_refund: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_local_id?: string
+          p_provider_id: string
+          p_reference: string
+          p_status: string
+        }
+        Returns: Json
+      }
+      record_gateway_payment: { Args: { p_record: Json }; Returns: Json }
       record_offline_cash_payment: {
         Args: {
           p_amount: number
@@ -9911,6 +10317,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      refund_wallet_debit_amount: {
+        Args: { p_amount: number; p_transaction_id: string }
+        Returns: number
+      }
       reject_transaction_refund: {
         Args: { p_reason: string; p_request_id: string }
         Returns: boolean
@@ -9918,6 +10328,18 @@ export type Database = {
       release_customer_balance_reservation: {
         Args: { p_appointment_id: string }
         Returns: boolean
+      }
+      remove_notification_settings_override: {
+        Args: { p_location_id: string; p_tenant_id: string }
+        Returns: Json
+      }
+      request_customer_refund: {
+        Args: { p_amount: number; p_reason: string; p_transaction_id: string }
+        Returns: string
+      }
+      request_subscription_cancellation: {
+        Args: { p_note: string; p_reason: string; p_tenant_id: string }
+        Returns: string
       }
       request_transaction_refund: {
         Args: {
@@ -9927,6 +10349,10 @@ export type Database = {
           p_transaction_id: string
         }
         Returns: string
+      }
+      reserve_communication_credits: {
+        Args: { p_amount: number; p_tenant_id: string }
+        Returns: boolean
       }
       reserve_customer_balance: {
         Args: {
@@ -9938,10 +10364,42 @@ export type Database = {
         Returns: string
       }
       reserve_customer_package_credit: {
-        Args: { p_appointment_id: string; p_service_id: string }
+        Args: {
+          p_appointment_id: string
+          p_appointment_service_id: string
+          p_service_id: string
+        }
+        Returns: string
+      }
+      resolve_refund_wallet: {
+        Args: { p_transaction_id: string }
+        Returns: string
+      }
+      resolve_salon_wallet_location: {
+        Args: {
+          p_reference_id: string
+          p_reference_type: string
+          p_requested_location_id?: string
+          p_tenant_id: string
+        }
         Returns: string
       }
       resolve_user_contexts: { Args: { p_tenant_id: string }; Returns: Json }
+      restore_communication_credits: {
+        Args: { p_amount: number; p_tenant_id: string }
+        Returns: boolean
+      }
+      resume_subscription: { Args: { p_tenant_id: string }; Returns: string }
+      reverse_refund_wallet_debit: {
+        Args: {
+          p_amount: number
+          p_currency: string
+          p_debit_idempotency_key: string
+          p_tenant_id: string
+          p_transaction_id: string
+        }
+        Returns: string
+      }
       revive_location: {
         Args: { p_location_id: string; p_tenant_id: string }
         Returns: Json
@@ -10014,6 +10472,10 @@ export type Database = {
       sync_customer_purse_balance: {
         Args: { p_currency: string; p_customer_id: string; p_tenant_id: string }
         Returns: number
+      }
+      sync_solo_payout_destination_coverage: {
+        Args: { p_tenant_id: string }
+        Returns: undefined
       }
       tenant_user_allows_promo_trial_bonus: {
         Args: {
@@ -10151,6 +10613,7 @@ export type Database = {
         | "salon_purse_reversal"
         | "salon_purse_debit_credit_purchase"
         | "salon_purse_debit_refund"
+        | "salon_purse_credit_purse_topup"
       wallet_type: "customer" | "salon"
       withdrawal_status:
         | "pending"
@@ -10361,6 +10824,7 @@ export const Constants = {
         "salon_purse_reversal",
         "salon_purse_debit_credit_purchase",
         "salon_purse_debit_refund",
+        "salon_purse_credit_purse_topup",
       ],
       wallet_type: ["customer", "salon"],
       withdrawal_status: [

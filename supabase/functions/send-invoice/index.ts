@@ -90,6 +90,8 @@ serve(async (req) => {
       quantity: number;
       unit_price: number;
       total_price: number;
+      is_package_covered: boolean;
+      package_name: string | null;
     }>;
 
     if (!customer?.email) {
@@ -115,14 +117,24 @@ serve(async (req) => {
     const currency = tenant?.currency || "USD";
 
     // Generate HTML invoice
+    const packageCoveredBadge = (packageName: string | null) => `
+      <span style="display: inline-block; padding: 2px 8px; border-radius: 9999px; background-color: #ecfdf5; color: #047857; font-size: 11px; font-weight: 600; white-space: nowrap;">
+        Covered by package: ${packageName || "Package"}
+      </span>
+    `;
+
     const lineItemsHtml = lineItems
       .map(
         (item) => `
         <tr>
           <td style="padding: 12px; border-bottom: 1px solid #e5e7eb;">${item.description}</td>
           <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: center;">${item.quantity}</td>
-          <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatCurrency(item.unit_price, currency)}</td>
-          <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${formatCurrency(item.total_price, currency)}</td>
+          <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${
+            item.is_package_covered ? packageCoveredBadge(item.package_name) : formatCurrency(item.unit_price, currency)
+          }</td>
+          <td style="padding: 12px; border-bottom: 1px solid #e5e7eb; text-align: right;">${
+            item.is_package_covered ? packageCoveredBadge(item.package_name) : formatCurrency(item.total_price, currency)
+          }</td>
         </tr>
       `
       )
