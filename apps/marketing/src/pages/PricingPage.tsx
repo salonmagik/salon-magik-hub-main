@@ -140,7 +140,7 @@ export default function PricingPage() {
 								)}
 							>
 								{annual
-									? `Annual · save up to ${maxSavingsPct ?? "—"}%/yr`
+									? `Annual · save up to ${maxSavingsPct ?? "N/A"}%/yr`
 									: "Monthly"}
 							</button>
 						))}
@@ -148,7 +148,7 @@ export default function PricingPage() {
 				</div>
 			</section>
 
-			{/* Plan cards — same as PricingSection on landing */}
+			{/* Plan cards: same as PricingSection on landing */}
 			<section className="px-8 pb-[80px] pt-[48px]">
 				<div className="mx-auto max-w-[1180px]">
 					{isLoading ? (
@@ -249,7 +249,7 @@ export default function PricingPage() {
 															? lim.max_locations > 1
 																? `Up to ${lim.max_locations}`
 																: "1"
-															: "—"}
+															: "N/A"}
 													</td>
 												);
 											})}
@@ -271,7 +271,7 @@ export default function PricingPage() {
 																: lim.max_staff >= 999
 																	? "Unlimited"
 																	: `Up to ${lim.max_staff}`
-															: "—"}
+															: "N/A"}
 													</td>
 												);
 											})}
@@ -287,7 +287,7 @@ export default function PricingPage() {
 														key={plan.id}
 														className="py-4 text-center text-[14.5px] text-brand-ink"
 													>
-														{lim ? lim.monthly_messages.toLocaleString() : "—"}
+														{lim ? lim.monthly_messages.toLocaleString() : "N/A"}
 													</td>
 												);
 											})}
@@ -307,7 +307,7 @@ export default function PricingPage() {
 															? lim.max_services == null
 																? "Unlimited"
 																: `Up to ${lim.max_services} each`
-															: "—"}
+															: "N/A"}
 													</td>
 												);
 											})}
@@ -468,7 +468,7 @@ export default function PricingPage() {
 																			</span>
 																		) : (
 																			<span className="text-[20px] text-brand-ink/20">
-																				—
+																				&times;
 																			</span>
 																		)}
 																	</td>

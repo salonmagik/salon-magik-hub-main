@@ -15,8 +15,8 @@ export function useWaitlist(): WaitlistContextValue {
 
 /**
  * Provides a single, app-wide "exclusive access" waitlist dialog so any CTA
- * (shared nav header, pricing cards, etc.) can open it from any marketing page
- * — not just the landing page, which manages its own local dialog state.
+ * (shared nav header, pricing cards, etc.) can open it from any marketing page,
+ * not just the landing page, which manages its own local dialog state.
  */
 export function WaitlistProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);

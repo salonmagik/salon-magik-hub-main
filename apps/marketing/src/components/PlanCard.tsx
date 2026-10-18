@@ -102,7 +102,7 @@ export function PlanCard({
               </div>
             ) : (
               <div className="mt-1 text-[12.5px] text-brand-ink/45">
-                Save up to {savingsPct ?? "—"}% with annual billing
+                Save up to {savingsPct ?? "N/A"}% with annual billing
               </div>
             )}
           </>

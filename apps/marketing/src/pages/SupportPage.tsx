@@ -4,7 +4,7 @@ import { MarketingLayout } from "@/components/MarketingLayout";
 export default function SupportPage() {
   return (
     <MarketingLayout>
-      {/* Centered hero — consistent with Pricing + FAQ pages */}
+      {/* Centered hero: consistent with Pricing + FAQ pages */}
       <section className="px-8 pb-0 pt-16 text-center">
         <div className="mx-auto max-w-[580px]">
           <h1 className="font-serif text-[clamp(32px,4vw,48px)] font-medium leading-[1.12] tracking-[-0.4px] text-brand-ink">
@@ -58,7 +58,7 @@ export default function SupportPage() {
             <h2 className="mb-5 font-serif text-[22px] font-medium text-brand-ink">Response times</h2>
             <div className="space-y-2 rounded-[14px] bg-brand-lilac-bg px-6 py-5 text-[14px] leading-relaxed text-brand-ink/70">
               <p><span className="font-medium text-brand-ink">Email:</span> Within 24 hours on business days</p>
-              <p><span className="font-medium text-brand-ink">WhatsApp:</span> Within 2 hours (9 am – 6 pm WAT, Mon – Fri)</p>
+              <p><span className="font-medium text-brand-ink">WhatsApp:</span> Within 2 hours (9 am to 6 pm WAT, Mon to Fri)</p>
               <p><span className="font-medium text-brand-ink">Urgent:</span> Billing and access issues are always prioritised</p>
             </div>
           </div>

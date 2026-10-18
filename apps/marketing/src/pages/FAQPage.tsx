@@ -47,7 +47,7 @@ export default function FAQPage() {
       items: [
         { q: "Do I need a card to start?", a: `No. Every plan starts with a ${trialDays}-day free trial and no card is required to begin.` },
         { q: "How long does setup take?", a: "Most salons are fully set up in under 10 minutes. Onboarding walks you through adding your services, hours, and first team member." },
-        { q: "Can my clients book without downloading an app?", a: "Yes. Clients book through your own link — no app download and no account required on their end." },
+        { q: "Can my clients book without downloading an app?", a: "Yes. Clients book through your own link, with no app download and no account required on their end." },
         { q: "Do you support multiple languages?", a: "The platform currently runs in English. More language support is on our roadmap." },
       ],
     },
@@ -55,7 +55,7 @@ export default function FAQPage() {
       category: "Plans & billing",
       items: [
         { q: "Can I move between plans as my team grows?", a: "Yes, you can upgrade or downgrade at any time from your settings. Your data, clients and history move with you." },
-        { q: "What happens when my trial ends?", a: "You'll be asked to choose a plan. If you don't, your account goes into read-only mode — nothing is deleted. You can reactivate any time." },
+        { q: "What happens when my trial ends?", a: "You'll be asked to choose a plan. If you don't, your account goes into read-only mode, but nothing is deleted. You can reactivate any time." },
         { q: "Is there a discount for annual billing?", a: `Yes. Annual plans save you up to ${maxSavingsPct ?? 8}% compared to monthly billing, depending on your plan.` },
       ],
     },
@@ -69,10 +69,10 @@ export default function FAQPage() {
     {
       category: "Features",
       items: [
-        { q: "Is WhatsApp messaging supported?", a: "Not yet — it's on our roadmap. Today you can send personalised promotional messages and automated reminders to your clients via SMS and email, and birthday messages are sent automatically on your clients' birthdays. WhatsApp is coming soon." },
+        { q: "Is WhatsApp messaging supported?", a: "Not yet. It's on our roadmap. Today you can send personalised promotional messages and automated reminders to your clients via SMS and email, and birthday messages are sent automatically on your clients' birthdays. WhatsApp is coming soon." },
         { q: "Can I manage multiple locations?", a: "Yes. The Chain plan supports multiple branches with a unified dashboard, shared client records, and per-location reporting." },
         { q: "Does Salon Magik have a mobile app?", a: "The web app is fully responsive and works great on mobile. A dedicated native app is on our roadmap." },
-        { q: "Can I customise my booking page?", a: "Yes — you can set your brand colour, upload a banner image, add a short bio, and toggle availability. More customisation options are coming." },
+        { q: "Can I customise my booking page?", a: "Yes, you can set your brand colour, upload a banner image, add a short bio, and toggle availability. More customisation options are coming." },
         { q: "Can clients pay online when booking?", a: "Yes. You can enable online payments so clients pay in full or leave a deposit at the time of booking." },
       ],
     },
@@ -81,7 +81,7 @@ export default function FAQPage() {
       items: [
         { q: "How do staff members log in?", a: "Staff receive an invitation email. They create their own password and can only access what their role allows." },
         { q: "Can I control what each staff member sees?", a: "Yes. Studio and Chain plans include role-based permissions, so you control access to reports, transactions, and settings." },
-        { q: "What happens if a staff member leaves?", a: "You can deactivate their account instantly. Their appointment history is preserved — nothing is lost." },
+        { q: "What happens if a staff member leaves?", a: "You can deactivate their account instantly. Their appointment history is preserved, so nothing is lost." },
       ],
     },
   ];
@@ -118,7 +118,7 @@ export default function FAQPage() {
 
           <div className="mt-16 rounded-[18px] bg-brand-lilac-bg px-8 py-8 text-center">
             <p className="font-serif text-[20px] font-medium text-brand-ink">Still stuck?</p>
-            <p className="mt-2 text-[14.5px] text-brand-ink/55">Our support team is available Monday – Friday, 9am – 6pm WAT.</p>
+            <p className="mt-2 text-[14.5px] text-brand-ink/55">Our support team is available Monday to Friday, 9am to 6pm WAT.</p>
             <a
               href="mailto:support@salonmagik.com"
               className="mt-5 inline-block rounded-full bg-brand-purple px-7 py-[13px] text-[15px] font-medium text-white transition-colors hover:bg-brand-purple-deep"

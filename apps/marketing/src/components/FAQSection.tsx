@@ -17,7 +17,7 @@ export function FAQSection() {
     },
     {
       q: "Can my clients book without downloading an app?",
-      a: "Yes. Clients book through your own link — no app download and no account required on their end.",
+      a: "Yes. Clients book through your own link, with no app download and no account required on their end.",
     },
     {
       q: "Can I move between plans as my team grows?",
@@ -29,7 +29,7 @@ export function FAQSection() {
     },
     {
       q: "Is WhatsApp messaging supported?",
-      a: "Not yet — it's on our roadmap. Today, messaging runs through SMS and email broadcasts, plus automatic birthday and reactivation messages.",
+      a: "Not yet. It's on our roadmap. Today, messaging runs through SMS and email broadcasts, plus automatic birthday and reactivation messages.",
     },
   ];
 
