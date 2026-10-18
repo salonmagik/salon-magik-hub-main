@@ -248,7 +248,7 @@ export function ReviewStep({
         )}
         <div className="flex justify-between items-baseline pt-2.5 mt-1 border-t border-border">
           <span className="font-medium text-sm">{requiresApproval ? "Amount Due After Approval" : "Amount Due Now"}</span>
-          <span className="font-serif text-xl font-semibold">{formatCurrency(requiresApproval ? afterPurse : amountDueNow, salon.currency)}</span>
+          <span className="font-serif text-2xl font-semibold">{formatCurrency(requiresApproval ? afterPurse : amountDueNow, salon.currency)}</span>
         </div>
       </div>
     </div>

@@ -143,7 +143,7 @@ export function BookerInfoStep({
   return (
     <div className="space-y-6">
       <div>
-        <h3 className="font-serif text-xl font-semibold mb-2">Your Information</h3>
+        <h3 className="font-serif text-lg font-semibold mb-2">Your Information</h3>
         <p className="text-sm text-muted-foreground mb-6">
           {emailStage === "details"
             ? "Please provide your contact details for booking confirmation"

@@ -206,7 +206,7 @@ export function CartStep({ currency, onBrowse }: CartStepProps) {
       <Separator className="mt-6 mb-4" />
       <div className="flex items-center justify-between">
         <span className="font-medium">Total</span>
-        <span className="font-serif text-xl font-semibold">{formatCurrency(total, currency)}</span>
+        <span className="font-serif text-2xl font-semibold">{formatCurrency(total, currency)}</span>
       </div>
     </div>
   );
