@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Sheet,
   SheetContent,
@@ -19,6 +19,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { ProductOrderDetailDialog } from "@/components/ProductOrderDetailDialog";
 import { PackagePurchaseDetailDialog } from "@/components/PackagePurchaseDetailDialog";
 import { MixedPurchaseDetailDialog } from "@/components/MixedPurchaseDetailDialog";
+import { AppointmentDetailsDialog } from "@/components/dialogs/AppointmentDetailsDialog";
+import type { CalendarAppointment } from "@/hooks/useCalendarAppointments";
 
 type AppointmentNotificationMeta = {
   id: string;
@@ -92,7 +94,8 @@ const getIconColor = (type: Notification["type"]) => {
 
 export function NotificationsPanel({ open, onOpenChange, notificationsData }: NotificationsPanelProps) {
   const navigate = useNavigate();
-  const { activeContextType, setActiveContext, assignedLocationIds } = useAuth();
+  const location = useLocation();
+  const { activeContextType, setActiveContext, assignedLocationIds, currentTenant } = useAuth();
   const notificationsHook = useNotifications(!notificationsData);
   const { notifications, isLoading, markAsRead, markAllAsRead, refetch } =
     notificationsData || notificationsHook;
@@ -100,6 +103,12 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
   const [detailDialog, setDetailDialog] = useState<
     { kind: "product_order" | "package_order" | "mixed_order"; bookingReference: string } | null
   >(null);
+  // Holds the fully-shaped CalendarAppointment for "appointment" type
+  // notifications -- fetched fresh on click (not derived from
+  // appointmentMetaById, which only carries the lightweight fields used by
+  // the notification list itself) so AppointmentDetailsDialog gets real
+  // data, same as it would opened in-page from AppointmentsPage.
+  const [appointmentDetail, setAppointmentDetail] = useState<CalendarAppointment | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -156,9 +165,58 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
     };
   }, [open, appointmentNotificationIds]);
 
+  // Used to decide whether the three purchase-detail dialogs below should
+  // offer a "Go to X" CTA at all -- when the user is already on the
+  // destination page/tab, only "Close" should show (no point navigating
+  // to where you already are).
+  const isOnFulfillmentTab =
+    location.pathname === "/salon/products" && new URLSearchParams(location.search).get("subtab") === "fulfillment";
+  const isOnPurchasesTab =
+    location.pathname === "/salon/packages" && new URLSearchParams(location.search).get("tab") === "purchases";
+  const isOnAppointmentsPage = location.pathname === "/salon/appointments";
+
+  const navigateToFulfillment = (orderId: string) => {
+    navigate(`/salon/products?subtab=fulfillment&orderId=${encodeURIComponent(orderId)}`);
+  };
+  const navigateToPurchases = (purchaseId?: string) => {
+    navigate(
+      `/salon/packages?tab=purchases${purchaseId ? `&purchaseId=${encodeURIComponent(purchaseId)}` : ""}`,
+    );
+  };
+  const navigateToAppointmentDetails = (appointmentId: string) => {
+    navigate(`/salon/appointments?appointmentId=${encodeURIComponent(appointmentId)}&open=details`);
+  };
+
   const handleViewSettings = () => {
     onOpenChange(false);
     navigate("/salon/settings?tab=notifications");
+  };
+
+  // Mirrors the exact select shape useCalendarAppointments uses to build a
+  // CalendarAppointment, so the dialog never receives a fabricated/partial
+  // object -- just this one row instead of a whole date range.
+  const fetchAppointmentForDialog = async (
+    appointmentId: string,
+    tenantId: string,
+  ): Promise<CalendarAppointment | null> => {
+    const { data, error } = await supabase
+      .from("appointments")
+      .select(`
+        *,
+        customer:customers!appointments_customer_id_fkey(*),
+        services:appointment_services(*),
+        transactions(id, provider, method, status)
+      `)
+      .eq("id", appointmentId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Failed to load appointment for notification detail dialog:", error);
+      return null;
+    }
+
+    return (data as CalendarAppointment | null) || null;
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -183,9 +241,19 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
     };
 
     if (notification.type === "appointment" && notification.entity_id) {
+      // No navigate() here, same reasoning as product_order/package_order/
+      // mixed_order below -- a hard route change first would remount this
+      // panel and wipe the dialog state before it ever rendered. The
+      // AppointmentDetailsDialog modal opens in place; its own "Go to
+      // appointments" CTA (only shown when not already on that page) does
+      // the deep-link navigation on demand.
       const appointmentMeta = appointmentMetaById[notification.entity_id];
       await switchToLocationIfNeeded(appointmentMeta?.location_id);
-      navigate(`/salon/appointments?appointmentId=${notification.entity_id}&open=details`);
+      if (!currentTenant?.id) return;
+      const appointment = await fetchAppointmentForDialog(notification.entity_id, currentTenant.id);
+      if (appointment) {
+        setAppointmentDetail(appointment);
+      }
       return;
     }
     if (notification.type === "payment") {
@@ -199,11 +267,16 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
       return;
     }
     if (notification.type === "product_order") {
+      // No navigate() here -- SalonSidebar/NotificationsPanel remount on
+      // every route change (see module comment), which would wipe the
+      // setDetailDialog state set right below before it ever rendered.
+      // The dialog itself only offers a "Go to Fulfillment" CTA when the
+      // caller determines (via the route check below) that the user
+      // isn't already on that tab.
       await switchToLocationIfNeeded();
       const bookingReference = notification.entity_id
         ? appointmentMetaById[notification.entity_id]?.booking_reference
         : null;
-      navigate("/salon/products?subtab=fulfillment");
       if (bookingReference) {
         setDetailDialog({ kind: "product_order", bookingReference });
       }
@@ -214,7 +287,6 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
       const bookingReference = notification.entity_id
         ? appointmentMetaById[notification.entity_id]?.booking_reference
         : null;
-      navigate("/salon/packages?tab=purchases");
       if (bookingReference) {
         setDetailDialog({ kind: "package_order", bookingReference });
       }
@@ -396,20 +468,31 @@ export function NotificationsPanel({ open, onOpenChange, notificationsData }: No
       </SheetContent>
     </Sheet>
 
+    <AppointmentDetailsDialog
+      open={appointmentDetail !== null}
+      onOpenChange={(next) => !next && setAppointmentDetail(null)}
+      appointment={appointmentDetail}
+      onNavigateToAppointments={isOnAppointmentsPage ? undefined : navigateToAppointmentDetails}
+    />
     <ProductOrderDetailDialog
       open={detailDialog?.kind === "product_order"}
       onOpenChange={(next) => !next && setDetailDialog(null)}
       bookingReference={detailDialog?.kind === "product_order" ? detailDialog.bookingReference : null}
+      onNavigateToFulfillment={isOnFulfillmentTab ? undefined : navigateToFulfillment}
     />
     <PackagePurchaseDetailDialog
       open={detailDialog?.kind === "package_order"}
       onOpenChange={(next) => !next && setDetailDialog(null)}
       bookingReference={detailDialog?.kind === "package_order" ? detailDialog.bookingReference : null}
+      onNavigateToPurchases={isOnPurchasesTab ? undefined : navigateToPurchases}
     />
     <MixedPurchaseDetailDialog
       open={detailDialog?.kind === "mixed_order"}
       onOpenChange={(next) => !next && setDetailDialog(null)}
       bookingReference={detailDialog?.kind === "mixed_order" ? detailDialog.bookingReference : null}
+      onNavigateToAppointments={isOnAppointmentsPage ? undefined : navigateToAppointmentDetails}
+      onNavigateToFulfillment={isOnFulfillmentTab ? undefined : navigateToFulfillment}
+      onNavigateToPurchases={isOnPurchasesTab ? undefined : navigateToPurchases}
     />
     </>
   );

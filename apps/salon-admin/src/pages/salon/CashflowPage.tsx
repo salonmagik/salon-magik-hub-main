@@ -169,6 +169,18 @@ export default function CashflowPage() {
     : (currentTenant?.country && availableCountries.includes(currentTenant.country) ? currentTenant.country : availableCountries[0]) || "";
   const locationCountryById = new Map(locations.map((loc) => [loc.id, loc.country]));
 
+  // Business Settings rollup: lets the chain owner narrow the consolidated
+  // list down to one branch. "All branches" (empty string) is the default,
+  // matching the country filter's defaulting pattern above.
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
+
+  useEffect(() => {
+    if (selectedLocationId && locationCountryById.get(selectedLocationId) !== effectiveCountry) {
+      setSelectedLocationId("");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [effectiveCountry]);
+
   useEffect(() => {
     const tab = searchParams.get("tab");
     const type = searchParams.get("type");
@@ -197,7 +209,16 @@ export default function CashflowPage() {
     }
     if (isOwnerHub && effectiveCountry) {
       const locationId = txn.appointment?.location_id;
-      if (!locationId || locationCountryById.get(locationId) !== effectiveCountry) return false;
+      // Only exclude a transaction when it's definitively tied to a
+      // *different* country's branch. Transactions with no appointment
+      // (e.g. store-credit top-ups, which aren't tied to any branch) have
+      // no location to compare, and were wrongly dropped by this filter
+      // whenever a country was selected (including the single-country
+      // default) -- treat "unknown location" as "don't exclude" instead.
+      if (locationId && locationCountryById.get(locationId) !== effectiveCountry) return false;
+    }
+    if (isOwnerHub && selectedLocationId) {
+      if (txn.appointment?.location_id !== selectedLocationId) return false;
     }
     const matchesSearch =
       txn.customer?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -211,7 +232,7 @@ export default function CashflowPage() {
     if (activeTab === "purse") return matchesSearch && (txn.type === "purse_topup" || txn.type === "purse_redemption");
     return matchesSearch;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [transactions, dateRange, isOwnerHub, effectiveCountry, searchQuery, activeTab]);
+  }), [transactions, dateRange, isOwnerHub, effectiveCountry, selectedLocationId, searchQuery, activeTab]);
 
   // "Today's Inflow" and pending-refund totals are money, so they must respect
   // the country filter and never sum two currencies together, same as
@@ -421,9 +442,11 @@ export default function CashflowPage() {
             <div className="min-w-0">
               <p className="truncate font-medium">{txn.customer?.full_name || "Guest"}</p>
               {showBranch && txn.appointment?.location?.name && (
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {txn.appointment.location.name}
-                </p>
+                <div className="mt-1">
+                  <Badge variant="secondary" className="text-[10px]">
+                    {txn.appointment.location.name}
+                  </Badge>
+                </div>
               )}
             </div>
             <p className={cn("shrink-0 font-serif text-base font-semibold", amountColorClass)}>
@@ -507,9 +530,11 @@ export default function CashflowPage() {
                 )}
               </div>
               {showBranch && txn.appointment?.location?.name && (
-                <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {txn.appointment.location.name}
-                </p>
+                <div className="mt-1">
+                  <Badge variant="secondary" className="text-[10px]">
+                    {txn.appointment.location.name}
+                  </Badge>
+                </div>
               )}
             </div>
           </div>
@@ -730,6 +755,26 @@ export default function CashflowPage() {
                       {c === "GH" ? "Ghana" : c === "NG" ? "Nigeria" : c}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+            )}
+            {isOwnerHub && locations.length > 1 && (
+              <Select
+                value={selectedLocationId || "all"}
+                onValueChange={(value) => setSelectedLocationId(value === "all" ? "" : value)}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All branches</SelectItem>
+                  {locations
+                    .filter((loc) => !effectiveCountry || loc.country === effectiveCountry)
+                    .map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.name}
+                      </SelectItem>
+                    ))}
                 </SelectContent>
               </Select>
             )}

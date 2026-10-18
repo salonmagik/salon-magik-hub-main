@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import {
   Dialog,
@@ -16,7 +15,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOrderByBookingReference, type OrderServiceLine } from "@/hooks/useOrderByBookingReference";
 import { supabase } from "@/lib/supabase";
 
-interface EntitlementItem {
+export interface EntitlementItem {
   id: string;
   total_quantity: number;
   remaining_quantity: number;
@@ -24,7 +23,7 @@ interface EntitlementItem {
   product: { id: string; name: string } | null;
 }
 
-interface Entitlement {
+export interface Entitlement {
   id: string;
   package_id: string;
   status: string;
@@ -38,6 +37,13 @@ interface PackagePurchaseDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bookingReference: string | null;
+  // Supplied by the caller only when the current page/tab isn't already
+  // the Purchases tab -- when omitted, the dialog shows just a Close
+  // button instead of a redundant "go to where you already are" CTA.
+  // The resolved entitlement id (best-effort match on the first package
+  // line) is passed through so the destination can deep-link straight to
+  // that purchase row; it may be undefined if no entitlement was found.
+  onNavigateToPurchases?: (purchaseId?: string) => void;
 }
 
 // Sessions-used progress per package is tracked in
@@ -48,7 +54,7 @@ interface PackagePurchaseDetailDialogProps {
 // a guaranteed one-to-one join (there's no column linking an entitlement
 // directly back to the purchase appointment or booking_reference), so
 // session progress is omitted rather than guessed wrong if none is found.
-function usePackageEntitlements(customerId: string | null, packageLines: OrderServiceLine[]) {
+export function usePackageEntitlements(customerId: string | null, packageLines: OrderServiceLine[]) {
   const [entitlements, setEntitlements] = useState<Record<string, Entitlement | null>>({});
   const [isLoading, setIsLoading] = useState(false);
   const packageIdsKey = useMemo(
@@ -101,8 +107,7 @@ function usePackageEntitlements(customerId: string | null, packageLines: OrderSe
 // Shows every package purchased in one checkout, reassembled from the
 // shared booking_reference (see useOrderByBookingReference). Multiple
 // packages in one order each get their own session-progress block.
-export function PackagePurchaseDetailDialog({ open, onOpenChange, bookingReference }: PackagePurchaseDetailDialogProps) {
-  const navigate = useNavigate();
+export function PackagePurchaseDetailDialog({ open, onOpenChange, bookingReference, onNavigateToPurchases }: PackagePurchaseDetailDialogProps) {
   const { currentTenant } = useAuth();
   const { order, isLoading } = useOrderByBookingReference(open ? bookingReference : null);
   const { entitlements } = usePackageEntitlements(order?.customerId ?? null, order?.packages ?? []);
@@ -115,7 +120,9 @@ export function PackagePurchaseDetailDialog({ open, onOpenChange, bookingReferen
 
   const handleGoToPurchases = () => {
     onOpenChange(false);
-    navigate("/salon/packages?tab=purchases");
+    const firstPackageLine = order?.packages[0];
+    const entitlementId = firstPackageLine?.package_id ? entitlements[firstPackageLine.package_id]?.id : undefined;
+    onNavigateToPurchases?.(entitlementId);
   };
 
   return (
@@ -197,9 +204,27 @@ export function PackagePurchaseDetailDialog({ open, onOpenChange, bookingReferen
                   );
                 })}
 
-                <div className="flex items-center justify-between rounded-[14px] border border-border/60 bg-card p-4">
-                  <span className="text-sm text-muted-foreground">Total paid</span>
-                  <span className="font-semibold text-lg">{formatCurrency(order.amountPaid || order.totalAmount)}</span>
+                <div className="space-y-2 rounded-[14px] border border-border/60 bg-card p-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>{formatCurrency(order.totalAmount)}</span>
+                  </div>
+                  {order.storeCreditPaid > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Paid via store credit</span>
+                      <span>{formatCurrency(order.storeCreditPaid)}</span>
+                    </div>
+                  )}
+                  {order.storeCreditPaid > 0 && (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Received</span>
+                      <span>{formatCurrency(order.otherPaid)}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between border-t border-dashed pt-2">
+                    <span className="text-sm text-muted-foreground">Total paid</span>
+                    <span className="font-semibold text-lg">{formatCurrency(order.amountPaid || order.totalAmount)}</span>
+                  </div>
                 </div>
               </>
             )}
@@ -210,9 +235,11 @@ export function PackagePurchaseDetailDialog({ open, onOpenChange, bookingReferen
           <Button variant="outline" className="rounded-full px-6" onClick={() => onOpenChange(false)}>
             Close
           </Button>
-          <Button className="rounded-full px-7" onClick={handleGoToPurchases}>
-            Go to Purchases
-          </Button>
+          {onNavigateToPurchases && (
+            <Button className="rounded-full px-7" onClick={handleGoToPurchases}>
+              Go to Purchases
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

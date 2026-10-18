@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -62,6 +61,11 @@ interface AppointmentDetailsDialogProps {
   appointment: CalendarAppointment | null;
   onRefresh?: () => void;
   onOpenApprovalAction?: (action: "approve" | "decline" | "reschedule" | "review", appointment: CalendarAppointment) => void;
+  // Supplied by the caller only when the current page isn't already the
+  // Appointments page -- when omitted, the "Go to appointments" footer
+  // button doesn't render, matching the pattern used by
+  // ProductOrderDetailDialog/PackagePurchaseDetailDialog/MixedPurchaseDetailDialog.
+  onNavigateToAppointments?: (appointmentId: string) => void;
 }
 
 type AppointmentBookingMetadata = {
@@ -92,8 +96,8 @@ export function AppointmentDetailsDialog({
   appointment,
   onRefresh,
   onOpenApprovalAction,
+  onNavigateToAppointments,
 }: AppointmentDetailsDialogProps) {
-  const navigate = useNavigate();
   const { currentTenant, roles } = useAuth();
   const { locations } = useLocations();
   const [isGifted, setIsGifted] = useState(false);
@@ -251,7 +255,7 @@ export function AppointmentDetailsDialog({
 
   const handleGoToAppointments = () => {
     onOpenChange(false);
-    navigate("/salon/appointments");
+    onNavigateToAppointments?.(appointment.id);
   };
 
   // Mask phone for staff role
@@ -616,7 +620,9 @@ export function AppointmentDetailsDialog({
               </Button>
             </>
           )}
-          <Button className="rounded-full px-7" onClick={handleGoToAppointments}>Go to appointments</Button>
+          {onNavigateToAppointments && (
+            <Button className="rounded-full px-7" onClick={handleGoToAppointments}>Go to appointments</Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

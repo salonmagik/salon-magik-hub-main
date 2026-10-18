@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card, CardContent } from "@ui/card";
 import { Badge } from "@ui/badge";
 import { Button } from "@ui/button";
@@ -26,6 +27,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { useProductFulfillment, type FulfillmentItem, type ProductFulfillmentType } from "@/hooks/useProductFulfillment";
+import { useOrderByBookingReference } from "@/hooks/useOrderByBookingReference";
 import { useAuth } from "@/hooks/useAuth";
 import { format, startOfDay, endOfDay, subDays, startOfMonth, endOfMonth } from "date-fns";
 import { cn } from "@shared/utils";
@@ -51,6 +53,40 @@ export function ProductFulfillmentTab() {
   const currency = currentTenant?.currency || "USD";
   const [typeFilter, setTypeFilter] = useState<FulfillmentTypeFilter>("all");
   const [dateRange, setDateRange] = useState<{ from?: Date; to?: Date }>({});
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [highlightedProductIds, setHighlightedProductIds] = useState<Set<string>>(new Set());
+  const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
+
+  // Deep-link support: a notification (or the Product Order detail dialog's
+  // "Go to Fulfillment" CTA) points here with ?orderId=<booking_reference>.
+  // Mirrors the pattern in AppointmentsPage.tsx -- fetch the order directly
+  // (instead of trusting it's already in `items`' default view), derive its
+  // date so the date-range filter doesn't hide it, and if any of its lines
+  // are already fulfilled, lift the hardcoded fulfilled-filter for just
+  // those lines so a notification about an already-fulfilled order is
+  // still visible.
+  const orderId = searchParams.get("orderId");
+  const { order: highlightedOrder } = useOrderByBookingReference(orderId);
+
+  useEffect(() => {
+    if (!orderId || !highlightedOrder) return;
+
+    setHighlightedProductIds(new Set(highlightedOrder.products.map((p) => p.id)));
+    setDateRange({ from: new Date(highlightedOrder.createdAt), to: new Date(highlightedOrder.createdAt) });
+    setTypeFilter("all");
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("orderId");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId, highlightedOrder]);
+
+  useEffect(() => {
+    if (highlightedProductIds.size === 0) return;
+    const firstId = highlightedProductIds.values().next().value;
+    const row = firstId ? rowRefs.current[firstId] : null;
+    row?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightedProductIds, items]);
 
   const formatCurrency = (amount: number) => {
     const symbols: Record<string, string> = {
@@ -67,16 +103,18 @@ export function ProductFulfillmentTab() {
   // then apply the fulfillment-type and date-range filters on top.
   const activeItems = useMemo(() => {
     return items.filter((i) => {
-      if (i.fulfillment_status === "fulfilled") return false;
+      if (i.fulfillment_status === "fulfilled" && !highlightedProductIds.has(i.id)) return false;
       if (typeFilter !== "all" && i.fulfillment_type !== typeFilter) return false;
       if (dateRange.from || dateRange.to) {
         const createdAt = new Date(i.created_at);
-        if (dateRange.from && createdAt < startOfDay(dateRange.from)) return false;
-        if (dateRange.to && createdAt > endOfDay(dateRange.to)) return false;
+        const inRange =
+          (!dateRange.from || createdAt >= startOfDay(dateRange.from)) &&
+          (!dateRange.to || createdAt <= endOfDay(dateRange.to));
+        if (!inRange && !highlightedProductIds.has(i.id)) return false;
       }
       return true;
     });
-  }, [items, typeFilter, dateRange]);
+  }, [items, typeFilter, dateRange, highlightedProductIds]);
 
   if (isLoading) {
     return (
@@ -186,7 +224,13 @@ export function ProductFulfillmentTab() {
                 const StatusIcon = config?.icon || Clock;
 
                 return (
-                  <TableRow key={item.id}>
+                  <TableRow
+                    key={item.id}
+                    ref={(el) => {
+                      rowRefs.current[item.id] = el;
+                    }}
+                    className={cn(highlightedProductIds.has(item.id) && "bg-primary/5 ring-1 ring-primary/30")}
+                  >
                     <TableCell className="text-sm text-muted-foreground">
                       {format(new Date(item.created_at), "MMM d, yyyy")}
                     </TableCell>

@@ -44,6 +44,12 @@ export interface OrderOverview {
   voucher: OrderVoucher | null;
   totalAmount: number;
   amountPaid: number;
+  // Breakdown of amountPaid by how it was actually paid -- a notification/
+  // detail view that only shows one lump "amount paid" number can't tell
+  // the salon how much of that was store credit versus real money, which
+  // matters for cashflow reconciliation (store credit isn't new cash in).
+  storeCreditPaid: number;
+  otherPaid: number;
   appointmentIds: string[];
 }
 
@@ -120,6 +126,28 @@ export function useOrderByBookingReference(bookingReference?: string | null) {
         }
       }
 
+      let storeCreditPaid = 0;
+      let otherPaid = 0;
+      if (appointmentIds.length > 0) {
+        const { data: paymentRows, error: paymentError } = await supabase
+          .from("transactions")
+          .select("amount, method")
+          .eq("tenant_id", currentTenant.id)
+          .in("appointment_id", appointmentIds)
+          .in("type", ["payment", "deposit"])
+          .eq("status", "completed");
+
+        if (paymentError) throw paymentError;
+
+        for (const payment of (paymentRows || []) as { amount: number; method: string | null }[]) {
+          if (payment.method === "purse") {
+            storeCreditPaid += Number(payment.amount || 0);
+          } else {
+            otherPaid += Number(payment.amount || 0);
+          }
+        }
+      }
+
       setOrder({
         bookingReference,
         customerId: rows[0].customer_id || null,
@@ -131,6 +159,8 @@ export function useOrderByBookingReference(bookingReference?: string | null) {
         voucher,
         totalAmount,
         amountPaid,
+        storeCreditPaid,
+        otherPaid,
         appointmentIds,
       });
     } catch (err) {

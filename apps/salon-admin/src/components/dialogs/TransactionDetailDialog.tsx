@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import {
   Dialog,
@@ -43,6 +43,7 @@ const statusStyles: Record<string, { bg: string; text: string }> = {
 type LinkedAppointment = {
   id: string;
   scheduled_start: string | null;
+  booking_reference: string | null;
   customer: { id: string; full_name: string } | null;
   location: { id: string; name: string } | null;
 };
@@ -96,6 +97,16 @@ export function TransactionDetailDialog({
   onDeclineRefund,
 }: TransactionDetailDialogProps) {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Same "don't show a CTA pointing at where the user already is" rule
+  // as the notification purchase-detail dialogs (ProductOrderDetailDialog
+  // etc) -- this dialog navigates directly via its own useNavigate, so the
+  // check is self-contained here instead of threaded through as a prop.
+  const isOnFulfillmentTab =
+    location.pathname === "/salon/products" && new URLSearchParams(location.search).get("subtab") === "fulfillment";
+  const isOnPurchasesTab =
+    location.pathname === "/salon/packages" && new URLSearchParams(location.search).get("tab") === "purchases";
+  const isOnAppointmentsPage = location.pathname === "/salon/appointments";
   const [isLoading, setIsLoading] = useState(false);
   const [linkedKind, setLinkedKind] = useState<LinkedKind>("none");
   const [linkedAppointment, setLinkedAppointment] = useState<LinkedAppointment | null>(null);
@@ -148,7 +159,7 @@ export function TransactionDetailDialog({
         const { data: appointment, error: appointmentError } = await supabase
           .from("appointments")
           .select(
-            "id, scheduled_start, booking_metadata, customer:customers!appointments_customer_id_fkey(id, full_name), location:locations(id, name)",
+            "id, scheduled_start, booking_reference, booking_metadata, customer:customers!appointments_customer_id_fkey(id, full_name), location:locations(id, name)",
           )
           .eq("id", transaction.appointment_id)
           .maybeSingle();
@@ -342,14 +353,16 @@ export function TransactionDetailDialog({
                       {linkedPackage.expires_at && ` · valid until ${format(new Date(linkedPackage.expires_at), "d MMM yyyy")}`}
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0 whitespace-nowrap rounded-lg"
-                    onClick={() => navigate("/salon/packages")}
-                  >
-                    View package
-                  </Button>
+                  {!isOnPurchasesTab && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 whitespace-nowrap rounded-lg"
+                      onClick={() => navigate(`/salon/packages?tab=purchases&purchaseId=${encodeURIComponent(linkedPackage.id)}`)}
+                    >
+                      View package
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : linkedKind === "product" ? (
@@ -369,14 +382,24 @@ export function TransactionDetailDialog({
                       <p className="mt-1 text-xs text-muted-foreground">{linkedAppointment.location.name}</p>
                     )}
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0 whitespace-nowrap rounded-lg"
-                    onClick={() => navigate("/salon/products?subtab=fulfillment")}
-                  >
-                    View in Fulfillment
-                  </Button>
+                  {!isOnFulfillmentTab && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 whitespace-nowrap rounded-lg"
+                      onClick={() =>
+                        navigate(
+                          `/salon/products?subtab=fulfillment${
+                            linkedAppointment?.booking_reference
+                              ? `&orderId=${encodeURIComponent(linkedAppointment.booking_reference)}`
+                              : ""
+                          }`,
+                        )
+                      }
+                    >
+                      View in Fulfillment
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : linkedKind === "appointment" && linkedAppointment ? (
@@ -395,14 +418,16 @@ export function TransactionDetailDialog({
                         .join(" · ")}
                     </p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0 whitespace-nowrap rounded-lg"
-                    onClick={() => navigate("/salon/appointments")}
-                  >
-                    View appointment
-                  </Button>
+                  {!isOnAppointmentsPage && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 whitespace-nowrap rounded-lg"
+                      onClick={() => navigate(`/salon/appointments?appointmentId=${encodeURIComponent(linkedAppointment.id)}&open=details`)}
+                    >
+                      View appointment
+                    </Button>
+                  )}
                 </div>
               </div>
             ) : null}

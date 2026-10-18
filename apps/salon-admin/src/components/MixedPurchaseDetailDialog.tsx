@@ -1,4 +1,3 @@
-import { useNavigate } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
@@ -12,11 +11,20 @@ import { Skeleton } from "@ui/skeleton";
 import { User, Phone, Calendar, ShoppingBag, Package, Ticket } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrderByBookingReference } from "@/hooks/useOrderByBookingReference";
+import { usePackageEntitlements } from "@/components/PackagePurchaseDetailDialog";
 
 interface MixedPurchaseDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bookingReference: string | null;
+  // Each is supplied by the caller only when the current page/tab isn't
+  // already the matching destination -- when omitted, that section's
+  // button doesn't render instead of pointing at where the user already
+  // is. purchaseId (passed to onNavigateToPurchases) is a best-effort
+  // entitlement match on the first package line and may be undefined.
+  onNavigateToAppointments?: (appointmentId: string) => void;
+  onNavigateToFulfillment?: (orderId: string) => void;
+  onNavigateToPurchases?: (purchaseId?: string) => void;
 }
 
 // A mixed order (any combination of two or more of service/package/product
@@ -25,10 +33,17 @@ interface MixedPurchaseDetailDialogProps {
 // Rules artboard calls for: no tab navigation, just every line item
 // grouped by kind, reassembled from the shared booking_reference via
 // useOrderByBookingReference.
-export function MixedPurchaseDetailDialog({ open, onOpenChange, bookingReference }: MixedPurchaseDetailDialogProps) {
-  const navigate = useNavigate();
+export function MixedPurchaseDetailDialog({
+  open,
+  onOpenChange,
+  bookingReference,
+  onNavigateToAppointments,
+  onNavigateToFulfillment,
+  onNavigateToPurchases,
+}: MixedPurchaseDetailDialogProps) {
   const { currentTenant } = useAuth();
   const { order, isLoading } = useOrderByBookingReference(open ? bookingReference : null);
+  const { entitlements } = usePackageEntitlements(order?.customerId ?? null, order?.packages ?? []);
   const currency = currentTenant?.currency || "USD";
 
   const formatCurrency = (amount: number) => {
@@ -36,9 +51,22 @@ export function MixedPurchaseDetailDialog({ open, onOpenChange, bookingReference
     return `${symbols[currency] || ""}${Number(amount).toLocaleString()}`;
   };
 
-  const goTo = (path: string) => {
+  const handleOpenAppointments = () => {
     onOpenChange(false);
-    navigate(path);
+    const appointmentId = order?.services[0]?.appointment_id;
+    if (appointmentId) onNavigateToAppointments?.(appointmentId);
+  };
+
+  const handleOpenFulfillment = () => {
+    onOpenChange(false);
+    if (bookingReference) onNavigateToFulfillment?.(bookingReference);
+  };
+
+  const handleOpenPurchases = () => {
+    onOpenChange(false);
+    const firstPackageLine = order?.packages[0];
+    const entitlementId = firstPackageLine?.package_id ? entitlements[firstPackageLine.package_id]?.id : undefined;
+    onNavigateToPurchases?.(entitlementId);
   };
 
   const subtotal = order ? order.totalAmount + (order.voucher?.discount_amount || 0) : 0;
@@ -158,6 +186,18 @@ export function MixedPurchaseDetailDialog({ open, onOpenChange, bookingReference
                       <span>-{formatCurrency(Number(order.voucher.discount_amount))}</span>
                     </div>
                   )}
+                  {order.storeCreditPaid > 0 && (
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Paid via store credit</span>
+                      <span>{formatCurrency(order.storeCreditPaid)}</span>
+                    </div>
+                  )}
+                  {order.storeCreditPaid > 0 && (
+                    <div className="flex justify-between text-sm text-muted-foreground">
+                      <span>Received</span>
+                      <span>{formatCurrency(order.otherPaid)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center pt-1">
                     <span className="text-sm font-medium">Total paid</span>
                     <span className="font-semibold text-lg">{formatCurrency(order.amountPaid || order.totalAmount)}</span>
@@ -165,18 +205,18 @@ export function MixedPurchaseDetailDialog({ open, onOpenChange, bookingReference
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {order.services.length > 0 && (
-                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => goTo("/salon/appointments")}>
+                  {order.services.length > 0 && onNavigateToAppointments && (
+                    <Button variant="outline" size="sm" className="rounded-full" onClick={handleOpenAppointments}>
                       Open in Appointments
                     </Button>
                   )}
-                  {order.products.length > 0 && (
-                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => goTo("/salon/products?subtab=fulfillment")}>
+                  {order.products.length > 0 && onNavigateToFulfillment && (
+                    <Button variant="outline" size="sm" className="rounded-full" onClick={handleOpenFulfillment}>
                       Open in Fulfillment
                     </Button>
                   )}
-                  {order.packages.length > 0 && (
-                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => goTo("/salon/packages?tab=purchases")}>
+                  {order.packages.length > 0 && onNavigateToPurchases && (
+                    <Button variant="outline" size="sm" className="rounded-full" onClick={handleOpenPurchases}>
                       Open in Purchases
                     </Button>
                   )}

@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { SalonSidebar, MobileQuickActionEffect, type MobileQuickAction } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { Button } from "@ui/button";
@@ -52,8 +53,16 @@ const STATUS_META: Record<PackagePurchaseStatus, { label: string; bg: string; co
 
 export default function PackagesPage() {
   useWalkthroughAutoTrigger("packages");
-  const [tab, setTab] = useState<PackageTab>("catalog");
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Previously a plain useState with no URL read at all -- navigate calls
+  // like "/salon/packages?tab=purchases" (from NotificationsPanel, the
+  // purchase-detail dialogs, etc) landed on Catalog regardless, since
+  // nothing ever looked at the tab query param. This mirrors the subtab
+  // sync pattern in ProductsPage.tsx.
+  const [tab, setTab] = useState<PackageTab>(() => (searchParams.get("tab") === "purchases" ? "purchases" : "catalog"));
   const [purchaseFilter, setPurchaseFilter] = useState<PurchaseFilter>("all");
+  const [highlightedPurchaseId, setHighlightedPurchaseId] = useState<string | null>(null);
+  const purchaseRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const [packageDialogOpen, setPackageDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -83,6 +92,46 @@ export default function PackagesPage() {
   const { createRequest } = useDeletionRequests();
 
   const { currency } = useActiveBranchCurrency("USD");
+
+  // Keep the tab in sync if the URL changes after mount (e.g. a second
+  // notification click while this page is already open).
+  useEffect(() => {
+    const tabFromUrl = searchParams.get("tab");
+    if (tabFromUrl === "purchases" && tab !== "purchases") {
+      setTab("purchases");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Deep-link support: a notification (or a purchase-detail dialog's "Go
+  // to Purchases" CTA) points here with ?purchaseId=<entitlement id>.
+  // usePackagePurchases already loads every purchase with no date or
+  // status filtering baked into the query, so there's no need to fetch
+  // the purchase separately like AppointmentsPage/ProductFulfillmentTab
+  // do -- the deep-linked row is already in `purchases`, it's only the
+  // status-filter buttons that can hide it, so flip that to "all" and
+  // scroll to it.
+  useEffect(() => {
+    const purchaseId = searchParams.get("purchaseId");
+    if (!purchaseId || purchasesLoading) return;
+
+    const target = purchases.find((p) => p.id === purchaseId);
+    if (!target) return;
+
+    setTab("purchases");
+    setPurchaseFilter("all");
+    setHighlightedPurchaseId(purchaseId);
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("purchaseId");
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, purchases, purchasesLoading]);
+
+  useEffect(() => {
+    if (!highlightedPurchaseId) return;
+    purchaseRowRefs.current[highlightedPurchaseId]?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightedPurchaseId, purchases]);
 
   const canEdit = hasPermission("catalog:edit");
   const canDelete = hasPermission("catalog:delete");
@@ -350,7 +399,17 @@ export default function PackagesPage() {
           </div>
         )}
 
-        <Tabs value={tab} onValueChange={(v) => setTab(v as PackageTab)}>
+        <Tabs
+          value={tab}
+          onValueChange={(v) => {
+            setTab(v as PackageTab);
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev);
+              next.set("tab", v);
+              return next;
+            }, { replace: true });
+          }}
+        >
           <TabsList className="scrollbar-hide h-auto w-full justify-start overflow-x-auto rounded-full bg-[#eee9e1] p-1 lg:w-fit">
             <TabsTrigger value="catalog" className="h-10 shrink-0 rounded-full px-5 sm:px-6">Catalog</TabsTrigger>
             <TabsTrigger value="purchases" className="h-10 shrink-0 rounded-full px-5 sm:px-6">Purchases</TabsTrigger>
@@ -456,7 +515,13 @@ export default function PackagesPage() {
                     return (
                       <div
                         key={purchase.id}
-                        className="grid grid-cols-1 gap-2 px-5 py-4 text-sm lg:grid-cols-[1.3fr_1.5fr_1fr_1.6fr_0.9fr_1fr] lg:items-center lg:gap-4"
+                        ref={(el) => {
+                          purchaseRowRefs.current[purchase.id] = el;
+                        }}
+                        className={cn(
+                          "grid grid-cols-1 gap-2 px-5 py-4 text-sm lg:grid-cols-[1.3fr_1.5fr_1fr_1.6fr_0.9fr_1fr] lg:items-center lg:gap-4",
+                          highlightedPurchaseId === purchase.id && "bg-primary/5 ring-1 ring-primary/30",
+                        )}
                       >
                         <div className="font-medium">{purchase.customer?.full_name || "Unknown customer"}</div>
                         <div>{purchase.package?.name || "Package"}</div>

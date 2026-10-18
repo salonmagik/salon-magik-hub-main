@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, addDays, addWeeks, addMonths, subWeeks, subMonths } from "date-fns";
 import { supabase } from "@/lib/supabase";
@@ -170,6 +170,16 @@ const getReviewActionLabel = (appointment: AppointmentWithDetails | CalendarAppo
 export default function AppointmentsPage() {
   useWalkthroughAutoTrigger("appointments");
   const [searchParams, setSearchParams] = useSearchParams();
+  // Guards the two URL-driven "open this appointment" effects below against
+  // firing twice for the same appointment. The Scheduled-tab view/period/date
+  // sync effect (further down) re-commits searchParams on every render while
+  // on that tab, using a snapshot that can still include appointmentId/open
+  // before the deep-link effect's own async cleanup has deleted them -- that
+  // re-commit re-triggers the deep-link effect a second time before the
+  // first run finishes, reopening the modal. A ref keyed by the exact param
+  // combo already processed makes a second trigger for the same link a
+  // no-op regardless of how many times these effects re-fire.
+  const processedDeepLinkRef = useRef<string | null>(null);
   const { roles, currentTenant } = useAuth();
   const { createFromAppointment } = useInvoices();
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
@@ -511,6 +521,9 @@ export default function AppointmentsPage() {
     if (!approvalAction || !["approve", "decline", "reschedule", "review"].includes(approvalAction)) return;
 
     if (appointmentId) {
+      const dedupeKey = `approvalAction:${appointmentId}:${approvalAction}`;
+      if (processedDeepLinkRef.current === dedupeKey) return;
+      processedDeepLinkRef.current = dedupeKey;
       let isCancelled = false;
 
       const run = async () => {
@@ -584,6 +597,10 @@ export default function AppointmentsPage() {
     const appointmentId = searchParams.get("appointmentId");
     const openMode = searchParams.get("open");
     if (!appointmentId || openMode !== "details") return;
+
+    const dedupeKey = `details:${appointmentId}`;
+    if (processedDeepLinkRef.current === dedupeKey) return;
+    processedDeepLinkRef.current = dedupeKey;
 
     let isCancelled = false;
 
@@ -1102,7 +1119,7 @@ export default function AppointmentsPage() {
                     <>
                       <p className="mt-1 font-serif text-2xl font-semibold">{scheduledStats.rangeCount}</p>
                       {scheduledStats.giftedCount > 0 && (
-                        <p className="mt-0.5 text-xs font-medium text-pink-600">{scheduledStats.giftedCount} gifted</p>
+                        <p className="mt-0.5 text-xs font-medium text-muted-foreground">{scheduledStats.giftedCount} gifted</p>
                       )}
                     </>
                   )}
@@ -1162,12 +1179,17 @@ export default function AppointmentsPage() {
             </Card>
           </div>
         ) : activeTab === "unscheduled" ? (
-          <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-3 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
+          <div className="scrollbar-hide flex gap-3 overflow-x-auto overscroll-x-contain snap-x pb-1 [&>*]:shrink-0 [&>*]:snap-start [&>*]:min-w-[158px] sm:grid sm:grid-cols-4 sm:gap-[14px] sm:overflow-visible sm:pb-0 sm:[&>*]:min-w-0">
             <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
               <div>
                 <p className="text-xs text-muted-foreground sm:text-sm">Total</p>
                 {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.totalCount}</p>
+                  <>
+                    <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.totalCount}</p>
+                    {unscheduledStats.giftedCount > 0 && (
+                      <p className="mt-0.5 text-xs font-semibold text-muted-foreground">{unscheduledStats.giftedCount} gifted</p>
+                    )}
+                  </>
                 )}
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
@@ -1205,26 +1227,6 @@ export default function AppointmentsPage() {
               </div>
               <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-amber-500/10">
                 <Coins className="h-5 w-5 text-amber-600" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Gifted</p>
-                {statsLoading ? <Skeleton className="h-6 w-8 mt-1" /> : (
-                  <p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">{unscheduledStats.giftedCount}</p>
-                )}
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-primary/[0.08]">
-                <Gift className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 bg-white rounded-[14px] border border-border/60 shadow-sm">
-              <div>
-                <p className="text-xs text-muted-foreground sm:text-sm">Refunded</p>
-                <p className="mt-1 font-serif text-xl font-semibold text-muted-foreground sm:text-2xl">N/A</p>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] flex-shrink-0 bg-muted">
-                <RotateCcw className="h-5 w-5 text-muted-foreground" />
               </div>
             </div>
           </div>
