@@ -14,6 +14,7 @@ import { Switch } from "@ui/switch";
 import { Label } from "@ui/label";
 import { Skeleton } from "@ui/skeleton";
 import {
+  Check,
   Clock,
   User,
   Phone,
@@ -25,6 +26,7 @@ import {
   ShoppingBag,
   Loader2,
 } from "lucide-react";
+import { cn } from "@shared/utils";
 import { useAppointmentProducts, type AppointmentProduct } from "@/hooks/useAppointmentProducts";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/lib/supabase";
@@ -160,7 +162,7 @@ export function AppointmentDetailsDialog({
     : "Not scheduled";
   const scheduledTime = appointment.scheduled_start
     ? format(new Date(appointment.scheduled_start), "h:mm a")
-    : "—";
+    : "N/A";
   const bookedOn = format(new Date(appointment.created_at), "MMM d, yyyy 'at' h:mm a");
 
   const totalDuration = appointment.services.reduce(
