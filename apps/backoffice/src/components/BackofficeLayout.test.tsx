@@ -30,7 +30,7 @@ function renderLayout() {
   );
 }
 
-describe("BackofficeLayout — blocked refunds nav badge", () => {
+describe("BackofficeLayout: blocked refunds nav badge", () => {
   beforeEach(() => {
     mockedUseBackofficeAuth.mockReturnValue({
       profile: { full_name: "Test Admin" },

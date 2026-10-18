@@ -205,7 +205,7 @@ export default function TransactionsPage() {
               All Transactions
             </h1>
             <p className="text-sm text-muted-foreground mt-1 max-w-xl">
-              Every customer payment across every tenant — bookings, deposits, refunds, and store-credit activity, in one place. Read-only; refunds and disputes are actioned from each tenant's own Cashflow tab.
+              Every customer payment across every tenant: bookings, deposits, refunds, and store-credit activity, in one place. Read-only; refunds and disputes are actioned from each tenant's own Cashflow tab.
             </p>
           </div>
           <Button variant="outline" onClick={handleExport} disabled={isExporting}>
@@ -246,7 +246,7 @@ export default function TransactionsPage() {
                     <Gauge className="h-3 w-3" /> Success rate
                   </p>
                   <p className="text-xl font-semibold tabular-nums">
-                    {successRate === null ? "—" : `${successRate.toFixed(1)}%`}
+                    {successRate === null ? "N/A" : `${successRate.toFixed(1)}%`}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {summary?.totals.failed_count ?? 0} failed of {summary?.totals.total_count ?? 0}
@@ -394,13 +394,13 @@ export default function TransactionsPage() {
                         </TableCell>
                         <TableCell className="text-sm">{row.tenant_name}</TableCell>
                         <TableCell>
-                          <div className="text-sm font-medium">{row.customer_name || "—"}</div>
+                          <div className="text-sm font-medium">{row.customer_name || "N/A"}</div>
                           <div className="text-xs text-muted-foreground">
                             {row.type === "purse_topup" || row.type === "purse_redemption"
                               ? "Store credit"
                               : row.service_name
                                 ? `${row.service_name}${row.service_count > 1 ? ` +${row.service_count - 1}` : ""}`
-                                : "—"}
+                                : "N/A"}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -411,12 +411,12 @@ export default function TransactionsPage() {
                             <MethodIcon className="h-3.5 w-3.5" /> {methodMeta.label}
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground capitalize">{row.provider || "—"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground capitalize">{row.provider || "N/A"}</TableCell>
                         <TableCell className={`text-right tabular-nums font-semibold ${row.type === "refund" ? "text-destructive" : ""}`}>
                           {row.type === "refund" ? "-" : ""}{formatMoney(row.amount, row.currency)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
-                          {row.charges ? formatMoney(row.charges, row.currency) : "—"}
+                          {row.charges ? formatMoney(row.charges, row.currency) : "N/A"}
                         </TableCell>
                         <TableCell>
                           <span className={`text-xs font-medium capitalize ${STATUS_META[row.status] || ""}`}>
@@ -432,7 +432,7 @@ export default function TransactionsPage() {
             {rows && rows.length > 0 && (
               <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30 text-xs text-muted-foreground">
                 <span>
-                  Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} of {totalCount}
+                  Showing {page * PAGE_SIZE + 1} to {Math.min((page + 1) * PAGE_SIZE, totalCount)} of {totalCount}
                 </span>
                 <div className="flex items-center gap-1">
                   <Button variant="outline" size="icon" className="h-7 w-7" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
@@ -448,7 +448,7 @@ export default function TransactionsPage() {
           </CardContent>
         </Card>
 
-        {/* Blocked refunds — refunds rejected because the salon had already
+        {/* Blocked refunds: refunds rejected because the salon had already
             withdrawn the money. See refund-clawback-safeguard design. */}
         <div>
           <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -456,7 +456,7 @@ export default function TransactionsPage() {
             Blocked refunds
           </h2>
           <p className="text-sm text-muted-foreground mt-1 max-w-xl">
-            Refund attempts rejected because the salon's wallet could no longer cover the amount — the salon had already withdrawn the money. Follow up with these salons directly.
+            Refund attempts rejected because the salon's wallet could no longer cover the amount: the salon had already withdrawn the money. Follow up with these salons directly.
           </p>
         </div>
         <Card className="overflow-hidden">
@@ -500,7 +500,7 @@ export default function TransactionsPage() {
                       <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
                         {formatMoney(row.shortfall, row.currency)}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{row.attempted_by_email || "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{row.attempted_by_email || "N/A"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -509,7 +509,7 @@ export default function TransactionsPage() {
             {blockedRefunds && blockedRefunds.length > 0 && (
               <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30 text-xs text-muted-foreground">
                 <span>
-                  Showing {blockedRefundsPage * PAGE_SIZE + 1}–{Math.min((blockedRefundsPage + 1) * PAGE_SIZE, blockedRefundsTotal)} of {blockedRefundsTotal}
+                  Showing {blockedRefundsPage * PAGE_SIZE + 1} to {Math.min((blockedRefundsPage + 1) * PAGE_SIZE, blockedRefundsTotal)} of {blockedRefundsTotal}
                 </span>
                 <div className="flex items-center gap-1">
                   <Button variant="outline" size="icon" className="h-7 w-7" disabled={blockedRefundsPage === 0} onClick={() => setBlockedRefundsPage((p) => p - 1)}>
@@ -553,14 +553,14 @@ export default function TransactionsPage() {
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Customer</span>
-                  <span className="font-medium">{selected.customer_name || "—"}</span>
+                  <span className="font-medium">{selected.customer_name || "N/A"}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">For</span>
                   <span className="font-medium">
                     {selected.type === "purse_topup" || selected.type === "purse_redemption"
                       ? "Store credit balance"
-                      : selected.service_name || "—"}
+                      : selected.service_name || "N/A"}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 text-sm">
@@ -577,15 +577,15 @@ export default function TransactionsPage() {
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Charges (platform + customer fee)</span>
-                  <span className="font-medium">{selected.charges ? formatMoney(selected.charges, selected.currency) : "—"}</span>
+                  <span className="font-medium">{selected.charges ? formatMoney(selected.charges, selected.currency) : "N/A"}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Provider</span>
-                  <span className="font-medium capitalize">{selected.provider || "—"}</span>
+                  <span className="font-medium capitalize">{selected.provider || "N/A"}</span>
                 </div>
                 <div className="flex justify-between py-2 text-sm">
                   <span className="text-muted-foreground">Provider reference</span>
-                  <span className="font-mono text-xs">{selected.provider_reference || "—"}</span>
+                  <span className="font-mono text-xs">{selected.provider_reference || "N/A"}</span>
                 </div>
               </div>
 
@@ -597,7 +597,7 @@ export default function TransactionsPage() {
                 </div>
                 <div className="flex justify-between py-2 text-sm">
                   <span className="text-muted-foreground">Appointment</span>
-                  <span className="font-mono text-xs">{selected.appointment_id || "—"}</span>
+                  <span className="font-mono text-xs">{selected.appointment_id || "N/A"}</span>
                 </div>
               </div>
             </>

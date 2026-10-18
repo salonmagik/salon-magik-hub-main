@@ -102,7 +102,7 @@ export default function CustomersUsersPage() {
         <div>
           <h1 className="text-[22px] font-medium tracking-tight">Users</h1>
           <p className="mt-1 text-muted-foreground">
-            {(users || []).length.toLocaleString()} total across salon-admin and client-portal — view only, no
+            {(users || []).length.toLocaleString()} total across salon-admin and client-portal. View only, no
             actions can be taken here.
           </p>
         </div>
@@ -155,9 +155,9 @@ export default function CustomersUsersPage() {
                   <TableBody>
                     {filteredUsers.map((user) => (
                       <TableRow key={user.user_id} className="h-16">
-                        <TableCell className="font-medium">{user.full_name || "—"}</TableCell>
-                        <TableCell className="text-sm">{user.email || "—"}</TableCell>
-                        <TableCell className="text-sm">{user.phone || "—"}</TableCell>
+                        <TableCell className="font-medium">{user.full_name || "N/A"}</TableCell>
+                        <TableCell className="text-sm">{user.email || "N/A"}</TableCell>
+                        <TableCell className="text-sm">{user.phone || "N/A"}</TableCell>
                         <TableCell>
                           {user.tenant_roles.length === 0 ? (
                             <span className="text-sm text-muted-foreground">No salon</span>
@@ -201,7 +201,7 @@ export default function CustomersUsersPage() {
               </span>
               <span>{selectedUser?.full_name || "User details"}</span>
             </DialogTitle>
-            <DialogDescription>Account and salon membership details — view only.</DialogDescription>
+            <DialogDescription>Account and salon membership details, view only.</DialogDescription>
           </DialogHeader>
 
           {selectedUser && (

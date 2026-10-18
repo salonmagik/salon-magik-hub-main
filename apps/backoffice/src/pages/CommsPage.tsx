@@ -54,9 +54,9 @@ const emptyEditorState: TemplateEditorState = {
 
 // Keep this in sync with the `templateValues` object each edge function actually
 // supplies to renderPlatformTemplate(). A placeholder not in this list will render
-// as a literal "{{...}}" in the sent email — see send-staff-invitation's
+// as a literal "{{...}}" in the sent email. See send-staff-invitation's
 // {{staff_name}} incident for why this is enforced, not just documented.
-// Placeholders ending in _button render a ready-made, brand-styled button —
+// Placeholders ending in _button render a ready-made, brand-styled button,
 // use those instead of the raw _link version so custom templates don't need
 // to hand-write button markup to stay on-brand.
 const KNOWN_TEMPLATE_PLACEHOLDERS: Record<string, string[]> = {

@@ -236,7 +236,7 @@ export default function CampaignsPage() {
                       <Badge variant={campaign.is_active ? "success" : "neutral"} className="cursor-default">{campaign.is_active ? "Active" : "Inactive"}</Badge>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-56 text-xs">
-                      A manual on/off toggle, independent of the campaign's Starts/Ends dates above — a campaign inside its date window can still be switched off.
+                      A manual on/off toggle, independent of the campaign's Starts/Ends dates above: a campaign inside its date window can still be switched off.
                     </TooltipContent>
                   </Tooltip>
                   <Button size="sm" variant="outline" onClick={() => toggleCampaign.mutate({ id: campaign.id, isActive: !campaign.is_active })}>

@@ -80,7 +80,7 @@ describe("SubscriptionLedgerPage", () => {
     render(<SubscriptionLedgerPage />);
     fireEvent.click(screen.getByText("Cancel Pending Salon"));
 
-    expect(screen.getByText(/Cancellation pending — access until/)).toBeInTheDocument();
+    expect(screen.getByText(/Cancellation pending: access until/)).toBeInTheDocument();
     expect(screen.getByText(/too expensive/)).toBeInTheDocument();
     expect(screen.getByText(/will miss you/)).toBeInTheDocument();
     expect(screen.getByText(/Requested by owner@test\.local/)).toBeInTheDocument();

@@ -39,7 +39,7 @@ export function useBlockedRefunds(filters: BlockedRefundFilters) {
   });
 }
 
-// Lightweight — a single-row fetch used to drive the unresolved-count badge
+// Lightweight: a single-row fetch used to drive the unresolved-count badge
 // on the Transactions nav entry without duplicating the panel's own query.
 export function useBlockedRefundsCount() {
   return useQuery({

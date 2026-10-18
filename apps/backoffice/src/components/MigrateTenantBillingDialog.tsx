@@ -32,7 +32,7 @@ interface PreviewResult {
 /**
  * Moves one tenant off Paystack's native Subscription engine and onto the
  * self-managed billing cron. Deliberately one tenant at a time, previewed
- * before it touches anything real — see backoffice-migrate-tenant-billing
+ * before it touches anything real. See backoffice-migrate-tenant-billing
  * for why this isn't automated.
  */
 export function MigrateTenantBillingDialog({ tenant, onOpenChange, onSuccess }: MigrateTenantBillingDialogProps) {

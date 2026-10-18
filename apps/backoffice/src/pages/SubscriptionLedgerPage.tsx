@@ -13,7 +13,7 @@ import { format } from "date-fns";
 import { EmptyState } from "@ui/empty-state";
 
 function formatMoney(amount: number | null | undefined, currency: string | null | undefined) {
-  if (amount === null || amount === undefined) return "—";
+  if (amount === null || amount === undefined) return "N/A";
   const symbols: Record<string, string> = { GHS: "₵", NGN: "₦", USD: "$" };
   const symbol = currency ? symbols[currency] || `${currency} ` : "";
   return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -201,7 +201,7 @@ export default function SubscriptionLedgerPage() {
                       >
                         <TableCell>
                           <div className="font-medium">{row.tenant_name}</div>
-                          <div className="text-xs text-muted-foreground">{row.country || "—"}</div>
+                          <div className="text-xs text-muted-foreground">{row.country || "N/A"}</div>
                         </TableCell>
                         <TableCell>
                           {row.plan && (
@@ -248,7 +248,7 @@ export default function SubscriptionLedgerPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-muted-foreground">—</span>
+                            <span className="text-muted-foreground">N/A</span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -261,11 +261,11 @@ export default function SubscriptionLedgerPage() {
                         </TableCell>
                         <TableCell>
                           <span className={row.comms_balance !== null && row.comms_balance < 10 ? "text-red-600 font-medium" : ""}>
-                            {row.comms_balance ?? "—"}
+                            {row.comms_balance ?? "N/A"}
                           </span>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {row.next_billing_at ? format(new Date(row.next_billing_at), "MMM d, yyyy") : "—"}
+                          {row.next_billing_at ? format(new Date(row.next_billing_at), "MMM d, yyyy") : "N/A"}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -302,12 +302,12 @@ function TenantBillingDrawer({ tenant, onClose }: { tenant: SubscriptionLedgerRo
             {tenant.subscription_cancel_at && (
               <>
                 <p className="font-medium text-amber-900">
-                  Cancellation pending — access until {format(new Date(tenant.subscription_cancel_at), "MMM d, yyyy")}
+                  Cancellation pending: access until {format(new Date(tenant.subscription_cancel_at), "MMM d, yyyy")}
                 </p>
                 {tenant.cancellation_reason && (
                   <p className="text-xs text-amber-800">
                     Reason: {tenant.cancellation_reason.replace(/_/g, " ")}
-                    {tenant.cancellation_reason_note ? ` — "${tenant.cancellation_reason_note}"` : ""}
+                    {tenant.cancellation_reason_note ? `: "${tenant.cancellation_reason_note}"` : ""}
                   </p>
                 )}
                 {tenant.cancellation_requested_by_email && (
@@ -392,7 +392,7 @@ function TenantBillingDrawer({ tenant, onClose }: { tenant: SubscriptionLedgerRo
             )}
             <div className="flex justify-between items-center pt-3 border-t">
               <p className="text-sm font-medium">Comms credits</p>
-              <p className="font-serif text-sm">{tenant?.comms_balance ?? "—"} remaining</p>
+              <p className="font-serif text-sm">{tenant?.comms_balance ?? "N/A"} remaining</p>
             </div>
           </TabsContent>
         </Tabs>

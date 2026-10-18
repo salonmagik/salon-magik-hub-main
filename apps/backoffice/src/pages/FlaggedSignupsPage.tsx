@@ -120,14 +120,14 @@ export default function FlaggedSignupsPage() {
                       <TableCell className="text-sm text-muted-foreground">
                         {format(new Date(row.detected_at), "MMM d, yyyy · h:mm a")}
                       </TableCell>
-                      <TableCell className="font-mono text-sm">{row.phone_last4 ? `•••• ${row.phone_last4}` : "—"}</TableCell>
-                      <TableCell className="text-sm">{row.attempted_email || "—"}</TableCell>
-                      <TableCell className="font-mono text-sm">{row.ip_address || "—"}</TableCell>
+                      <TableCell className="font-mono text-sm">{row.phone_last4 ? `•••• ${row.phone_last4}` : "N/A"}</TableCell>
+                      <TableCell className="text-sm">{row.attempted_email || "N/A"}</TableCell>
+                      <TableCell className="font-mono text-sm">{row.ip_address || "N/A"}</TableCell>
                       <TableCell>
                         {row.tenant_name ? (
                           <span className="text-sm">{row.tenant_name}</span>
                         ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
+                          <span className="text-sm text-muted-foreground">N/A</span>
                         )}
                       </TableCell>
                     </TableRow>

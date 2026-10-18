@@ -26,7 +26,7 @@ interface AddTenantOwnerDialogProps {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Restricted to salons with no active owner — this repairs the "owner was
+ * Restricted to salons with no active owner, this repairs the "owner was
  * invited but the invite silently never recorded" case, it isn't a general
  * reassign-ownership tool. Every use requires a fresh TOTP code, checked
  * independently of the session-level "already verified this session" flag
