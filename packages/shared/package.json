@@ -17,6 +17,7 @@
   "dependencies": {
     "clsx": "^2.1.1",
     "country-state-city": "^3.2.1",
+    "posthog-js": "^1.438.12",
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
