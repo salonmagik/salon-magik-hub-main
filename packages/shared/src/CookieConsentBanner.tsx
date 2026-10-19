@@ -13,7 +13,7 @@ import {
 export function CookieConsentBanner() {
   const [visible, setVisible] = useState(false);
   const [managing, setManaging] = useState(false);
-  const [analyticsOn, setAnalyticsOn] = useState(false);
+  const [analyticsOn, setAnalyticsOn] = useState(true);
 
   useEffect(() => {
     if (isAnalyticsInitialized() && !hasAnalyticsConsentDecision()) setVisible(true);
