@@ -10,8 +10,11 @@ import { cn } from "@shared/utils";
 import {
   LayoutDashboard,
   Calendar,
-  Clock,
+  ShoppingBag,
+  Package,
   RefreshCcw,
+  Clock,
+  TicketCheck,
   Bell,
   User,
   HelpCircle,
@@ -21,6 +24,7 @@ import {
 import { SalonMagikLogo } from "@/components/SalonMagikLogo";
 import { MaintenanceBanner } from "@/components/MaintenanceBanner";
 import { ProductAnnouncementCard } from "@shared/ProductAnnouncementCard";
+import { ClientNotificationsDrawer } from "@/components/ClientNotificationsDrawer";
 import { supabase } from "@/lib/supabase";
 import { ConfirmDetailsModal, needsDetailsConfirmation } from "@/components/ConfirmDetailsModal";
 import {
@@ -38,38 +42,39 @@ interface ClientSidebarProps {
   children: React.ReactNode;
 }
 
-// Desktop keeps its own top nav (unchanged). Mobile's bottom bar below is a
-// separate, deliberately shorter set: the busiest four destinations get a
-// permanent tab, everything else lives behind "More" so nothing is ever
-// listed in both places at once.
-const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/" },
-  { label: "Bookings & Orders", icon: Calendar, path: "/bookings" },
-  { label: "History", icon: Clock, path: "/history" },
-  { label: "Store Credit", icon: RefreshCcw, path: "/balance" },
-  { label: "Notifications", icon: Bell, path: "/notifications", showBadge: true },
-  { label: "Profile & Security", icon: User, path: "/profile" },
-  { label: "Help & Support", icon: HelpCircle, path: "/help" },
-];
+// Desktop's real left sidebar. Mobile's bottom bar below is a separate,
+// deliberately shorter set: the busiest four destinations get a permanent
+// tab, everything else lives behind "More" so nothing is ever listed in
+// both places at once.
+const DESKTOP_NAV_ITEMS = [
+  { label: "Home", icon: LayoutDashboard, path: "/" },
+  { label: "Bookings", icon: Calendar, path: "/bookings" },
+  { label: "Orders", icon: ShoppingBag, path: "/orders" },
+  { label: "Packages", icon: Package, path: "/packages" },
+  { label: "Vouchers", icon: TicketCheck, path: "/vouchers" },
+  { label: "Store credit", icon: RefreshCcw, path: "/store-credit" },
+  { label: "Transactions", icon: Clock, path: "/history" },
+] as const;
 
 const BOTTOM_TABS = [
-  { label: "Home", icon: LayoutDashboard, path: "/", showBadge: false },
-  { label: "Bookings", icon: Calendar, path: "/bookings", showBadge: false },
-  { label: "Notifications", icon: Bell, path: "/notifications", showBadge: true },
-  { label: "Profile", icon: User, path: "/profile", showBadge: false },
+  { label: "Home", icon: LayoutDashboard, path: "/" },
+  { label: "Bookings", icon: Calendar, path: "/bookings" },
+  { label: "Packages", icon: Package, path: "/packages" },
+  { label: "Store credit", icon: RefreshCcw, path: "/store-credit" },
 ] as const;
 
 const MORE_ITEMS = [
-  { label: "History", icon: Clock, path: "/history" },
-  { label: "Store Credit", icon: RefreshCcw, path: "/balance" },
+  { label: "Orders", icon: ShoppingBag, path: "/orders" },
+  { label: "Vouchers", icon: TicketCheck, path: "/vouchers" },
+  { label: "Transactions", icon: Clock, path: "/history" },
   { label: "Help & Support", icon: HelpCircle, path: "/help" },
 ] as const;
 
 // Kept in sync with MORE_ITEMS' paths (plus /refunds, which redirects into
-// /balance): whatever "More" can navigate to, so the tab reads as active
-// for the whole time you're browsing one of its destinations, not just while
-// the sheet itself is open.
-const MORE_PATHS = ["/history", "/balance", "/refunds", "/help"];
+// /store-credit): whatever "More" can navigate to, so the tab reads as
+// active for the whole time you're browsing one of its destinations, not
+// just while the sheet itself is open.
+const MORE_PATHS = ["/orders", "/vouchers", "/history", "/help", "/refunds"];
 
 // The one deliberate exception to "the bar is always there": a booking's own
 // detail page has its own action menu and a Complete Payment button
@@ -139,13 +144,22 @@ function IntentionalClientLink({
   );
 }
 
+function initialsFor(name: string | null | undefined) {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 export function ClientSidebar({ children }: ClientSidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut, profile, isLoading: authLoading } = useClientAuth();
+  const { signOut, profile, customers, isLoading: authLoading } = useClientAuth();
   const { unreadCount } = useClientNotifications();
   const { forceOpen: confirmDetailsForceOpen, setForceOpen: setConfirmDetailsForceOpen } = useConfirmDetailsPrompt();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [bottomNavVisible, setBottomNavVisible] = useState(true);
   const [announcementsGateOpen, setAnnouncementsGateOpen] = useState(false);
@@ -244,79 +258,154 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
     </div>
   );
 
+  const firstSalonName = (customers ?? [])[0]?.tenant?.name;
+  const profileInitials = initialsFor(profile?.full_name);
+
   return (
     <ClientInactivityGuard>
       <div className="min-h-screen min-w-0 overflow-x-hidden bg-background">
-        {/* Mobile Header: navigation itself lives on the bottom bar below;
-            this is chrome (brand) only, no duplicate nav entry point. */}
-        <header className="sticky top-0 z-40 flex h-14 items-center gap-4 border-b border-white/10 bg-primary px-4 text-white lg:hidden">
-          <Link to="/" className="flex items-center gap-2">
-            <SalonMagikLogo variant="white" transparentIcon size="sm" />
-          </Link>
-        </header>
+        {/* Desktop left sidebar: fixed to the viewport, not sticky, so it
+            never scrolls with page content (matches salon-admin/backoffice). */}
+        <aside className="fixed left-0 top-0 z-50 hidden h-screen w-[232px] shrink-0 flex-col border-r bg-white lg:flex">
+          <div className="flex h-16 items-center border-b px-6">
+            <Link to="/" className="shrink-0">
+              <SalonMagikLogo size="sm" />
+            </Link>
+          </div>
 
-        {/* Desktop Header */}
-        <header className="sticky top-0 z-40 hidden h-20 items-center border-b bg-white/95 px-10 backdrop-blur lg:flex xl:px-16 2xl:px-24">
-          <Link to="/" className="shrink-0">
-            <SalonMagikLogo size="sm" />
-          </Link>
-          <nav className="mx-auto flex items-center gap-1">
-            {navItems.slice(0, 5).map((item) => {
-              const badgeCount = item.showBadge ? unreadCount : 0;
-              return (
+          <nav className="flex flex-1 flex-col justify-between overflow-y-auto scrollbar-hide px-3 py-4">
+            <div className="space-y-1">
+              {DESKTOP_NAV_ITEMS.map((item) => {
+                const active = isActive(item.path);
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={cn(
+                      "flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-[#2E1F4E] text-white"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    <item.icon className="h-[18px] w-[18px] shrink-0" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="space-y-3">
+              <div className="space-y-1 border-t pt-3">
                 <Link
-                  key={item.path}
-                  to={item.path}
+                  to="/help"
                   className={cn(
-                    "relative rounded-full px-4 py-2 text-sm transition-colors",
-                    isActive(item.path)
-                      ? "bg-primary/8 font-medium text-primary"
+                    "flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors",
+                    isActive("/help")
+                      ? "bg-[#2E1F4E] text-white"
                       : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
-                  {item.label}
-                  {isActive(item.path) && (
-                    <span className="absolute bottom-0.5 left-1/2 h-[2px] w-1/2 -translate-x-1/2 rounded-full bg-accent" />
-                  )}
-                  {badgeCount > 0 && (
-                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
-                      {badgeCount > 9 ? "9+" : badgeCount}
-                    </span>
-                  )}
+                  <HelpCircle className="h-[18px] w-[18px] shrink-0" />
+                  <span>Help</span>
                 </Link>
-              );
-            })}
-          </nav>
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" asChild className="rounded-full">
-              <Link to="/profile">
-                <User className="h-5 w-5" />
-                <span className="sr-only">Profile</span>
-              </Link>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full"
-              onClick={() => setShowLogoutDialog(true)}
-            >
-              <LogOut className="h-5 w-5" />
-              <span className="sr-only">Sign out</span>
-            </Button>
-          </div>
-        </header>
+                <Link
+                  to="/profile"
+                  className={cn(
+                    "flex items-center gap-3 rounded-full px-4 py-2.5 text-sm font-medium transition-colors",
+                    isActive("/profile")
+                      ? "bg-[#2E1F4E] text-white"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  <User className="h-[18px] w-[18px] shrink-0" />
+                  <span>Profile</span>
+                </Link>
+              </div>
 
-        <main
-          className={cn(
-            "min-w-0 overflow-x-hidden bg-[#fbfaf8]",
-            !isBookingDetailRoute && "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
-          )}
-        >
-          <MaintenanceBanner />
-          <div className="mx-auto w-full min-w-0 max-w-5xl px-4 py-5 sm:px-7 lg:py-10">
-            <div className="client-content w-full min-w-0 [&>*]:min-w-0">{children}</div>
-          </div>
-        </main>
+              <div className="flex items-center gap-2 rounded-xl bg-muted/60 p-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2E1F4E] text-xs font-semibold text-white">
+                  {profileInitials}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {profile?.full_name || "Your account"}
+                  </p>
+                  {firstSalonName && (
+                    <p className="truncate text-xs text-muted-foreground">{firstSalonName}</p>
+                  )}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0 rounded-full text-muted-foreground hover:text-destructive"
+                  onClick={() => setShowLogoutDialog(true)}
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span className="sr-only">Sign out</span>
+                </Button>
+              </div>
+            </div>
+          </nav>
+        </aside>
+
+        <div className="flex min-w-0 flex-1 flex-col lg:pl-[232px]">
+          {/* Mobile Header: navigation itself lives on the bottom bar below;
+              the bell opens the shared notifications drawer. */}
+          <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 border-b border-white/10 bg-primary px-4 text-white lg:hidden">
+            <Link to="/" className="flex items-center gap-2">
+              <SalonMagikLogo variant="white" transparentIcon size="sm" />
+            </Link>
+            <button
+              type="button"
+              onClick={() => setNotificationsOpen(true)}
+              className="relative flex h-9 w-9 items-center justify-center rounded-full transition-colors hover:bg-white/10"
+              aria-label="Notifications"
+            >
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+          </header>
+
+          {/* Desktop slim top bar */}
+          <header className="sticky top-0 z-40 hidden h-16 items-center justify-end gap-3 border-b bg-white/95 px-8 backdrop-blur lg:flex">
+            <button
+              type="button"
+              onClick={() => setNotificationsOpen(true)}
+              className="relative flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label="Notifications"
+            >
+              <Bell className="h-5 w-5" />
+              {unreadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+            <Link
+              to="/profile"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#2E1F4E] text-xs font-semibold text-white transition-opacity hover:opacity-90"
+            >
+              {profileInitials}
+            </Link>
+          </header>
+
+          <main
+            className={cn(
+              "min-w-0 flex-1 overflow-x-hidden bg-[#fbfaf8]",
+              !isBookingDetailRoute && "pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0",
+            )}
+          >
+            <MaintenanceBanner />
+            <div className="mx-auto w-full min-w-0 max-w-5xl px-4 py-5 sm:px-7 lg:py-10">
+              <div className="client-content w-full min-w-0 [&>*]:min-w-0">{children}</div>
+            </div>
+          </main>
+        </div>
 
         {/* Mobile Bottom Navigation: hidden on a booking's own detail page,
             which has its own action menu and payment button in this same
@@ -333,7 +422,6 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
           >
             <div className="mx-3 flex w-[min(94vw,27rem)] items-center justify-around gap-1 rounded-[30px] border border-white/10 bg-primary px-2 py-2 shadow-[0_18px_42px_rgba(28,18,49,0.42)] backdrop-blur-xl">
               {BOTTOM_TABS.map((tab) => {
-                const badgeCount = tab.showBadge ? unreadCount : 0;
                 const active = isActive(tab.path);
                 return (
                   <IntentionalClientLink
@@ -348,11 +436,6 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
                       )}
                     >
                       <tab.icon className="h-[18px] w-[18px]" strokeWidth={active ? 2.2 : 1.8} />
-                      {badgeCount > 0 && (
-                        <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white">
-                          {badgeCount > 9 ? "9+" : badgeCount}
-                        </span>
-                      )}
                     </span>
                     <span className={cn("max-w-full truncate text-[10px] font-semibold leading-none transition-colors", active ? "text-white" : "text-white/60 group-hover:text-white/90")}>
                       {tab.label}
@@ -381,6 +464,8 @@ export function ClientSidebar({ children }: ClientSidebarProps) {
             <MoreSheetContent onItemClick={() => setMoreOpen(false)} />
           </SheetContent>
         </Sheet>
+
+        <ClientNotificationsDrawer open={notificationsOpen} onOpenChange={setNotificationsOpen} />
 
         {announcementsGateOpen && (
           <ProductAnnouncementCard

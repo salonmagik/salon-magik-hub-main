@@ -3,15 +3,13 @@ import { useNavigate } from "react-router-dom";
 import { ClientSidebar } from "@/components/ClientSidebar";
 import { ClientRefundRequestDialog } from "@/components/ClientRefundRequestDialog";
 import { useClientTransactions, useClientBookings } from "@/hooks";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Badge } from "@ui/badge";
 import { Skeleton } from "@ui/skeleton";
-import { CreditCard, Calendar, ArrowUpRight, ArrowDownLeft, Store, Info, MoreVertical } from "lucide-react";
+import { MoreVertical } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@shared/currency";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { Button } from "@ui/button";
+import { cn } from "@shared/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,15 +17,13 @@ import {
   DropdownMenuTrigger,
 } from "@ui/dropdown-menu";
 
-const TYPE_TOOLTIPS: Record<string, string> = {
-  payment: "A payment made for a booking.",
-  deposit: "A deposit paid to secure a booking.",
-  refund: "Money refunded back to you.",
-  purse_topup: "Money you added to your salon balance.",
-  purse_redemption: "Salon balance you spent on a booking.",
+const TYPE_LABELS: Record<string, string> = {
+  payment: "Payment",
+  deposit: "Deposit",
+  refund: "Refund",
+  purse_topup: "Store credit top-up",
+  purse_redemption: "Salon balance used",
 };
-
-const STATUS_TOOLTIP = "Whether this transaction has fully processed. \"Completed\" means it's final.";
 
 const METHOD_LABELS: Record<string, string> = {
   card: "Card",
@@ -40,31 +36,20 @@ const METHOD_LABELS: Record<string, string> = {
   qr: "QR",
 };
 
+const STATUS_META: Record<string, { label: string; className: string }> = {
+  completed: { label: "Done", className: "bg-[#E1F3EC] text-[#268766]" },
+  pending: { label: "Pending", className: "bg-[#FFF6DC] text-[#8A6510]" },
+  failed: { label: "Failed", className: "bg-rose-100 text-rose-700" },
+};
+
+type HistoryTab = "transactions" | "past-bookings";
+
 export default function ClientHistoryPage() {
   const navigate = useNavigate();
+  const [tab, setTab] = useState<HistoryTab>("transactions");
   const { transactions, isLoading: txLoading } = useClientTransactions();
   const { bookings, isLoading: bookingsLoading } = useClientBookings("completed");
   const [refundTransaction, setRefundTransaction] = useState<(typeof transactions)[number] | null>(null);
-
-  const typeLabels: Record<string, string> = {
-    payment: "Payment",
-    deposit: "Deposit",
-    refund: "Refund",
-    purse_topup: "Balance top-up",
-    purse_redemption: "Salon balance used",
-  };
-
-  const getTypeColor = (type: string) => {
-    if (type === "refund" || type === "purse_redemption") return "text-green-600";
-    return "text-foreground";
-  };
-
-  const getTypeIcon = (type: string) => {
-    if (type === "refund" || type === "purse_topup") {
-      return <ArrowDownLeft className="h-4 w-4 text-green-600" />;
-    }
-    return <ArrowUpRight className="h-4 w-4 text-muted-foreground" />;
-  };
 
   // A refund transaction's own method says where it landed: "purse" means it
   // was issued as redeemable salon credit, anything else (cash, transfer,
@@ -74,199 +59,180 @@ export default function ClientHistoryPage() {
 
   return (
     <ClientSidebar>
-      <div className="space-y-6">
+      <div className="space-y-5 pb-10">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">History</h1>
-          <p className="text-muted-foreground mt-1">
-            View your transaction and booking history
-          </p>
+          <h1 className="font-serif text-2xl font-medium tracking-[-0.5px] text-[#2E1F4E]">Transactions</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Every payment and refund, in one place.</p>
         </div>
 
-        <Tabs defaultValue="transactions" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="transactions" className="gap-2">
-              <CreditCard className="h-4 w-4" />
-              Transactions
-            </TabsTrigger>
-            <TabsTrigger value="bookings" className="gap-2">
-              <Calendar className="h-4 w-4" />
-              Past Bookings
-            </TabsTrigger>
-          </TabsList>
+        <div className="flex w-fit gap-1 rounded-xl bg-[#F1ECE1] p-1">
+          <button
+            type="button"
+            onClick={() => setTab("transactions")}
+            className={cn(
+              "rounded-lg px-4 py-2 text-xs font-semibold transition-colors",
+              tab === "transactions" ? "bg-white text-[#2E1F4E] shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            Transactions &middot; {transactions.length}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTab("past-bookings")}
+            className={cn(
+              "rounded-lg px-4 py-2 text-xs font-semibold transition-colors",
+              tab === "past-bookings" ? "bg-white text-[#2E1F4E] shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            Past bookings &middot; {bookings.length}
+          </button>
+        </div>
 
-          <TabsContent value="transactions">
-            <Card>
-              <CardHeader>
-                <CardTitle>Transaction History</CardTitle>
-                <CardDescription>
-                  All your past transactions across salons
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {txLoading ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex justify-between items-center">
-                        <div className="space-y-2">
-                          <Skeleton className="h-4 w-32" />
-                          <Skeleton className="h-3 w-24" />
-                        </div>
-                        <Skeleton className="h-6 w-20" />
-                      </div>
-                    ))}
-                  </div>
-                ) : transactions.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">
-                    No transaction history
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {transactions.map((tx) => (
-                      <div
-                        key={tx.id}
-                        className="flex flex-col gap-3 rounded-lg border p-3 min-[420px]:flex-row min-[420px]:items-center min-[420px]:justify-between"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                            {getTypeIcon(tx.type)}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">
-                                {typeLabels[tx.type] || tx.type}
-                              </span>
-                              {TYPE_TOOLTIPS[tx.type] && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Info className="h-3 w-3 text-muted-foreground cursor-default" />
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-56 text-xs">
-                                    {TYPE_TOOLTIPS[tx.type]}
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
-                              <Badge variant="outline" className="text-xs">
-                                {METHOD_LABELS[tx.method] || tx.method}
-                              </Badge>
-                              {tx.type === "refund" && (
-                                <Badge className="text-xs bg-green-100 text-green-800">
-                                  {refundDestinationLabel(tx.method)}
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Store className="h-3 w-3" />
-                              {tx.tenant?.name || "Salon"}
-                            </div>
-                            <p className="text-xs text-muted-foreground">
-                              {format(new Date(tx.created_at), "MMM d, yyyy 'at' h:mm a")}
+        {tab === "transactions" ? (
+          txLoading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16 w-full rounded-[14px]" />
+              ))}
+            </div>
+          ) : transactions.length === 0 ? (
+            <div className="rounded-[14px] border border-[#EAE4D8] bg-white p-6 text-center text-sm text-muted-foreground">
+              No transaction history
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-[14px] border border-[#EAE4D8] bg-white">
+              {/* Column header row, desktop only */}
+              <div className="hidden grid-cols-[100px_1fr_130px_110px_110px_84px_32px] gap-3 border-b border-[#F1ECE1] px-4 py-2.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:grid">
+                <span>Date</span>
+                <span>Description</span>
+                <span>Salon</span>
+                <span>Method</span>
+                <span className="text-right">Amount</span>
+                <span>Status</span>
+                <span />
+              </div>
+              <div className="divide-y divide-[#F1ECE1]">
+                {transactions.map((tx) => {
+                  const isCredit = tx.type === "refund" || tx.type === "purse_topup" || tx.type === "purse_redemption";
+                  const statusMeta = STATUS_META[tx.status] || { label: tx.status, className: "bg-muted text-foreground" };
+                  const canRequestRefund = (tx.type === "payment" || tx.type === "deposit") && tx.status === "completed";
+                  const refundChip = tx.type === "refund" && (
+                    <Badge className="ml-2 bg-[#E1F3EC] text-[10px] text-[#268766]">
+                      {refundDestinationLabel(tx.method)}
+                    </Badge>
+                  );
+                  const kebab = canRequestRefund && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label="Transaction actions">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setRefundTransaction(tx)}>
+                          Request refund
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  );
+                  return (
+                    <div key={tx.id}>
+                      {/* Mobile: a stacked card, not the desktop grid squeezed down */}
+                      <div className="space-y-2 px-4 py-3.5 sm:hidden">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium">
+                              {TYPE_LABELS[tx.type] || tx.type}
+                              {refundChip}
+                            </p>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {format(new Date(tx.created_at), "MMM d, yyyy")} &middot; {tx.tenant?.name || "Salon"}
                             </p>
                           </div>
+                          {kebab && <div className="shrink-0">{kebab}</div>}
                         </div>
-                        <div className="flex items-end gap-2 text-right">
-                          <div>
-                          <p className={`font-semibold ${getTypeColor(tx.type)}`}>
-                            {tx.type === "refund" ? "+" : ""}
-                            {formatCurrency(tx.amount, tx.currency)}
-                          </p>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Badge
-                                variant="secondary"
-                                className={`cursor-default ${tx.status === "completed" ? "bg-green-100 text-green-800" : ""}`}
-                              >
-                                {tx.status}
-                              </Badge>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-56 text-xs">{STATUS_TOOLTIP}</TooltipContent>
-                          </Tooltip>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">{METHOD_LABELS[tx.method] || tx.method}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold", statusMeta.className)}>
+                              {statusMeta.label}
+                            </span>
+                            <span className={cn("text-sm font-semibold", isCredit && "text-[#268766]")}>
+                              {isCredit ? "+" : ""}
+                              {formatCurrency(tx.amount, tx.currency)}
+                            </span>
                           </div>
-                          {(tx.type === "payment" || tx.type === "deposit") && tx.status === "completed" && (
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Transaction actions">
-                                  <MoreVertical className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => setRefundTransaction(tx)}>
-                                  Request refund
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
 
-          <TabsContent value="bookings">
-            <Card>
-              <CardHeader>
-                <CardTitle>Past Bookings</CardTitle>
-                <CardDescription>
-                  Completed appointments history
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {bookingsLoading ? (
-                  <div className="space-y-4">
-                    {[1, 2, 3].map((i) => (
-                      <Skeleton key={i} className="h-20 w-full" />
-                    ))}
-                  </div>
-                ) : bookings.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">
-                    No completed bookings
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {bookings.map((booking) => (
-                      <div
-                        key={booking.id}
-                        className="p-4 rounded-lg border cursor-pointer hover:border-primary/40 transition-colors"
-                        onClick={() => navigate(`/bookings/${booking.id}`)}
-                      >
-                        <div className="flex flex-col gap-3 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between">
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <Store className="h-4 w-4 text-muted-foreground" />
-                              <span className="font-medium">{booking.tenant?.name}</span>
-                            </div>
-                            {booking.scheduled_start && (
-                              <p className="text-sm text-muted-foreground">
-                                {format(new Date(booking.scheduled_start), "EEEE, MMMM d, yyyy")}
-                              </p>
-                            )}
-                            {booking.services && booking.services.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {booking.services.map((s) => (
-                                  <Badge key={s.id} variant="secondary" className="text-xs">
-                                    {s.service_name}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <p className="font-semibold">
-                              {formatCurrency(booking.total_amount, booking.tenant?.currency || "USD")}
-                            </p>
-                            <Badge className="bg-green-100 text-green-800">Completed</Badge>
-                          </div>
-                        </div>
+                      {/* Desktop/tablet: column grid */}
+                      <div className="hidden grid-cols-[100px_1fr_130px_110px_110px_84px_32px] items-center gap-3 px-4 py-3.5 text-sm sm:grid">
+                        <span>{format(new Date(tx.created_at), "MMM d, yyyy")}</span>
+                        <span className="font-medium">
+                          {TYPE_LABELS[tx.type] || tx.type}
+                          {refundChip}
+                        </span>
+                        <span className="text-muted-foreground">{tx.tenant?.name || "Salon"}</span>
+                        <span className="text-muted-foreground">{METHOD_LABELS[tx.method] || tx.method}</span>
+                        <span className={cn("text-right font-semibold", isCredit && "text-[#268766]")}>
+                          {isCredit ? "+" : ""}
+                          {formatCurrency(tx.amount, tx.currency)}
+                        </span>
+                        <span className={cn("w-fit rounded-full px-2.5 py-0.5 text-[11px] font-semibold", statusMeta.className)}>
+                          {statusMeta.label}
+                        </span>
+                        <div className="flex justify-end">{kebab}</div>
                       </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )
+        ) : bookingsLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-20 w-full rounded-[14px]" />
+            ))}
+          </div>
+        ) : bookings.length === 0 ? (
+          <div className="rounded-[14px] border border-[#EAE4D8] bg-white p-6 text-center text-sm text-muted-foreground">
+            No completed bookings
+          </div>
+        ) : (
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            {bookings.map((booking) => (
+              <button
+                key={booking.id}
+                type="button"
+                onClick={() => navigate(`/bookings/${booking.id}`)}
+                className="flex cursor-pointer flex-col gap-2 rounded-[14px] border border-[#EAE4D8] bg-white p-4 text-left transition-shadow hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm font-semibold text-[#2E1F4E]">{booking.tenant?.name}</p>
+                  <Badge className="bg-[#E1F3EC] text-[10px] text-[#268766]">Completed</Badge>
+                </div>
+                {booking.scheduled_start && (
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(booking.scheduled_start), "EEEE, MMMM d, yyyy")}
+                  </p>
+                )}
+                <div className="flex items-center justify-between pt-1">
+                  <div className="flex flex-wrap gap-1">
+                    {(booking.services || []).slice(0, 2).map((s) => (
+                      <span key={s.id} className="rounded-full bg-[#F3EDFF] px-2 py-0.5 text-[10px] font-medium text-[#2E1F4E]">
+                        {s.service_name}
+                      </span>
                     ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                  <span className="text-sm font-semibold text-[#2E1F4E]">
+                    {formatCurrency(booking.total_amount, booking.tenant?.currency || "USD")}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <ClientRefundRequestDialog
         open={Boolean(refundTransaction)}

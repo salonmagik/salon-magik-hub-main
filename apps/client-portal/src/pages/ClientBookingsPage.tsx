@@ -1,34 +1,12 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { ClientSidebar } from "@/components/ClientSidebar";
-import { useClientAuth, useClientBookings, useClientBalance, useClientProductOrders, useClientVouchers, isVoucherUnused } from "@/hooks";
-import type { ClientAppointmentWithDetails, ClientPackageEntitlement, ClientProductOrder, ClientVoucher } from "@/hooks";
-import { formatCurrency } from "@shared/currency";
+import { useClientBookings } from "@/hooks";
+import type { ClientAppointmentWithDetails } from "@/hooks";
 import { cn } from "@shared/utils";
 import { Skeleton } from "@ui/skeleton";
 import { UpcomingAppointmentDialog } from "@/components/UpcomingAppointmentDialog";
-import { PackageDetailDialog } from "@/components/PackageDetailDialog";
-import { ProductDetailDialog } from "@/components/ProductDetailDialog";
-import { VoucherDetailDialog } from "@/components/VoucherDetailDialog";
-import { productStatusMeta, packageExpiryMeta, isPackageExpired, voucherStatusMeta, monthDayChip } from "@/lib/bookingsOrdersUi";
-import { ProductIcon } from "@/components/ProductIcon";
-
-function SectionHeader({ title, count, seeAllHref }: { title: string; count: string; seeAllHref?: string }) {
-  return (
-    <div className="flex items-baseline justify-between">
-      <div className="flex items-center gap-2 font-serif text-lg font-semibold text-[#2E1F4E]">
-        {title}
-        <span className="rounded-full bg-[#F3EDFF] px-2.5 py-0.5 text-xs font-normal text-[#8A8392]">{count}</span>
-      </div>
-      {seeAllHref && (
-        <Link to={seeAllHref} className="text-sm font-semibold text-[#2E1F4E] hover:underline">
-          See all
-        </Link>
-      )}
-    </div>
-  );
-}
+import { monthDayChip } from "@/lib/bookingsOrdersUi";
 
 function EmptySection({ message }: { message: string }) {
   return (
@@ -38,247 +16,122 @@ function EmptySection({ message }: { message: string }) {
   );
 }
 
+type BookingTab = "upcoming" | "past" | "unpaid";
+
+const TABS: { key: BookingTab; label: string }[] = [
+  { key: "upcoming", label: "Upcoming" },
+  { key: "past", label: "Past" },
+  { key: "unpaid", label: "Needs payment" },
+];
+
 export default function ClientBookingsPage() {
-  const { customers } = useClientAuth();
+  const [tab, setTab] = useState<BookingTab>("upcoming");
   const { bookings: upcomingRaw, isLoading: upcomingLoading } = useClientBookings("upcoming");
+  const { bookings: pastRaw, isLoading: pastLoading } = useClientBookings("completed");
+  const { bookings: unpaidRaw, isLoading: unpaidLoading } = useClientBookings("unpaid");
+
   // useClientBookings("upcoming") deliberately also returns bookings with no
   // scheduled_start (originally meant to keep an unscheduled item visible
   // elsewhere), but "Upcoming" here means a real appointment with a real
   // date, that's the whole point of the section. A product/package order or
-  // an appointment still awaiting a time slot belongs in Packages/Products
+  // an appointment still awaiting a time slot belongs on Orders/Packages
   // or gets scheduled first, not shown here as a dateless "--" card.
   const upcoming = useMemo(
     () => upcomingRaw.filter((booking) => Boolean(booking.scheduled_start)),
     [upcomingRaw],
   );
-  const { packages, isLoading: packagesLoading } = useClientBalance();
-  const { orders, isLoading: ordersLoading } = useClientProductOrders();
-  const { vouchers, isLoading: vouchersLoading } = useClientVouchers();
-
   const [selectedBooking, setSelectedBooking] = useState<ClientAppointmentWithDetails | null>(null);
-  const [selectedPackage, setSelectedPackage] = useState<ClientPackageEntitlement | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<ClientProductOrder | null>(null);
-  const [selectedVoucher, setSelectedVoucher] = useState<ClientVoucher | null>(null);
 
-  const tenantPhoneByTenantId = useMemo(() => {
-    const map = new Map<string, string | null>();
-    for (const customer of customers) {
-      if (customer.tenant) map.set(customer.tenant_id, customer.tenant.contact_phone);
-    }
-    return map;
-  }, [customers]);
+  const countByTab: Record<BookingTab, number> = {
+    upcoming: upcoming.length,
+    past: pastRaw.length,
+    unpaid: unpaidRaw.length,
+  };
+  const bookingsByTab: Record<BookingTab, ClientAppointmentWithDetails[]> = {
+    upcoming,
+    past: pastRaw,
+    unpaid: unpaidRaw,
+  };
+  const loadingByTab: Record<BookingTab, boolean> = {
+    upcoming: upcomingLoading,
+    past: pastLoading,
+    unpaid: unpaidLoading,
+  };
+  const emptyMessageByTab: Record<BookingTab, string> = {
+    upcoming: "No upcoming bookings",
+    past: "No past bookings yet",
+    unpaid: "Nothing needs payment right now",
+  };
 
-  const upcomingPreview = upcoming.slice(0, 2);
-
-  const unusedVouchers = vouchers.filter(isVoucherUnused);
-  const voucherPreview = (unusedVouchers.length > 0 ? unusedVouchers : vouchers).slice(0, 2);
-  const voucherCountLabel = unusedVouchers.length > 0 ? `${unusedVouchers.length} unused` : `${vouchers.length}`;
-
-  const packagePreview = packages.slice(0, 2);
-  const productPreview = orders.slice(0, 6);
-
-  const isLoading = upcomingLoading || packagesLoading || ordersLoading || vouchersLoading;
+  const activeBookings = bookingsByTab[tab];
+  const isLoading = loadingByTab[tab];
 
   return (
     <ClientSidebar>
-      <div className="space-y-9 pb-10">
+      <div className="space-y-5 pb-10">
         <div>
-          <p className="text-xs uppercase tracking-[0.12em] text-primary/65">Your bookings and orders</p>
-          <h1 className="mt-2 font-serif text-3xl font-medium tracking-[-0.5px] text-[#2E1F4E]">Bookings &amp; Orders</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Everything you've booked or bought, grouped by what it is.
-          </p>
+          <h1 className="font-serif text-2xl font-medium tracking-[-0.5px] text-[#2E1F4E]">Bookings</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Every appointment you've scheduled, across every salon.</p>
+        </div>
+
+        <div className="flex w-fit gap-1 rounded-xl bg-[#F1ECE1] p-1">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setTab(t.key)}
+              className={cn(
+                "rounded-lg px-4 py-2 text-xs font-semibold transition-colors",
+                tab === t.key ? "bg-white text-[#2E1F4E] shadow-sm" : "text-muted-foreground",
+              )}
+            >
+              {t.label} &middot; {countByTab[t.key]}
+            </button>
+          ))}
         </div>
 
         {isLoading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-24 w-full rounded-2xl" />
+              <Skeleton key={i} className="h-20 w-full rounded-[14px]" />
             ))}
           </div>
+        ) : activeBookings.length === 0 ? (
+          <EmptySection message={emptyMessageByTab[tab]} />
         ) : (
-          <>
-            {/* Upcoming */}
-            <section className="space-y-3.5">
-              <SectionHeader
-                title="Upcoming"
-                count={String(upcoming.length)}
-                seeAllHref={upcoming.length > 2 ? "/bookings/upcoming" : undefined}
-              />
-              {upcomingPreview.length === 0 ? (
-                <EmptySection message="No upcoming bookings" />
-              ) : (
-                <div className="grid gap-3.5 sm:grid-cols-2">
-                  {upcomingPreview.map((booking) => {
-                    const fromPackage = (booking.services || []).some((s) => !!s.package_id);
-                    const title = booking.services && booking.services.length > 0 ? booking.services[0].service_name : "Appointment";
-                    const chip = fromPackage
-                      ? { label: "Package session", className: "text-[#268766] bg-[#E1F3EC]" }
-                      : { label: "Service", className: "text-[#2E1F4E] bg-[#F3EDFF]" };
-                    const dateChip = booking.scheduled_start ? monthDayChip(booking.scheduled_start) : null;
-                    return (
-                      <button
-                        key={booking.id}
-                        type="button"
-                        onClick={() => setSelectedBooking(booking)}
-                        className="flex cursor-pointer items-start gap-3.5 rounded-[14px] border border-[#EAE4D8] bg-white p-4 text-left transition-shadow hover:shadow-md"
-                      >
-                        <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-[#F3EDFF]">
-                          <span className="text-[10px] font-bold uppercase text-[#2E1F4E]">{dateChip?.month ?? "--"}</span>
-                          <span className="font-serif text-[17px] font-semibold leading-none text-[#2E1F4E]">{dateChip?.day ?? "--"}</span>
-                        </div>
-                        <div>
-                          <span className={cn("rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide", chip.className)}>
-                            {chip.label}
-                          </span>
-                          <p className="mt-1.5 text-sm font-semibold text-[#2E1F4E]">{title}</p>
-                          <p className="mt-0.5 text-xs text-muted-foreground">
-                            {booking.scheduled_start && format(new Date(booking.scheduled_start), "h:mm a")}
-                            {booking.location ? ` · ${booking.location.name}` : ""}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* Packages */}
-            <section className="space-y-3.5">
-              <SectionHeader
-                title="Packages"
-                count={String(packages.length)}
-                seeAllHref={packages.length > 2 ? "/bookings/packages" : undefined}
-              />
-              {packagePreview.length === 0 ? (
-                <EmptySection message="No packages purchased yet" />
-              ) : (
-                <div className="grid gap-3.5 sm:grid-cols-2">
-                  {packagePreview.map((entitlement) => {
-                    const items = entitlement.items || [];
-                    const total = items.reduce((sum, item) => sum + item.total_quantity, 0);
-                    const remaining = items.reduce((sum, item) => sum + item.remaining_quantity, 0);
-                    const used = Math.max(total - remaining, 0);
-                    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
-                    const expiryMeta = packageExpiryMeta(entitlement.expires_at, entitlement.status);
-                    const expired = isPackageExpired(entitlement.expires_at, entitlement.status);
-                    return (
-                      <button
-                        key={entitlement.id}
-                        type="button"
-                        onClick={() => setSelectedPackage(entitlement)}
-                        className="flex cursor-pointer flex-col gap-2.5 rounded-[14px] border border-[#EAE4D8] bg-white p-[18px] text-left transition-shadow hover:shadow-md"
-                      >
-                        <div className="flex items-start justify-between gap-2.5">
-                          <div>
-                            <span className="rounded-full bg-[#E1F3EC] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#268766]">
-                              Package
-                            </span>
-                            <p className="mt-1.5 text-sm font-semibold text-[#2E1F4E]">{entitlement.package?.name || "Package"}</p>
-                          </div>
-                          <span className={cn("shrink-0 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px]", expiryMeta.className)}>
-                            {expiryMeta.label}
-                          </span>
-                        </div>
-                        <div>
-                          <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-                            <span>{used} of {total} sessions used</span>
-                            <span>{remaining} remaining</span>
-                          </div>
-                          <div className="h-1.5 overflow-hidden rounded-full bg-[#F0ECE1]">
-                            <div
-                              className="h-full rounded-full"
-                              style={{ width: `${pct}%`, backgroundColor: expired ? "#8A8392" : "#268766" }}
-                            />
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-
-            {/* Products */}
-            <section className="space-y-3.5">
-              <SectionHeader
-                title="Products"
-                count={String(orders.length)}
-                seeAllHref={orders.length > 6 ? "/bookings/products" : undefined}
-              />
-              {productPreview.length === 0 ? (
-                <EmptySection message="No products purchased yet" />
-              ) : (
-                <>
-                  <div className="scrollbar-hide flex gap-3.5 overflow-x-auto sm:grid sm:grid-cols-3 sm:overflow-visible">
-                    {productPreview.map((order) => {
-                      const meta = productStatusMeta(order.fulfillment_status);
-                      const dimmed = order.fulfillment_status === "fulfilled" || order.fulfillment_status === "cancelled";
-                      return (
-                        <button
-                          key={order.id}
-                          type="button"
-                          onClick={() => setSelectedProduct(order)}
-                          className={cn(
-                            "flex w-[118px] shrink-0 cursor-pointer flex-col items-center gap-2 rounded-[14px] border border-[#EAE4D8] bg-white p-4 text-center transition-shadow hover:shadow-md sm:w-auto",
-                            dimmed && "opacity-75",
-                          )}
-                        >
-                          <ProductIcon />
-                          <p className="text-[13px] font-semibold text-[#2E1F4E]">{order.product_name}</p>
-                          <p className="text-[10px] text-muted-foreground">{format(new Date(order.created_at), "MMM d, yyyy")}</p>
-                          <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-medium", meta.className)}>{meta.label}</span>
-                        </button>
-                      );
-                    })}
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            {activeBookings.map((booking) => {
+              const fromPackage = (booking.services || []).some((s) => !!s.package_id);
+              const title = booking.services && booking.services.length > 0 ? booking.services[0].service_name : "Appointment";
+              const chip = fromPackage
+                ? { label: "Package session", className: "text-[#268766] bg-[#E1F3EC]" }
+                : { label: "Service", className: "text-[#2E1F4E] bg-[#F3EDFF]" };
+              const dateChip = booking.scheduled_start ? monthDayChip(booking.scheduled_start) : null;
+              return (
+                <button
+                  key={booking.id}
+                  type="button"
+                  onClick={() => setSelectedBooking(booking)}
+                  className="flex cursor-pointer items-start gap-3.5 rounded-[14px] border border-[#EAE4D8] bg-white p-4 text-left transition-shadow hover:shadow-md"
+                >
+                  <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-[#F3EDFF]">
+                    <span className="text-[10px] font-bold uppercase text-[#2E1F4E]">{dateChip?.month ?? "--"}</span>
+                    <span className="font-serif text-[17px] font-semibold leading-none text-[#2E1F4E]">{dateChip?.day ?? "--"}</span>
                   </div>
-                  {orders.length > 6 && (
-                    <p className="text-[11px] text-muted-foreground">Showing the 6 most recent &middot; sorted newest first</p>
-                  )}
-                </>
-              )}
-            </section>
-
-            {/* Vouchers */}
-            <section className="space-y-3.5">
-              <SectionHeader
-                title="Vouchers"
-                count={voucherCountLabel}
-                seeAllHref={vouchers.length > 2 ? "/bookings/vouchers" : undefined}
-              />
-              {voucherPreview.length === 0 ? (
-                <EmptySection message="No vouchers yet" />
-              ) : (
-                <div className="grid gap-3.5 sm:grid-cols-2">
-                  {voucherPreview.map((voucher) => {
-                    const unused = isVoucherUnused(voucher);
-                    const meta = voucherStatusMeta(voucher.status, unused);
-                    return (
-                      <button
-                        key={voucher.id}
-                        type="button"
-                        onClick={() => setSelectedVoucher(voucher)}
-                        className="flex cursor-pointer items-center justify-between gap-3 rounded-[14px] border border-dashed border-[#D9D2E6] bg-white p-[18px] text-left transition-shadow hover:shadow-md"
-                      >
-                        <div>
-                          <span className={cn("rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide", meta.className)}>
-                            {meta.label}
-                          </span>
-                          <p className="mt-1.5 font-serif text-[17px] font-semibold text-[#2E1F4E]">
-                            {formatCurrency(voucher.balance, voucher.tenantCurrency)}
-                          </p>
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">
-                            Code {voucher.code} &middot; {voucher.expires_at ? format(new Date(voucher.expires_at), "MMM d, yyyy") : "No expiry"}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </section>
-          </>
+                  <div>
+                    <span className={cn("rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide", chip.className)}>
+                      {chip.label}
+                    </span>
+                    <p className="mt-1.5 text-sm font-semibold text-[#2E1F4E]">{title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {booking.scheduled_start && format(new Date(booking.scheduled_start), "h:mm a")}
+                      {booking.location ? ` · ${booking.location.name}` : ""}
+                    </p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -286,24 +139,6 @@ export default function ClientBookingsPage() {
         open={!!selectedBooking}
         onOpenChange={(open) => !open && setSelectedBooking(null)}
         booking={selectedBooking}
-      />
-      <PackageDetailDialog
-        open={!!selectedPackage}
-        onOpenChange={(open) => !open && setSelectedPackage(null)}
-        entitlement={selectedPackage}
-        tenantPhone={selectedPackage ? tenantPhoneByTenantId.get(selectedPackage.tenant_id) : null}
-      />
-      <ProductDetailDialog
-        open={!!selectedProduct}
-        onOpenChange={(open) => !open && setSelectedProduct(null)}
-        order={selectedProduct}
-        tenantPhone={selectedProduct?.tenantId ? tenantPhoneByTenantId.get(selectedProduct.tenantId) : null}
-      />
-      <VoucherDetailDialog
-        open={!!selectedVoucher}
-        onOpenChange={(open) => !open && setSelectedVoucher(null)}
-        voucher={selectedVoucher}
-        tenantPhone={selectedVoucher ? tenantPhoneByTenantId.get(selectedVoucher.tenant_id) : null}
       />
     </ClientSidebar>
   );
