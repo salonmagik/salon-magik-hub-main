@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { ClientSidebar } from "@/components/ClientSidebar";
 import { useClientAuth, useClientBalance } from "@/hooks";
 import type { ClientPackageEntitlement } from "@/hooks";
@@ -28,18 +27,11 @@ export default function ClientPackagesPage() {
   return (
     <ClientSidebar>
       <div className="space-y-6 pb-10">
-        <div className="space-y-3.5">
-          <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Link to="/bookings" className="hover:underline">Bookings &amp; Orders</Link>
-            <span>/</span>
-            <span className="font-semibold text-[#2E1F4E]">Packages</span>
-          </nav>
-          <div>
-            <h1 className="font-serif text-2xl font-semibold text-[#2E1F4E]">Packages</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {packages.length} {packages.length === 1 ? "package" : "packages"} &middot; {activeCount} active, {expiredCount} expired or used. Tap a package to see its sessions, dates and receipt.
-            </p>
-          </div>
+        <div>
+          <h1 className="font-serif text-2xl font-medium tracking-[-0.5px] text-[#2E1F4E]">Packages</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {packages.length} {packages.length === 1 ? "package" : "packages"} &middot; {activeCount} active, {expiredCount} expired or used. Tap a package to see its sessions, dates and receipt.
+          </p>
         </div>
 
         {isLoading ? (

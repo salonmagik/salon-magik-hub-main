@@ -11,21 +11,37 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@ui/select";
-import { useBookingCart, type CartItem } from "@/hooks";
+import { useBookingCart, type CartItem, type AvailablePackageCredit } from "@/hooks";
 import { formatCurrency } from "@shared/currency";
 import { QuantityControl } from "./QuantityControl";
 import { FulfillmentToggle } from "./FulfillmentToggle";
+import { PackageCreditToggle } from "./PackageCreditToggle";
 
 interface CartStepProps {
   currency: string;
   onBrowse: () => void;
+  /** Service id -> available package credit, for the currently identified customer (empty for a guest or one with no entitlements). */
+  packageCreditsByServiceId?: Map<string, AvailablePackageCredit>;
+  /** Cart item ids currently toggled to redeem a package credit instead of paying. */
+  packageCoveredItemIds?: Set<string>;
+  onTogglePackageCredit?: (itemId: string, checked: boolean) => void;
 }
 
 const TYPE_ICON = { service: Scissors, package: Package, product: ShoppingBag } as const;
 
-export function CartStep({ currency, onBrowse }: CartStepProps) {
+export function CartStep({
+  currency,
+  onBrowse,
+  packageCreditsByServiceId,
+  packageCoveredItemIds,
+  onTogglePackageCredit,
+}: CartStepProps) {
   const { items, meta, removeItem, updateItem, updateQuantity, updateMeta, getTotal } = useBookingCart();
-  const total = getTotal();
+  const packageCreditAmount = items.reduce((sum, item) => {
+    if (!packageCoveredItemIds?.has(item.id)) return sum;
+    return sum + item.price * item.quantity;
+  }, 0);
+  const total = Math.max(0, getTotal() - packageCreditAmount);
   const giftItems = items.filter((item) => item.isGift);
 
   const handleQuantityChange = (item: CartItem, delta: number) => {
@@ -64,6 +80,8 @@ export function CartStep({ currency, onBrowse }: CartStepProps) {
         const requiresBranchChoice = eligibleBranches.length > 1;
         const singleBranch = eligibleBranches.length === 1 ? eligibleBranches[0] : null;
         const TypeIcon = TYPE_ICON[item.type as keyof typeof TYPE_ICON] || ShoppingBag;
+        const matchingCredit = item.type === "service" ? packageCreditsByServiceId?.get(item.itemId) : undefined;
+        const isPackageCovered = Boolean(matchingCredit && packageCoveredItemIds?.has(item.id));
 
         return (
           <div key={item.id} className={index > 0 ? "pt-6 mt-6 border-t border-border" : ""}>
@@ -89,7 +107,11 @@ export function CartStep({ currency, onBrowse }: CartStepProps) {
                 <div className="flex items-start justify-between gap-3">
                   <h4 className="font-medium leading-snug line-clamp-1">{item.name}</h4>
                   <span className="font-serif font-semibold whitespace-nowrap">
-                    {formatCurrency(item.price * item.quantity, currency)}
+                    {isPackageCovered ? (
+                      <span className="text-success">{formatCurrency(0, currency)}</span>
+                    ) : (
+                      formatCurrency(item.price * item.quantity, currency)
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
@@ -177,6 +199,17 @@ export function CartStep({ currency, onBrowse }: CartStepProps) {
               <span className="text-sm">This is a gift</span>
             </label>
 
+            {matchingCredit && onTogglePackageCredit && (
+              <div className="pl-[76px] mt-1">
+                <PackageCreditToggle
+                  credit={matchingCredit}
+                  itemId={item.id}
+                  checked={isPackageCovered}
+                  onCheckedChange={(checked) => onTogglePackageCredit(item.id, checked)}
+                />
+              </div>
+            )}
+
             {item.type === "product" && (
               <div className="pl-[76px] mt-3">
                 <FulfillmentToggle
@@ -204,6 +237,12 @@ export function CartStep({ currency, onBrowse }: CartStepProps) {
       )}
 
       <Separator className="mt-6 mb-4" />
+      {packageCreditAmount > 0 && (
+        <div className="flex items-center justify-between text-sm text-success mb-1.5">
+          <span>Package credit applied</span>
+          <span>&minus;{formatCurrency(packageCreditAmount, currency)}</span>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <span className="font-medium">Total</span>
         <span className="font-serif text-2xl font-semibold">{formatCurrency(total, currency)}</span>

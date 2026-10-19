@@ -23,3 +23,4 @@ export { useDepositCalculation, calculateCancellationFee } from "./useDepositCal
 export { useBookingCountryContext, type PublicBookingCountryContext } from "./useBookingCountryContext";
 export { useResolvedSlug } from "./useResolvedSlug";
 export { useCheckedEmail, type EmailCheckPhase } from "./useCheckedEmail";
+export { useCustomerPackageCredits, type AvailablePackageCredit } from "./useCustomerPackageCredits";

@@ -3,13 +3,13 @@ import { TooltipProvider } from "@ui/tooltip";
 import ClientLoginPage from "@/pages/ClientLoginPage";
 import ClientDashboard from "@/pages/ClientDashboard";
 import ClientBookingsPage from "@/pages/ClientBookingsPage";
-import ClientUpcomingPage from "@/pages/ClientUpcomingPage";
 import ClientPackagesPage from "@/pages/ClientPackagesPage";
 import ClientProductsPage from "@/pages/ClientProductsPage";
 import ClientVouchersPage from "@/pages/ClientVouchersPage";
 import ClientBookingDetailPage from "@/pages/ClientBookingDetailPage";
 import ClientHistoryPage from "@/pages/ClientHistoryPage";
-import ClientRefundsPage from "@/pages/ClientRefundsPage";
+import ClientStoreCreditPage from "@/pages/ClientStoreCreditPage";
+import ClientStoreCreditDetailPage from "@/pages/ClientStoreCreditDetailPage";
 import ClientNotificationsPage from "@/pages/ClientNotificationsPage";
 import ClientProfilePage from "@/pages/ClientProfilePage";
 import ClientHelpPage from "@/pages/ClientHelpPage";
@@ -56,32 +56,28 @@ function App() {
               </ClientProtectedRoute>
             }
           />
+          <Route path="/bookings/upcoming" element={<Navigate to="/bookings" replace />} />
+          <Route path="/bookings/packages" element={<Navigate to="/packages" replace />} />
           <Route
-            path="/bookings/upcoming"
-            element={
-              <ClientProtectedRoute>
-                <ClientUpcomingPage />
-              </ClientProtectedRoute>
-            }
-          />
-          <Route
-            path="/bookings/packages"
+            path="/packages"
             element={
               <ClientProtectedRoute>
                 <ClientPackagesPage />
               </ClientProtectedRoute>
             }
           />
+          <Route path="/bookings/products" element={<Navigate to="/orders" replace />} />
           <Route
-            path="/bookings/products"
+            path="/orders"
             element={
               <ClientProtectedRoute>
                 <ClientProductsPage />
               </ClientProtectedRoute>
             }
           />
+          <Route path="/bookings/vouchers" element={<Navigate to="/vouchers" replace />} />
           <Route
-            path="/bookings/vouchers"
+            path="/vouchers"
             element={
               <ClientProtectedRoute>
                 <ClientVouchersPage />
@@ -104,15 +100,24 @@ function App() {
               </ClientProtectedRoute>
             }
           />
+          <Route path="/balance" element={<Navigate to="/store-credit" replace />} />
           <Route
-            path="/balance"
+            path="/store-credit"
             element={
               <ClientProtectedRoute>
-                <ClientRefundsPage />
+                <ClientStoreCreditPage />
               </ClientProtectedRoute>
             }
           />
-          <Route path="/refunds" element={<Navigate to="/balance?tab=refunds" replace />} />
+          <Route
+            path="/store-credit/:customerId"
+            element={
+              <ClientProtectedRoute>
+                <ClientStoreCreditDetailPage />
+              </ClientProtectedRoute>
+            }
+          />
+          <Route path="/refunds" element={<Navigate to="/store-credit" replace />} />
           <Route
             path="/notifications"
             element={

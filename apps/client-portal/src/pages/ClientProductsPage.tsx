@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { ClientSidebar } from "@/components/ClientSidebar";
 import { useClientAuth, useClientProductOrders } from "@/hooks";
@@ -26,18 +25,11 @@ export default function ClientProductsPage() {
   return (
     <ClientSidebar>
       <div className="space-y-6 pb-10">
-        <div className="space-y-3.5">
-          <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
-            <Link to="/bookings" className="hover:underline">Bookings &amp; Orders</Link>
-            <span>/</span>
-            <span className="font-semibold text-[#2E1F4E]">Products</span>
-          </nav>
-          <div>
-            <h1 className="font-serif text-2xl font-semibold text-[#2E1F4E]">Products</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {orders.length} {orders.length === 1 ? "product" : "products"} purchased. Tap one to see its order, branch and fulfillment history.
-            </p>
-          </div>
+        <div>
+          <h1 className="font-serif text-2xl font-medium tracking-[-0.5px] text-[#2E1F4E]">Orders</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {orders.length} {orders.length === 1 ? "product" : "products"} purchased. Tap one to see its order, branch and fulfillment history.
+          </p>
         </div>
 
         {isLoading ? (

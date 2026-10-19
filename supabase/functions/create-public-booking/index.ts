@@ -98,6 +98,8 @@ interface BookingRequest {
   // Purse-only payment fields
   processPursePayment?: boolean;
   pursePaymentCustomerId?: string;
+  /** Cart item ids (service lines only) the client toggled to redeem a package credit instead of paying. Re-validated server-side via reserve_customer_package_credit before being trusted. */
+  packageCoveredItemIds?: string[];
 }
 
 interface TenantCustomerRow {
@@ -136,7 +138,7 @@ function formatLineSchedule(item: CartItem) {
   return "Schedule pending";
 }
 
-function renderBookingSummary(items: CartItem[], currency: string) {
+function renderBookingSummary(items: CartItem[], currency: string, packageCoveredItemIds?: Set<string>) {
   return items
     .map((item) => {
       const branchName = item.locationName || "Main branch";
@@ -145,6 +147,10 @@ function renderBookingSummary(items: CartItem[], currency: string) {
         ? `<div><strong>Fulfillment:</strong> ${item.fulfillmentType === "delivery" ? "Delivery" : "Pickup"}</div>`
         : "";
       const staff = item.selectedStaffId ? `<div><strong>Staff selected:</strong> Assigned by salon preference</div>` : "";
+      const isPackageCovered = Boolean(packageCoveredItemIds?.has(item.id));
+      const amountText = isPackageCovered
+        ? `${currency} 0.00 <span style="color:#15834B;">(covered by package credit)</span>`
+        : `${currency} ${(item.price * item.quantity).toFixed(2)}`;
 
       return `
         <div style="border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin: 0 0 12px 0;">
@@ -154,7 +160,7 @@ function renderBookingSummary(items: CartItem[], currency: string) {
           <div><strong>When:</strong> ${formatLineSchedule(item)}</div>
           ${fulfillment}
           ${staff}
-          <div><strong>Amount:</strong> ${currency} ${(item.price * item.quantity).toFixed(2)}</div>
+          <div><strong>Amount:</strong> ${amountText}</div>
         </div>
       `;
     })
@@ -282,6 +288,11 @@ function buildVoucherLineHtml(voucherCode: string | null | undefined, discount: 
   return paragraph(`<strong style="color:#15834B">Voucher applied:</strong> ${voucherCode} (${currency} ${discount.toFixed(2)} off)`);
 }
 
+function buildPackageCreditLineHtml(discount: number, currency: string): string {
+  if (!discount || discount <= 0) return "";
+  return paragraph(`<strong style="color:#15834B">Package credit applied:</strong> -${currency} ${discount.toFixed(2)}`);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -313,7 +324,19 @@ serve(async (req) => {
       splitCustomerId,
       processPursePayment = false,
       pursePaymentCustomerId,
+      packageCoveredItemIds: requestedPackageCoveredItemIdsRaw,
     } = body;
+
+    // Only service lines (not bought packages/products) can ever be
+    // package-credit-covered -- filtered against item.type below, at the
+    // point each item is actually processed, since the final say on whether
+    // an item is covered rests with reserve_customer_package_credit, not
+    // this client-supplied hint.
+    const requestedPackageCoveredItemIds = new Set(
+      Array.isArray(requestedPackageCoveredItemIdsRaw)
+        ? requestedPackageCoveredItemIdsRaw.filter((id): id is string => typeof id === "string")
+        : [],
+    );
 
     const authHeader = req.headers.get("Authorization");
     let authenticatedUserId: string | null = null;
@@ -755,6 +778,19 @@ serve(async (req) => {
     const createdAppointmentIds: string[] = [];
     const approvalRequired = tenant.auto_confirm_bookings === false;
     let allocatedPromotionDiscount = 0;
+    // Package-credit redemption bookkeeping: items the client flagged are
+    // optimistically charged $0 going into their appointment row (mirroring
+    // the toggle-then-correct pattern salon-admin's ScheduleAppointmentDialog
+    // already uses for the same RPC) -- confirmed only once
+    // reserve_customer_package_credit actually succeeds below. A failure
+    // corrects that appointment's total_amount back up rather than silently
+    // under-billing. packageCoveredDiscount and confirmedPackageCoveredItemIds
+    // are populated as the loop runs and read afterward, once every item's
+    // outcome is known, to build the final email/total (both of which render
+    // after this loop completes).
+    let packageCoveredDiscount = 0;
+    const confirmedPackageCoveredItemIds = new Set<string>();
+    const failedPackageCreditItemNames: string[] = [];
 
     // Gift recipients previously got no account and no notification — a
     // recipient had no customers row, so auth-resolve-identifier correctly
@@ -969,6 +1005,14 @@ serve(async (req) => {
           : Number(((rawLineTotal / totalAmount) * promotionalDiscount).toFixed(2));
       allocatedPromotionDiscount += linePromotionDiscount;
       const lineTotal = Math.max(0, Number((rawLineTotal - linePromotionDiscount).toFixed(2)));
+      // Only a service line can be package-covered (a bought package or a
+      // product is never redeemed against an existing entitlement). This is
+      // just the client's hint -- whether it actually sticks is decided by
+      // reserve_customer_package_credit below, which re-derives eligibility
+      // from this appointment's own (server-resolved) customer_id, so a
+      // forged item id here can't redeem credit that isn't genuinely this
+      // customer's.
+      const isPackageCoveredRequested = item.type === "service" && requestedPackageCoveredItemIds.has(item.id);
       const { data: appointment, error: appointmentError } = await supabase
         .from("appointments")
         .insert({
@@ -987,7 +1031,7 @@ serve(async (req) => {
           approval_status: approvalRequired ? "pending" : "approved",
           approval_requested_at: approvalRequired ? new Date().toISOString() : null,
           customer_response_status: approvalRequired ? "pending" : "not_required",
-          total_amount: lineTotal,
+          total_amount: isPackageCoveredRequested ? 0 : lineTotal,
           notes: customer.notes || null,
           booking_reference: reference,
           booking_metadata: bookingMetadata,
@@ -1006,17 +1050,48 @@ serve(async (req) => {
       createdAppointmentIds.push(appointment.id);
 
       if (item.type === "service" || item.type === "package") {
-        const { error: servicesError } = await supabase.from("appointment_services").insert({
-          appointment_id: appointment.id,
-          service_id: item.type === "service" ? item.itemId : null,
-          package_id: item.type === "package" ? item.itemId : null,
-          service_name: item.name,
-          duration_minutes: item.durationMinutes || 60,
-          price: item.price,
-          status: "scheduled",
-        });
+        const { data: insertedAppointmentService, error: servicesError } = await supabase
+          .from("appointment_services")
+          .insert({
+            appointment_id: appointment.id,
+            service_id: item.type === "service" ? item.itemId : null,
+            package_id: item.type === "package" ? item.itemId : null,
+            service_name: item.name,
+            duration_minutes: item.durationMinutes || 60,
+            price: item.price,
+            status: "scheduled",
+          })
+          .select("id")
+          .single();
 
         if (servicesError) console.error("Error adding appointment service:", servicesError);
+
+        if (isPackageCoveredRequested) {
+          // The appointment above was already optimistically inserted with
+          // total_amount 0 for this line -- confirm that's warranted by
+          // actually reserving the credit, or correct it back up to the
+          // full price rather than leave the customer under-billed.
+          let reservationFailed = !insertedAppointmentService?.id;
+          if (!reservationFailed) {
+            const { error: rpcError } = await supabase.rpc("reserve_customer_package_credit", {
+              p_appointment_id: appointment.id,
+              p_service_id: item.itemId,
+              p_appointment_service_id: insertedAppointmentService!.id,
+            });
+            if (rpcError) {
+              console.error("Failed to reserve package credit for item", item.id, rpcError);
+              reservationFailed = true;
+            }
+          }
+
+          if (reservationFailed) {
+            failedPackageCreditItemNames.push(item.name);
+            await supabase.from("appointments").update({ total_amount: lineTotal }).eq("id", appointment.id);
+          } else {
+            packageCoveredDiscount += lineTotal;
+            confirmedPackageCoveredItemIds.add(item.id);
+          }
+        }
       }
 
       if (item.type === "product") {
@@ -1034,6 +1109,11 @@ serve(async (req) => {
 
     }
 
+    // Reflects only confirmed (RPC-succeeded) package-credit coverage -- a
+    // line that fell back to full price above is already excluded from
+    // packageCoveredDiscount, so this doesn't need to re-check failures.
+    const adjustedChargeableTotal = Math.max(0, chargeableTotal - packageCoveredDiscount);
+
     const selectedBalanceAmount = Number(
       splitPurseAmount && splitPurseAmount > 0
         ? splitPurseAmount
@@ -1043,7 +1123,7 @@ serve(async (req) => {
     );
     const totalBalanceReservation = Math.min(
       Math.max(0, voucherBalanceAmount + selectedBalanceAmount),
-      chargeableTotal,
+      adjustedChargeableTotal,
     );
 
     if (!approvalRequired && totalBalanceReservation > 0 && createdAppointmentIds[0]) {
@@ -1090,7 +1170,14 @@ serve(async (req) => {
 
     const primaryAppointmentId = createdAppointmentIds[0] ?? null;
     const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
-    const bookingSummaryHtml = renderBookingSummary(items, settlementCurrency);
+    const bookingSummaryHtml = renderBookingSummary(items, settlementCurrency, confirmedPackageCoveredItemIds);
+    if (failedPackageCreditItemNames.length > 0) {
+      console.warn(
+        "create-public-booking: package credit redemption failed for",
+        failedPackageCreditItemNames.join(", "),
+        "-- those lines were charged full price instead.",
+      );
+    }
     const hasServiceLikeItems = items.some((item) => item.type === "service" || item.type === "package");
     const hasProductOnlyItems = items.every((item) => item.type === "product");
     const hasPackageOnlyItems = items.every((item) => item.type === "package");
@@ -1240,6 +1327,7 @@ serve(async (req) => {
           : `We've received your ${emailOrderNoun} with <strong>${tenant.name}</strong>.`;
 
       const voucherLineHtml = buildVoucherLineHtml(voucherCode, promotionalDiscount, settlementCurrency);
+      const packageCreditLineHtml = buildPackageCreditLineHtml(packageCoveredDiscount, settlementCurrency);
 
       const itemsHtml = orderKind === "order"
         ? items.map((item) => buildProductItemCardHtml(item, settlementCurrency)).join("")
@@ -1253,9 +1341,10 @@ serve(async (req) => {
         ? `<div style="margin-top:18px;padding-top:14px;border-top:1px solid ${EMAIL_STYLES.borderColor};">` +
             paragraph(`<strong>Subtotal:</strong> ${settlementCurrency} ${totalAmount.toFixed(2)}`) +
             voucherLineHtml +
-            paragraph(`<strong>Total:</strong> ${settlementCurrency} ${chargeableTotal.toFixed(2)}`) +
+            packageCreditLineHtml +
+            paragraph(`<strong>Total:</strong> ${settlementCurrency} ${adjustedChargeableTotal.toFixed(2)}`) +
           `</div>`
-        : voucherLineHtml + paragraph(`<strong>Total:</strong> ${settlementCurrency} ${chargeableTotal.toFixed(2)}`);
+        : voucherLineHtml + packageCreditLineHtml + paragraph(`<strong>Total:</strong> ${settlementCurrency} ${adjustedChargeableTotal.toFixed(2)}`);
 
       const result = await sendResendEmail({
         resendApiKey,
@@ -1346,7 +1435,10 @@ serve(async (req) => {
             (promotionalDiscount > 0
               ? paragraph(`<strong>Voucher discount:</strong> -${settlementCurrency} ${promotionalDiscount.toFixed(2)}`)
               : "") +
-            paragraph(`<strong>Total:</strong> ${settlementCurrency} ${chargeableTotal.toFixed(2)}`) +
+            (packageCoveredDiscount > 0
+              ? paragraph(`<strong>Package credit applied:</strong> -${settlementCurrency} ${packageCoveredDiscount.toFixed(2)}`)
+              : "") +
+            paragraph(`<strong>Total:</strong> ${settlementCurrency} ${adjustedChargeableTotal.toFixed(2)}`) +
             `<div style="margin: 24px 0;">${bookingSummaryHtml}</div>` +
             reviewActionsHtml,
           log: {

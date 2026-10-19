@@ -19,13 +19,6 @@ const upcomingBooking = {
   tenant: { id: "tenant-1", name: "Adjoa's Studio", currency: "GHS" },
 };
 
-const completedBooking = {
-  ...upcomingBooking,
-  id: "booking-completed",
-  status: "completed",
-  scheduled_start: "2026-07-20T10:00:00.000Z",
-};
-
 vi.mock("@/hooks", () => ({
   useClientAuth: () => ({
     customers: [
@@ -39,23 +32,17 @@ vi.mock("@/hooks", () => ({
           name: "Adjoa's Studio",
           currency: "GHS",
           country: "Ghana",
+          slug: "adjoas-studio",
         },
       },
     ],
     isLoading: false,
   }),
-  useClientBookings: (filter: string) =>
-    filter === "completed"
-      ? {
-          bookings: [completedBooking],
-          nextAppointment: undefined,
-          isLoading: false,
-        }
-      : {
-          bookings: [upcomingBooking],
-          nextAppointment: upcomingBooking,
-          isLoading: false,
-        },
+  useClientBookings: () => ({
+    bookings: [upcomingBooking],
+    nextAppointment: upcomingBooking,
+    isLoading: false,
+  }),
   useClientBalance: () => ({
     packages: [
       {
@@ -80,6 +67,24 @@ vi.mock("@/hooks", () => ({
     purses: [{ customer_id: "customer-1", balance: 50 }],
     isLoading: false,
   }),
+  useClientVouchers: () => ({
+    vouchers: [{ id: "voucher-1", status: "active", balance: 25, expires_at: null }],
+    isLoading: false,
+  }),
+  isVoucherUnused: (voucher: { status: string }) => voucher.status === "active",
+  useClientTransactions: () => ({
+    transactions: [
+      {
+        id: "tx-1",
+        type: "payment",
+        amount: 200,
+        currency: "GHS",
+        created_at: "2026-07-20T10:00:00.000Z",
+        tenant: { id: "tenant-1", name: "Adjoa's Studio" },
+      },
+    ],
+    isLoading: false,
+  }),
 }));
 
 vi.mock("@/components/ClientSidebar", () => ({
@@ -98,10 +103,10 @@ describe("ClientDashboard", () => {
 
     expect(screen.getByText(/Hi Efua, your next visit/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Upcoming bookings" })).toBeInTheDocument();
-    expect(screen.getAllByText("Boho Braids")).toHaveLength(2);
-    expect(screen.getByText("Starter braid pack")).toBeInTheDocument();
+    expect(screen.getAllByText("Boho Braids")).toHaveLength(1);
+    expect(screen.getByRole("heading", { name: "Your entitlements" })).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument(); // remaining package sessions
     expect(screen.getByRole("heading", { name: "Salons you visit" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Visit history" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Store credit" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Recent activity" })).toBeInTheDocument();
   });
 });
