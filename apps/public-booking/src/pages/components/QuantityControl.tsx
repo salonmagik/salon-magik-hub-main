@@ -24,7 +24,10 @@ export function QuantityControl({
         variant="outline"
         size="icon"
         className={buttonSize}
-        onClick={onDecrement}
+        onClick={(e) => {
+          e.stopPropagation();
+          onDecrement();
+        }}
       >
         <Minus className={iconSize} />
       </Button>
@@ -33,7 +36,10 @@ export function QuantityControl({
         variant="outline"
         size="icon"
         className={buttonSize}
-        onClick={onIncrement}
+        onClick={(e) => {
+          e.stopPropagation();
+          onIncrement();
+        }}
       >
         <Plus className={iconSize} />
       </Button>
