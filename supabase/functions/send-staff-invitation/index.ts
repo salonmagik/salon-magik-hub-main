@@ -332,6 +332,34 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
+      // Default to every one of the tenant's locations so a brand-new staff
+      // member is immediately eligible for bookings everywhere (public
+      // booking's staff dropdown filters by staff_locations -- without this,
+      // a new hire is invisible there until someone separately visits the
+      // edit-staff locations tab, which chain tenants only reach manually and
+      // single-location tenants may never reach at all). An owner/manager can
+      // narrow this down afterwards via the existing locations tab.
+      const { data: tenantLocations, error: locationsError } = await serviceRoleClient
+        .from("locations")
+        .select("id")
+        .eq("tenant_id", tenantId);
+
+      if (locationsError) {
+        console.error("Error fetching tenant locations for staff assignment:", locationsError);
+      } else if (tenantLocations && tenantLocations.length > 0) {
+        const { error: staffLocationsError } = await serviceRoleClient.from("staff_locations").insert(
+          tenantLocations.map((location) => ({
+            user_id: createdUserId,
+            location_id: location.id,
+            tenant_id: tenantId,
+          }))
+        );
+
+        if (staffLocationsError) {
+          console.error("Error assigning default staff locations:", staffLocationsError);
+        }
+      }
+
       // Create the invitation record
       const { data: newInvitation, error: insertError } = await supabase
         .from("staff_invitations")

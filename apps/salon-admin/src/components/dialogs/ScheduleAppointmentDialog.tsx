@@ -11,7 +11,7 @@ import { User, Plus, Check, Loader2 } from "lucide-react";
 import { AddCustomerDialog } from "./AddCustomerDialog";
 import { AddServiceDialog } from "./AddServiceDialog";
 import { AppointmentNotesInput } from "@/components/notes/AppointmentNotesInput";
-import { useCustomers } from "@/hooks/useCustomers";
+import { useBookableCustomers } from "@/hooks/useBookableCustomers";
 import { useServices } from "@/hooks/useServices";
 import { useStaff } from "@/hooks/useStaff";
 import { useLocations } from "@/hooks/useLocations";
@@ -64,7 +64,7 @@ export function ScheduleAppointmentDialog({ open, onOpenChange, onSuccess, initi
   });
   const [selectedServices, setSelectedServices] = useState<SelectedService[]>([]);
 
-  const { customers, isLoading: customersLoading, refetch: refetchCustomers } = useCustomers();
+  const { customers, isLoading: customersLoading, refetch: refetchCustomers } = useBookableCustomers();
   const { services, isLoading: servicesLoading, refetch: refetchServices } = useServices(formData.locationId);
   const { staff, isLoading: staffLoading } = useStaff();
   const { locations, defaultLocation } = useLocations();
