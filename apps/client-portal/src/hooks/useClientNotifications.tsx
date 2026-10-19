@@ -3,6 +3,44 @@ import { supabase } from "@/lib/supabase";
 import { useClientAuth } from "./useClientAuth";
 import { toast } from "@ui/ui/use-toast";
 
+// Mirrors salon-admin's useNotifications chime (synthesized, not an audio
+// asset) so a client gets the same audible "something arrived" signal --
+// e.g. a refund rejection -- with the same swiftness as the salon side.
+// Browsers suspend AudioContext until the user has interacted with the page
+// at least once, so the very first notification of a session may play
+// silently; expected, not a bug.
+let chimeContext: AudioContext | null = null;
+
+function playNotificationChime() {
+  try {
+    if (!chimeContext) {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      chimeContext = new AudioContextClass();
+    }
+    if (chimeContext.state === "suspended") {
+      void chimeContext.resume();
+    }
+    const now = chimeContext.currentTime;
+    [880, 1318.51].forEach((frequency, index) => {
+      const oscillator = chimeContext!.createOscillator();
+      const gain = chimeContext!.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+      const startAt = now + index * 0.09;
+      gain.gain.setValueAtTime(0, startAt);
+      gain.gain.linearRampToValueAtTime(0.15, startAt + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, startAt + 0.22);
+      oscillator.connect(gain);
+      gain.connect(chimeContext!.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + 0.24);
+    });
+  } catch (err) {
+    console.error("Failed to play notification chime:", err);
+  }
+}
+
 export interface ClientNotification {
   id: string;
   tenant_id: string;
@@ -80,6 +118,8 @@ export function useClientNotifications() {
         (payload) => {
           const newNotification = payload.new as ClientNotification;
           setNotifications((prev) => [newNotification, ...prev]);
+
+          playNotificationChime();
 
           // Show toast for urgent notifications
           if (newNotification.urgent) {

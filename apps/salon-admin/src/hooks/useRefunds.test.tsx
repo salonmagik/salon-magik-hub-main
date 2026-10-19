@@ -29,6 +29,10 @@ vi.mock("@/lib/supabase", () => ({
     functions: {
       invoke: (name: string, opts: unknown) => invokeMock(name, opts),
     },
+    channel: () => ({
+      on: () => ({ subscribe: () => ({}) }),
+    }),
+    removeChannel: () => {},
   },
 }));
 
