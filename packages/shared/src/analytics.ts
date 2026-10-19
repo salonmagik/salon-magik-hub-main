@@ -2,6 +2,26 @@ import posthog from "posthog-js";
 
 let isInitialized = false;
 
+// Our own record of whether a visitor has made a cookie-consent choice at
+// all, separate from PostHog's own opt-in/opt-out state. We init with
+// opt_out_capturing_by_default: true, so a fresh visitor and someone who
+// explicitly declined are otherwise indistinguishable from posthog-js's own
+// public API -- this flag is what the consent banner checks to know
+// whether to show itself at all.
+const CONSENT_STORAGE_KEY = "sm_analytics_consent";
+type ConsentDecision = "granted" | "denied";
+
+function readConsentDecision(): ConsentDecision | null {
+  if (typeof window === "undefined") return null;
+  const value = window.localStorage.getItem(CONSENT_STORAGE_KEY);
+  return value === "granted" || value === "denied" ? value : null;
+}
+
+function writeConsentDecision(decision: ConsentDecision): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CONSENT_STORAGE_KEY, decision);
+}
+
 // This project's branch-promotion pipeline (development-only -> main ->
 // release) maps to three real environments, not two: local dev, a
 // staging.salonmagik.com deploy, and the real production domain -- a built
@@ -45,11 +65,44 @@ export function initAnalytics(options: {
     person_profiles: "identified_only",
     capture_pageview: true,
     capture_pageleave: true,
+    // Nothing is captured until a visitor explicitly consents -- see
+    // the consent helpers below and <CookieConsentBanner>.
+    opt_out_capturing_by_default: true,
     loaded: (ph) => {
       ph.register({ app: options.appName, environment });
+      // A returning visitor who already granted consent in a prior session
+      // shouldn't be re-opted-out just because this is a fresh page load.
+      if (readConsentDecision() === "granted") ph.opt_in_capturing();
     },
   });
   isInitialized = true;
+}
+
+// Whether this visitor has made ANY cookie-consent choice yet (accept or
+// decline) -- used by <CookieConsentBanner> to decide whether to show
+// itself at all. Distinct from PostHog's own opted-in/out state, which
+// can't tell "never asked" apart from "declined" once opt_out_capturing_
+// by_default is on.
+export function hasAnalyticsConsentDecision(): boolean {
+  return readConsentDecision() !== null;
+}
+
+// Nothing to ask consent for if this app has no VITE_POSTHOG_KEY set (e.g.
+// a local dev checkout before the key's been filled in) -- the consent
+// banner should stay hidden entirely rather than ask about a tracker that
+// was never loaded.
+export function isAnalyticsInitialized(): boolean {
+  return isInitialized;
+}
+
+export function grantAnalyticsConsent(): void {
+  writeConsentDecision("granted");
+  if (isInitialized) posthog.opt_in_capturing();
+}
+
+export function revokeAnalyticsConsent(): void {
+  writeConsentDecision("denied");
+  if (isInitialized) posthog.opt_out_capturing();
 }
 
 // Thin wrappers so call sites never need to import posthog-js directly or

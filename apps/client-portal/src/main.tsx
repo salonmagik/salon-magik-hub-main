@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { initAnalytics } from "@shared/analytics";
+import { CookieConsentBanner } from "@shared/CookieConsentBanner";
 import App from "./App";
 import "./index.css";
 
@@ -14,5 +15,6 @@ initAnalytics({
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <App />
+    <CookieConsentBanner />
   </React.StrictMode>
 );

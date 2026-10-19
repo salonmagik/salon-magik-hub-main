@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initAnalytics } from "@shared/analytics";
+import { CookieConsentBanner } from "@shared/CookieConsentBanner";
 import App from "./App";
 import "./index.css";
 
@@ -33,5 +34,6 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
 		<QueryClientProvider client={queryClient}>
 			<App />
 		</QueryClientProvider>
+		<CookieConsentBanner />
 	</React.StrictMode>,
 );

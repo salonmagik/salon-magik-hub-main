@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { initAnalytics } from "@shared/analytics";
+import { CookieConsentBanner } from "@shared/CookieConsentBanner";
 import App from "./App.tsx";
 import "./index.css";
 
@@ -10,4 +11,9 @@ initAnalytics({
   mode: import.meta.env.MODE,
 });
 
-createRoot(document.getElementById("root")!).render(<App />);
+createRoot(document.getElementById("root")!).render(
+  <>
+    <App />
+    <CookieConsentBanner />
+  </>,
+);

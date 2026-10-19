@@ -10,3 +10,4 @@ export * from "./address-geography";
 export * from "./ProductAnnouncementCard";
 export * from "./order-kind";
 export * from "./analytics";
+export * from "./CookieConsentBanner";
