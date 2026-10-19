@@ -19,6 +19,7 @@ interface RefundViaPaystackRequest {
   requestId?: string | null;
   refundType?: RefundType;
   idempotencyKey?: string | null;
+  cancelAppointment?: boolean;
 }
 
 const REFUND_TYPES: RefundType[] = ["paystack", "store_credit", "offline"];
@@ -52,7 +53,7 @@ export async function handleRefundViaPaystack(
     } catch {
       return json({ error: "Invalid JSON body", code: "INVALID_REQUEST" }, 400);
     }
-    const { transactionId, amount, reason, requestId, idempotencyKey } = body;
+    const { transactionId, amount, reason, requestId, idempotencyKey, cancelAppointment } = body;
     const refundType: RefundType = body.refundType || "paystack";
 
     if (refundType === "paystack") {
@@ -106,6 +107,7 @@ export async function handleRefundViaPaystack(
     const { data: result, error: refundError } = await serviceSupabase.rpc("complete_local_refund", {
       p_transaction_id: transactionId, p_amount: amount, p_refund_type: refundType,
       p_reason: reason.trim(), p_actor_id: user.id, p_key: debitIdempotencyKey, p_request_id: requestId || null,
+      p_cancel_appointment: Boolean(cancelAppointment),
     });
     if (refundError) throw refundError;
 

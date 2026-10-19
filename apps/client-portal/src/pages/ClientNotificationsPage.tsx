@@ -14,7 +14,7 @@ function getNotificationRoute(notification: ClientNotification): string | null {
   if (notification.entity_type === "appointment" && notification.entity_id) {
     return `/bookings/${notification.entity_id}`;
   }
-  if (notification.type === "payment") return "/history";
+  if (notification.type === "payment" || notification.type === "refund_request") return "/history";
   return null;
 }
 

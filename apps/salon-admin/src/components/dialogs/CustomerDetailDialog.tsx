@@ -148,7 +148,8 @@ export function CustomerDetailDialog({
   onOpenChange,
   customer,
 }: CustomerDetailDialogProps) {
-  const { currentTenant } = useAuth();
+  const { currentTenant, currentRole } = useAuth();
+  const canViewSalonBalance = currentRole !== "staff";
   const { invoices, isLoading: invoicesLoading, sendInvoice, refetch: refetchInvoices } = useInvoices();
 
   const [sendMessageDialogOpen, setSendMessageDialogOpen] = useState(false);
@@ -408,7 +409,9 @@ export function CustomerDetailDialog({
               <TabsTrigger value="notes" className="h-10 shrink-0 rounded-full px-6">Notes</TabsTrigger>
               <TabsTrigger value="messages" className="h-10 shrink-0 rounded-full px-6">Messages</TabsTrigger>
               <TabsTrigger value="transactions" className="h-10 shrink-0 rounded-full px-6">Transactions</TabsTrigger>
-              <TabsTrigger value="purse" className="h-10 shrink-0 rounded-full px-6">Store Credit</TabsTrigger>
+              {canViewSalonBalance && (
+                <TabsTrigger value="purse" className="h-10 shrink-0 rounded-full px-6">Store Credit</TabsTrigger>
+              )}
             </TabsList>
 
             <TabsContent value="overview" className="mt-4 space-y-4">
@@ -449,24 +452,26 @@ export function CustomerDetailDialog({
 
               {/* Quick Stats */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Card className="rounded-[14px] border-border/60 shadow-none">
-                  <CardContent className="p-5">
-                    <div className="flex items-center gap-1">
-                      <p className="text-sm text-muted-foreground">Store credit</p>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-3 w-3 text-muted-foreground cursor-default" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-56 text-xs">
-                          This customer's combined salon balance: paid funds plus salon-issued credit, added together.
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <p className="mt-1 font-serif text-2xl font-semibold">
-                      {currencySymbol}{Number(purse?.balance || 0).toFixed(2)}
-                    </p>
-                  </CardContent>
-                </Card>
+                {canViewSalonBalance && (
+                  <Card className="rounded-[14px] border-border/60 shadow-none">
+                    <CardContent className="p-5">
+                      <div className="flex items-center gap-1">
+                        <p className="text-sm text-muted-foreground">Store credit</p>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-56 text-xs">
+                            This customer's combined salon balance: paid funds plus salon-issued credit, added together.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <p className="mt-1 font-serif text-2xl font-semibold">
+                        {currencySymbol}{Number(purse?.balance || 0).toFixed(2)}
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
                 <Card className="rounded-[14px] border-border/60 shadow-none">
                   <CardContent className="p-5">
                     <div className="flex items-center gap-1">
@@ -931,6 +936,8 @@ export function CustomerDetailDialog({
             </TabsContent>
 
             <TabsContent value="purse" className="mt-4">
+              {!canViewSalonBalance ? null : (
+              <>
               <Card className="mb-4">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-1">
@@ -995,6 +1002,8 @@ export function CustomerDetailDialog({
                     );
                   })}
                 </div>
+              )}
+              </>
               )}
             </TabsContent>
           </Tabs>

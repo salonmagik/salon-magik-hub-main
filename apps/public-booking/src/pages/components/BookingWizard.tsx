@@ -655,7 +655,6 @@ export function BookingWizard({
         lastName: data.profile.lastName || prev.lastName,
         email: data.profile.email || prev.email,
         phone: data.profile.phone || prev.phone,
-        notes: data.profile.notes || prev.notes,
         deliveryAddress: data.profile.deliveryAddress || prev.deliveryAddress,
       }));
     }

@@ -4,7 +4,18 @@ import { RequestRefundDialog } from "./RequestRefundDialog";
 
 const { rpcMock, invokeMock } = vi.hoisted(() => ({ rpcMock: vi.fn(), invokeMock: vi.fn() }));
 vi.mock("@/lib/supabase", () => ({
-  supabase: { from: () => ({ select: () => ({ eq: () => ({ in: vi.fn().mockResolvedValue({ data: [], error: null }) }) }) }), rpc: rpcMock, functions: { invoke: invokeMock } },
+  supabase: {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          in: vi.fn().mockResolvedValue({ data: [], error: null }),
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        }),
+      }),
+    }),
+    rpc: rpcMock,
+    functions: { invoke: invokeMock },
+  },
 }));
 vi.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ currentTenant: { id: "tenant-1", currency: "GHS" } }) }));
 

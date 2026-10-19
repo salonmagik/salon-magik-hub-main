@@ -76,7 +76,7 @@ serve(async (req) => {
 
     const { data: customer, error: customerError } = await admin
       .from("customers")
-      .select("id, full_name, email, phone, notes, user_id")
+      .select("id, full_name, email, phone, user_id")
       .eq("tenant_id", tenantId)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -138,7 +138,6 @@ serve(async (req) => {
           lastName,
           email: customer.email || user.email,
           phone: customer.phone || "",
-          notes: customer.notes || "",
           deliveryAddress,
         },
       }),

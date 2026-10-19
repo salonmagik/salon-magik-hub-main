@@ -46,6 +46,7 @@ export function useCustomers() {
         .from("customers")
         .select("*")
         .eq("tenant_id", currentTenant.id)
+        .neq("status", "deleted")
         .order("full_name", { ascending: true });
 
       if (fetchError) throw fetchError;
@@ -165,6 +166,24 @@ export function useCustomers() {
           variant: "destructive",
         });
         return null;
+      }
+
+      // A re-entry under a different phone number/email won't trip the exact
+      // match above, so fall back to an exact name match as a softer signal
+      // -- names can legitimately collide, so this warns rather than blocks.
+      const normalizedName = data.fullName.trim().toLowerCase();
+      const nameMatch = normalizedName
+        ? (existingCustomers || []).find(
+            (customer) =>
+              customer.status !== "deleted" && (customer.full_name || "").trim().toLowerCase() === normalizedName,
+          )
+        : undefined;
+
+      if (nameMatch) {
+        const proceed = window.confirm(
+          `A customer named "${nameMatch.full_name}" already exists in your salon with different contact info. Add this as a separate customer anyway?`,
+        );
+        if (!proceed) return null;
       }
 
       const { data: customer, error } = await supabase

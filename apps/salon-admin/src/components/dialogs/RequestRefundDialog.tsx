@@ -12,6 +12,7 @@ import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Textarea } from "@ui/textarea";
+import { Checkbox } from "@ui/checkbox";
 import { Alert, AlertDescription } from "@ui/alert";
 import { CircleDollarSign, Loader2, RotateCcw, TriangleAlert, WalletCards } from "lucide-react";
 import { FunctionsHttpError } from "@supabase/supabase-js";
@@ -100,6 +101,12 @@ export function RequestRefundDialog({
   const [maxRefundAmount, setMaxRefundAmount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [appointmentInfo, setAppointmentInfo] = useState<{
+    status: string;
+    amountPaid: number;
+    scheduledStart: string | null;
+  } | null>(null);
+  const [cancelAppointmentChoice, setCancelAppointmentChoice] = useState(false);
   const idempotencyKeyRef = useRef<string>(generateUUID());
 
   const currency = transaction?.currency || currentTenant?.currency || "USD";
@@ -116,7 +123,13 @@ export function RequestRefundDialog({
     setErrorMessage("");
     setAmount(request ? String(request.amount) : "");
     setReason(request?.reason || "");
-    setRefundType(request?.refund_type === "offline" ? "offline" : "store_credit");
+    // A customer-submitted request always has refund_type hardcoded to
+    // "offline" server-side (clients never actually choose a method), so it
+    // isn't a real signal of the salon's preference -- always default the
+    // approval dialog to salon balance and let the salon switch it manually.
+    setRefundType("store_credit");
+    setAppointmentInfo(null);
+    setCancelAppointmentChoice(false);
     idempotencyKeyRef.current = generateUUID();
 
     const loadRefundableAmount = async () => {
@@ -139,8 +152,33 @@ export function RequestRefundDialog({
       setIsLoading(false);
     };
 
+    const loadAppointmentInfo = async () => {
+      if (!transaction.appointment_id) return;
+      const { data } = await supabase
+        .from("appointments")
+        .select("status, amount_paid, scheduled_start")
+        .eq("id", transaction.appointment_id)
+        .maybeSingle();
+      if (data) {
+        setAppointmentInfo({
+          status: data.status,
+          amountPaid: Number(data.amount_paid || 0),
+          scheduledStart: data.scheduled_start,
+        });
+      }
+    };
+
     void loadRefundableAmount();
+    void loadAppointmentInfo();
   }, [open, request, transaction, mode]);
+
+  const isAppointmentCancellable = mode === "complete" && appointmentInfo?.status === "scheduled";
+  const isFullRefund = isAppointmentCancellable && appointmentInfo
+    ? appointmentInfo.amountPaid - numericAmount <= 0
+    : false;
+  const isUpcomingAppointment = Boolean(
+    appointmentInfo?.scheduledStart && new Date(appointmentInfo.scheduledStart).getTime() > Date.now(),
+  );
 
   const validationMessage = useMemo(() => {
     if (!amount || !Number.isFinite(numericAmount) || numericAmount <= 0) {
@@ -177,6 +215,7 @@ export function RequestRefundDialog({
             requestId: request?.id || null,
             refundType,
             idempotencyKey: idempotencyKeyRef.current,
+            cancelAppointment: isFullRefund || cancelAppointmentChoice,
           },
         });
         if (error) throw await extractRefundError(error);
@@ -298,6 +337,25 @@ export function RequestRefundDialog({
                       Salon Magik records this refund but does not send money to the customer. Confirm the cash or transfer separately.
                     </AlertDescription>
                   </Alert>
+                )}
+                {isAppointmentCancellable && isFullRefund && (
+                  <Alert>
+                    <AlertDescription>
+                      This refund will cancel the {isUpcomingAppointment ? "upcoming appointment" : "appointment"}.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {isAppointmentCancellable && !isFullRefund && (
+                  <label className="flex items-start gap-2 rounded-lg border p-3 text-sm">
+                    <Checkbox
+                      checked={cancelAppointmentChoice}
+                      onCheckedChange={(checked) => setCancelAppointmentChoice(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <span>
+                      Also cancel the {isUpcomingAppointment ? "upcoming appointment" : "appointment"}
+                    </span>
+                  </label>
                 )}
               </div>
             ) : (

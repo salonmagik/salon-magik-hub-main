@@ -68,6 +68,35 @@ export function useRefunds() {
     fetchRefunds();
   }, [fetchRefunds]);
 
+  // Clicking a refund-request notification just navigates to this page --
+  // if it's already mounted that's a no-op, so without this the "N refund
+  // request(s) need review" banner stayed stale until a hard refresh even
+  // though the notification bell (which has its own separate realtime
+  // subscription) had already fired.
+  useEffect(() => {
+    if (!currentTenant?.id) return;
+
+    const channel = supabase
+      .channel(`refund-requests-${currentTenant.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "refund_requests",
+          filter: `tenant_id=eq.${currentTenant.id}`,
+        },
+        () => {
+          fetchRefunds();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentTenant?.id, fetchRefunds]);
+
   const approveRefund = async (refundId: string) => {
     if (!currentTenant?.id || !user?.id) return false;
 
