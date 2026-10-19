@@ -31,6 +31,8 @@ interface ReviewStepProps {
   onPurseApplied: (amount: number) => void;
   selectedCountryCode?: string | null;
   subtotal: number;
+  packageCreditAmount?: number;
+  packageCoveredItemIds?: Set<string>;
   voucherDiscount: number;
   afterVoucher: number;
   afterPurse: number;
@@ -53,6 +55,8 @@ export function ReviewStep({
   onPurseApplied,
   selectedCountryCode,
   subtotal,
+  packageCreditAmount = 0,
+  packageCoveredItemIds,
   voucherDiscount,
   afterVoucher,
   afterPurse,
@@ -101,9 +105,17 @@ export function ReviewStep({
                     </div>
                   </div>
                   <span className="font-serif font-semibold whitespace-nowrap">
-                    {formatCurrency(item.price * item.quantity, salon.currency)}
+                    {packageCoveredItemIds?.has(item.id) ? (
+                      <span className="text-success">{formatCurrency(0, salon.currency)}</span>
+                    ) : (
+                      formatCurrency(item.price * item.quantity, salon.currency)
+                    )}
                   </span>
                 </div>
+
+                {packageCoveredItemIds?.has(item.id) && (
+                  <div className="text-xs text-success">Covered by package credit</div>
+                )}
 
                 {item.scheduleMode === "schedule_now" && item.scheduledDate && item.scheduledTime && (
                   <div className="text-xs text-muted-foreground flex flex-wrap gap-3">
@@ -234,6 +246,12 @@ export function ReviewStep({
           <span>Subtotal</span>
           <span>{formatCurrency(subtotal, salon.currency)}</span>
         </div>
+        {packageCreditAmount > 0 && (
+          <div className="flex justify-between text-sm text-success">
+            <span>Package credit applied</span>
+            <span>&minus;{formatCurrency(packageCreditAmount, salon.currency)}</span>
+          </div>
+        )}
         {voucherDiscount > 0 && (
           <div className="flex justify-between text-sm text-success">
             <span>Voucher discount</span>

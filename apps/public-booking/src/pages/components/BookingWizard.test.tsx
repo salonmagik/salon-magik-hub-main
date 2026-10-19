@@ -32,6 +32,10 @@ vi.mock("@/hooks", () => ({
     data: [],
     isLoading: false,
   }),
+  useCustomerPackageCredits: () => ({
+    creditsByServiceId: new Map(),
+    isLoading: false,
+  }),
 }));
 
 vi.mock("./CartStep", () => ({ CartStep: () => <div>Cart step</div> }));

@@ -14,6 +14,7 @@ import { validateE164Phone } from "@shared/validation";
 import {
   useBookingCart,
   useDepositCalculation,
+  useCustomerPackageCredits,
   type PublicTenant,
   type PublicLocation,
   type GiftRecipient,
@@ -220,6 +221,17 @@ export function BookingWizard({
   const [bookerHasExistingAccount, setBookerHasExistingAccount] = useState(false);
   const [bookerResendAvailableAt, setBookerResendAvailableAt] = useState<string | null>(null);
   const [bookerOtpCountdown, setBookerOtpCountdown] = useState(0);
+  // Cart item ids currently toggled to redeem a package credit instead of
+  // paying -- only ever populated once customerId resolves to a real,
+  // tenant-scoped customer with matching entitlements (see
+  // packageCreditsByServiceId below); a guest or an identified customer
+  // with no entitlements never sees anything different.
+  const [packageCoveredItemIds, setPackageCoveredItemIds] = useState<Set<string>>(new Set());
+  const { creditsByServiceId: packageCreditsByServiceId } = useCustomerPackageCredits(
+    salon.id,
+    bookerInfo.email,
+    bookerInfo.phone,
+  );
 
   const clearBookingIdentityState = () => {
     setBookerHasExistingAccount(false);
@@ -233,7 +245,36 @@ export function BookingWizard({
     setSplitPurseAmount(0);
     setSplitCardAmount(0);
     setPaymentMode("card");
+    setPackageCoveredItemIds(new Set());
   };
+
+  const handleTogglePackageCredit = (itemId: string, checked: boolean) => {
+    setPackageCoveredItemIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(itemId);
+      else next.delete(itemId);
+      return next;
+    });
+  };
+
+  // Drop any previously-toggled id that's no longer both in the cart and
+  // backed by real credit for its service -- covers the item being removed
+  // from the cart, its service changing, or the credits map refreshing
+  // (e.g. the same credit got spent redeeming a different line) out from
+  // under a stale toggle.
+  useEffect(() => {
+    setPackageCoveredItemIds((prev) => {
+      if (prev.size === 0) return prev;
+      const next = new Set<string>();
+      for (const id of prev) {
+        const item = items.find((entry) => entry.id === id);
+        if (item && item.type === "service" && packageCreditsByServiceId.get(item.itemId)) {
+          next.add(id);
+        }
+      }
+      return next.size === prev.size ? prev : next;
+    });
+  }, [items, packageCreditsByServiceId]);
 
   useEffect(() => {
     if (!bookerResendAvailableAt) {
@@ -339,8 +380,18 @@ export function BookingWizard({
   const requiresApproval = salon.auto_confirm_bookings === false;
 
   const subtotal = getTotal();
+  // Toggling a line to redeem a package credit zeroes its own contribution
+  // to the total -- total = sum of price for non-covered lines + products/
+  // other items -- computed here, before the voucher/purse chain, so every
+  // downstream amount (including amountDueNow, which is sent to the backend
+  // as the literal Paystack charge) already nets it out.
+  const packageCreditAmount = items.reduce((sum, item) => {
+    if (!packageCoveredItemIds.has(item.id)) return sum;
+    return sum + item.price * item.quantity;
+  }, 0);
+  const afterPackageCredit = Math.max(0, subtotal - packageCreditAmount);
   const voucherDiscount = appliedVoucher?.discountAmount || 0;
-  const afterVoucher = Math.max(0, subtotal - voucherDiscount);
+  const afterVoucher = Math.max(0, afterPackageCredit - voucherDiscount);
   const afterPurse = Math.max(0, afterVoucher - purseAmount);
   const depositAmount = Math.min(depositCalc.depositAmount, afterPurse);
 
@@ -796,6 +847,7 @@ export function BookingWizard({
         purseAmount: purseAmountForBackend,
         depositAmount: paymentOption === "pay_deposit" ? depositAmount : 0,
         giftsBelongToSamePerson: meta.giftsBelongToSamePerson,
+        packageCoveredItemIds: Array.from(packageCoveredItemIds),
       };
 
       // Add payment session creation parameters if needed
@@ -998,6 +1050,7 @@ export function BookingWizard({
       setAppliedVoucher(null);
       setPurseAmount(0);
       setPaymentOption("pay_now");
+      setPackageCoveredItemIds(new Set());
       updateMeta({ giftsBelongToSamePerson: true });
     }
     onOpenChange(false);
@@ -1090,6 +1143,9 @@ export function BookingWizard({
               <CartStep
                 currency={currency}
                 onBrowse={handleClose}
+                packageCreditsByServiceId={packageCreditsByServiceId}
+                packageCoveredItemIds={packageCoveredItemIds}
+                onTogglePackageCredit={handleTogglePackageCredit}
               />
             )}
 
@@ -1177,6 +1233,8 @@ export function BookingWizard({
                 onPurseApplied={setPurseAmount}
                 selectedCountryCode={selectedCountryCode}
                 subtotal={subtotal}
+                packageCreditAmount={packageCreditAmount}
+                packageCoveredItemIds={packageCoveredItemIds}
                 voucherDiscount={voucherDiscount}
                 afterVoucher={afterVoucher}
                 afterPurse={afterPurse}
@@ -1302,7 +1360,11 @@ export function BookingWizard({
                     </p>
                   </div>
                   <div className="font-serif font-semibold whitespace-nowrap">
-                    {formatCurrency(item.price * item.quantity, currency)}
+                    {packageCoveredItemIds.has(item.id) ? (
+                      <span className="text-success">{formatCurrency(0, currency)}</span>
+                    ) : (
+                      formatCurrency(item.price * item.quantity, currency)
+                    )}
                   </div>
                 </div>
               ))}
@@ -1312,6 +1374,12 @@ export function BookingWizard({
                 <span>Subtotal</span>
                 <span>{formatCurrency(subtotal, currency)}</span>
               </div>
+              {packageCreditAmount > 0 && (
+                <div className="flex justify-between text-sm text-success">
+                  <span>Package credit applied</span>
+                  <span>&minus;{formatCurrency(packageCreditAmount, currency)}</span>
+                </div>
+              )}
               {onReviewOrPayment && voucherDiscount > 0 && (
                 <div className="flex justify-between text-sm text-success">
                   <span>Voucher discount</span>
