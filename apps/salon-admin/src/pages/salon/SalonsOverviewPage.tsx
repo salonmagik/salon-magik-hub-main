@@ -32,7 +32,7 @@ type ReviewAppointment = {
   scheduled_start: string | null;
   is_unscheduled: boolean;
   location_id: string;
-  customer: { first_name: string | null; last_name: string | null } | null;
+  customer: { full_name: string | null } | null;
 };
 
 export default function SalonsOverviewPage() {
@@ -93,7 +93,7 @@ export default function SalonsOverviewPage() {
     try {
       let query = supabase
         .from("appointments")
-        .select("id, booking_reference, scheduled_start, is_unscheduled, location_id, customer:customers!appointments_customer_id_fkey(first_name,last_name)")
+        .select("id, booking_reference, scheduled_start, is_unscheduled, location_id, customer:customers!appointments_customer_id_fkey(full_name)")
         .eq("tenant_id", currentTenant.id)
         .neq("status", "cancelled")
         .order("scheduled_start", { ascending: true });
@@ -246,7 +246,7 @@ export default function SalonsOverviewPage() {
           <div className={cn(DIALOG_BODY_PADDING, "space-y-2 max-h-[360px] overflow-y-auto")}>
             {reviewAppointments.map((appointment) => {
               const location = locationById.get(appointment.location_id);
-              const name = [appointment.customer?.first_name, appointment.customer?.last_name].filter(Boolean).join(" ") || "Unnamed customer";
+              const name = appointment.customer?.full_name || "Unnamed customer";
               return (
                 <button
                   type="button"
