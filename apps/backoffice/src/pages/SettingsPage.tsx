@@ -1118,15 +1118,15 @@ export default function BackofficeSettingsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-muted-foreground">Name</Label>
-                    <p className="font-medium">{profile?.full_name || "N/A"}</p>
+                    <p className="font-medium">{profile?.full_name || "—"}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Role</Label>
-                    <p className="font-medium capitalize">{backofficeUser?.role?.replace("_", " ") || "N/A"}</p>
+                    <p className="font-medium capitalize">{backofficeUser?.role?.replace("_", " ") || "—"}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">Domain</Label>
-                    <p className="font-medium">{backofficeUser?.email_domain || "N/A"}</p>
+                    <p className="font-medium">{backofficeUser?.email_domain || "—"}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">2FA Status</Label>
@@ -1486,7 +1486,7 @@ export default function BackofficeSettingsPage() {
                           ) : (
                             <>
                               <p className="mt-1 text-2xl font-semibold tabular-nums">
-                                {entry?.sms_balance != null ? entry.sms_balance.toLocaleString() : "N/A"}
+                                {entry?.sms_balance != null ? entry.sms_balance.toLocaleString() : "0"}
                                 <span className="ml-1.5 text-sm font-normal text-muted-foreground">credits</span>
                               </p>
                               {entry?.main_balance && (
@@ -1552,7 +1552,7 @@ export default function BackofficeSettingsPage() {
                             <p className="mt-1 text-2xl font-semibold tabular-nums">
                               {entry?.balance != null && entry.currency
                                 ? formatCurrency(entry.balance, entry.currency)
-                                : "N/A"}
+                                : "—"}
                             </p>
                           )}
                         </div>

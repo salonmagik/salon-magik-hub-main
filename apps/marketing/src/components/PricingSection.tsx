@@ -98,7 +98,7 @@ export function PricingSection({ isWaitlistMode, onWaitlistClick }: PricingSecti
                 )}
               >
                 {annual
-                  ? `Annual · save up to ${plans?.map((p) => getSavingsPct(p.id)).filter(Boolean).reduce((a, b) => Math.max(a!, b!), 0) ?? "N/A"}%/yr`
+								  ? (() => { const maxSavings = plans?.map((p) => getSavingsPct(p.id)).filter((value): value is number => value != null).reduce((a, b) => Math.max(a, b), 0); return maxSavings != null ? `Annual · save up to ${maxSavings}%/yr` : "Annual billing"; })()
                   : "Monthly"}
               </button>
             ))}

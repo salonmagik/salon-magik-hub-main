@@ -23,7 +23,7 @@ export default function ConversionsPage() {
     const fullName = linkedUser?.profiles?.full_name?.trim?.();
     if (fullName) return fullName;
     if (linkedUser?.email_domain) return linkedUser.email_domain;
-    return `Agent (${agent.country_code || "N/A"})`;
+    return `Agent (${agent.country_code || "—"})`;
   };
   const visibleRedemptions = agentFilter === "all"
     ? redemptions

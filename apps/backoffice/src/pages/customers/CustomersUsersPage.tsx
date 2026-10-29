@@ -155,9 +155,9 @@ export default function CustomersUsersPage() {
                   <TableBody>
                     {filteredUsers.map((user) => (
                       <TableRow key={user.user_id} className="h-16">
-                        <TableCell className="font-medium">{user.full_name || "N/A"}</TableCell>
-                        <TableCell className="text-sm">{user.email || "N/A"}</TableCell>
-                        <TableCell className="text-sm">{user.phone || "N/A"}</TableCell>
+                        <TableCell className="font-medium">{user.full_name || "—"}</TableCell>
+                        <TableCell className="text-sm">{user.email || "—"}</TableCell>
+                        <TableCell className="text-sm">{user.phone || "—"}</TableCell>
                         <TableCell>
                           {user.tenant_roles.length === 0 ? (
                             <span className="text-sm text-muted-foreground">No salon</span>

@@ -936,7 +936,7 @@ export default function AppointmentsPage() {
   };
 
   const formatTime = (dateString: string | null) => {
-    if (!dateString) return "N/A";
+    if (!dateString) return "—";
     return new Date(dateString).toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
@@ -1656,7 +1656,7 @@ export default function AppointmentsPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-muted-foreground">N/A</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
                         <TableCell>

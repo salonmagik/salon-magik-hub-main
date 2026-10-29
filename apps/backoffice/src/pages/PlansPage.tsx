@@ -2384,7 +2384,7 @@ export default function PlansPage() {
                                     </p>
                                   </div>
                                 ) : (
-                                  <span className="text-muted-foreground">N/A</span>
+                                  <span className="text-muted-foreground">—</span>
                                 )}
                               </TableCell>
                             );

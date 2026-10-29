@@ -246,7 +246,7 @@ export default function TransactionsPage() {
                     <Gauge className="h-3 w-3" /> Success rate
                   </p>
                   <p className="text-xl font-semibold tabular-nums">
-                    {successRate === null ? "N/A" : `${successRate.toFixed(1)}%`}
+                    {successRate === null ? "0.0%" : `${successRate.toFixed(1)}%`}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {summary?.totals.failed_count ?? 0} failed of {summary?.totals.total_count ?? 0}
@@ -394,13 +394,13 @@ export default function TransactionsPage() {
                         </TableCell>
                         <TableCell className="text-sm">{row.tenant_name}</TableCell>
                         <TableCell>
-                          <div className="text-sm font-medium">{row.customer_name || "N/A"}</div>
+                          <div className="text-sm font-medium">{row.customer_name || "—"}</div>
                           <div className="text-xs text-muted-foreground">
                             {row.type === "purse_topup" || row.type === "purse_redemption"
                               ? "Store credit"
                               : row.service_name
                                 ? `${row.service_name}${row.service_count > 1 ? ` +${row.service_count - 1}` : ""}`
-                                : "N/A"}
+                                : "—"}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -411,12 +411,12 @@ export default function TransactionsPage() {
                             <MethodIcon className="h-3.5 w-3.5" /> {methodMeta.label}
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground capitalize">{row.provider || "N/A"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground capitalize">{row.provider || "—"}</TableCell>
                         <TableCell className={`text-right tabular-nums font-semibold ${row.type === "refund" ? "text-destructive" : ""}`}>
                           {row.type === "refund" ? "-" : ""}{formatMoney(row.amount, row.currency)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
-                          {row.charges ? formatMoney(row.charges, row.currency) : "N/A"}
+                          {formatMoney(row.charges ?? 0, row.currency)}
                         </TableCell>
                         <TableCell>
                           <span className={`text-xs font-medium capitalize ${STATUS_META[row.status] || ""}`}>
@@ -500,7 +500,7 @@ export default function TransactionsPage() {
                       <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
                         {formatMoney(row.shortfall, row.currency)}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{row.attempted_by_email || "N/A"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{row.attempted_by_email || "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -553,14 +553,14 @@ export default function TransactionsPage() {
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Customer</span>
-                  <span className="font-medium">{selected.customer_name || "N/A"}</span>
+                  <span className="font-medium">{selected.customer_name || "—"}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">For</span>
                   <span className="font-medium">
                     {selected.type === "purse_topup" || selected.type === "purse_redemption"
                       ? "Store credit balance"
-                      : selected.service_name || "N/A"}
+                      : selected.service_name || "—"}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 text-sm">
@@ -577,15 +577,15 @@ export default function TransactionsPage() {
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Charges (platform + customer fee)</span>
-                  <span className="font-medium">{selected.charges ? formatMoney(selected.charges, selected.currency) : "N/A"}</span>
+                  <span className="font-medium">{formatMoney(selected.charges ?? 0, selected.currency)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Provider</span>
-                  <span className="font-medium capitalize">{selected.provider || "N/A"}</span>
+                  <span className="font-medium capitalize">{selected.provider || "—"}</span>
                 </div>
                 <div className="flex justify-between py-2 text-sm">
                   <span className="text-muted-foreground">Provider reference</span>
-                  <span className="font-mono text-xs">{selected.provider_reference || "N/A"}</span>
+                  <span className="font-mono text-xs">{selected.provider_reference || "—"}</span>
                 </div>
               </div>
 
@@ -597,7 +597,7 @@ export default function TransactionsPage() {
                 </div>
                 <div className="flex justify-between py-2 text-sm">
                   <span className="text-muted-foreground">Appointment</span>
-                  <span className="font-mono text-xs">{selected.appointment_id || "N/A"}</span>
+                  <span className="font-mono text-xs">{selected.appointment_id || "—"}</span>
                 </div>
               </div>
             </>

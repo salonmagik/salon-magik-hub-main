@@ -238,8 +238,8 @@ export default function WaitlistPage() {
                               <TableRow key={signup.lead_id}>
                                 <TableCell className="font-medium">{signup.name}</TableCell>
                                 <TableCell>{signup.email}</TableCell>
-                                <TableCell className="capitalize">{signup.plan_interest || "N/A"}</TableCell>
-                                <TableCell>{signup.invited_at ? format(new Date(signup.invited_at), "MMM d, yyyy") : "N/A"}</TableCell>
+                                <TableCell className="capitalize">{signup.plan_interest || "—"}</TableCell>
+                                <TableCell>{signup.invited_at ? format(new Date(signup.invited_at), "MMM d, yyyy") : "—"}</TableCell>
                                 <TableCell>{format(new Date(signup.signed_up_at), "MMM d, yyyy")}</TableCell>
                               </TableRow>
                             ))}

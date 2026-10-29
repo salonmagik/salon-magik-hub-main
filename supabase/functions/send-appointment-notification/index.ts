@@ -298,7 +298,7 @@ const handler = async (req: Request): Promise<Response> => {
       (s: { id: string }) => packageNameByAppointmentServiceId.has(s.id),
     );
     const servicesList = !hasAnyCoveredService
-      ? appointment.services?.map((s: { service_name: string }) => s.service_name).join(", ") || "N/A"
+      ? appointment.services?.map((s: { service_name: string }) => s.service_name).join(", ") || "—"
       : (appointment.services || [])
           .map((s: { id: string; service_name: string; price: number }) => {
             const packageName = packageNameByAppointmentServiceId.get(s.id);
@@ -306,7 +306,7 @@ const handler = async (req: Request): Promise<Response> => {
               ? `${s.service_name} (covered by package: ${packageName})`
               : `${s.service_name} (${tenant?.currency || "GHS"} ${Number(s.price).toFixed(2)})`;
           })
-          .join("; ") || "N/A";
+          .join("; ") || "—";
     const totalAmount = `${tenant?.currency || "GHS"} ${Number(appointment.total_amount).toFixed(2)}`;
     const outstandingAmount = Math.max(
       Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0),
@@ -332,7 +332,7 @@ const handler = async (req: Request): Promise<Response> => {
       : "";
     const locationText = appointment.location
       ? `${appointment.location.name}${appointment.location.address ? `, ${appointment.location.address}` : ""}${appointment.location.city ? `, ${appointment.location.city}` : ""}`
-      : "N/A";
+      : "—";
 
     let appointmentDate = "TBD";
     let appointmentTime = "TBD";

@@ -152,13 +152,13 @@ export default function WithdrawalsPage() {
                     return (
                       <TableRow key={w.id}>
                         <TableCell className="font-medium">
-                          {w.tenants?.name || "N/A"}
+                          {w.tenants?.name || "—"}
                           <span className="block text-xs font-normal text-muted-foreground">
                             {w.locations?.name || "Salon-wide / unassigned"}
                           </span>
                         </TableCell>
                         <TableCell className="text-xs">
-                          {w.salon_wallets ? formatCurrency(Number(w.salon_wallets.balance), w.salon_wallets.currency) : "N/A"}
+                          {w.salon_wallets ? formatCurrency(Number(w.salon_wallets.balance), w.salon_wallets.currency) : "—"}
                         </TableCell>
                         <TableCell className="font-variant-numeric-tabular">
                           {formatCurrency(Number(w.amount), w.currency)}
@@ -167,14 +167,14 @@ export default function WithdrawalsPage() {
                           {dest
                             ? dest.account_name || dest.momo_provider
                               ? `${dest.account_name || dest.momo_provider} · ${dest.account_number || dest.momo_number || ""}`
-                              : "N/A"
-                            : "N/A"}
+                              : "—"
+                            : "—"}
                         </TableCell>
                         <TableCell>
                           <Badge className={`text-xs ${style.bg} ${style.text}`}>{style.label}</Badge>
                         </TableCell>
                         <TableCell className="max-w-64 truncate text-xs text-muted-foreground" title={w.failure_reason || undefined}>
-                          {w.failure_reason || "N/A"}
+                          {w.failure_reason || "—"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {format(new Date(w.requested_at), "MMM d, yyyy HH:mm")}

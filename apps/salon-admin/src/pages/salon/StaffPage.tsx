@@ -961,7 +961,7 @@ export default function StaffPage() {
 																<div className="flex items-center gap-2 text-muted-foreground">
 																	<Mail className="w-3.5 h-3.5 flex-shrink-0" />
 																	<span className="truncate text-sm">
-																		{member.email || "N/A"}
+														{member.email || "—"}
 																	</span>
 																</div>
 															</TableCell>
@@ -1532,7 +1532,7 @@ export default function StaffPage() {
 									<Input
 										id="staff-email"
 										className="h-12 rounded-lg border-black/10 disabled:bg-[#f1ece3] disabled:text-muted-foreground disabled:opacity-100"
-										value={staffToEdit?.email || "N/A"}
+										value={staffToEdit?.email || "—"}
 										disabled
 									/>
 								</div>
@@ -1549,7 +1549,7 @@ export default function StaffPage() {
 										value={
 											staffToEdit?.joinedAt
 												? format(new Date(staffToEdit.joinedAt), "MMM d, yyyy")
-												: "N/A"
+														: "—"
 										}
 										disabled
 									/>

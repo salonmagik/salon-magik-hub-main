@@ -166,7 +166,7 @@ export function AppointmentDetailsDialog({
     : "Not scheduled";
   const scheduledTime = appointment.scheduled_start
     ? format(new Date(appointment.scheduled_start), "h:mm a")
-    : "N/A";
+    : "—";
   const bookedOn = format(new Date(appointment.created_at), "MMM d, yyyy 'at' h:mm a");
 
   const totalDuration = appointment.services.reduce(

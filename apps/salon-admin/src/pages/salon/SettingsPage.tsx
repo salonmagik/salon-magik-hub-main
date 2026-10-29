@@ -2741,7 +2741,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 																					: defaultsRow[field.column]
 																						? "On"
 																						: "Off"
-																				: "N/A"}
+																: "—"}
 																			)
 																		</span>
 																	</span>
