@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, createButton, wrapEmailTemplate, EMAIL_STYLES } from "../_shared/email-template.ts";
 import { requireTenantMembership, resolveRequestActor } from "../_shared/request-auth.ts";
+import { hasOperationalAccess, OPERATIONAL_ACCESS_ERROR } from "../_shared/tenant-access.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -184,7 +185,7 @@ const handler = async (req: Request): Promise<Response> => {
         customer:customers!appointments_customer_id_fkey(id, full_name, email),
         services:appointment_services(id, service_name, price),
         location:locations(name, address, city),
-        tenant:tenants!tenant_id(name, currency, logo_url, banner_urls, plan)
+        tenant:tenants!tenant_id(name, currency, logo_url, banner_urls, plan, subscription_status, trial_ends_at)
       `)
       .eq("id", appointmentId)
       .single();
@@ -201,6 +202,13 @@ const handler = async (req: Request): Promise<Response> => {
       corsHeaders,
     );
     if (membershipError) return membershipError;
+
+    if (action === "reminder" && !hasOperationalAccess(appointment.tenant as { subscription_status?: string; trial_ends_at?: string | null })) {
+      return new Response(JSON.stringify({ error: OPERATIONAL_ACCESS_ERROR }), {
+        status: 402,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
 
     const customerEmail = appointment.customer?.email;
     if (!customerEmail) {

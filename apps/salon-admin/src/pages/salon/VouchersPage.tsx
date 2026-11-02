@@ -224,11 +224,10 @@ export default function VouchersPage() {
   };
 
   const resourceLimit = useMemo(() => {
-    const max = currentPlan?.limits?.max_vouchers ?? null;
     const count = vouchers.filter((v) => v.status === "active").length;
-    return { count, max, label: "voucher", pluralLabel: "vouchers" };
-  }, [currentPlan?.limits, vouchers]);
-  const isResourceFull = resourceLimit.max != null && resourceLimit.count >= resourceLimit.max;
+    return { count, max: null, label: "voucher", pluralLabel: "vouchers" };
+  }, [vouchers]);
+  const isResourceFull = false;
 
   const mobileQuickAction = useMemo<MobileQuickAction | null>(() => {
     if (selectedItems.size > 0) return null;
@@ -290,8 +289,8 @@ export default function VouchersPage() {
           <div className="flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning-bg/50 px-4 py-3 text-sm text-warning-foreground">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
-              <span className="font-medium">You've reached your plan's voucher limit.</span> Discontinue an existing voucher to
-              free up a slot, or upgrade your plan for unlimited vouchers.
+              <span className="font-medium">You've reached the voucher limit.</span> Discontinue an existing voucher to
+              free up a slot before adding another one.
             </p>
           </div>
         )}

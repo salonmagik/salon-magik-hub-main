@@ -198,7 +198,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
 
       // Group revenue by location
       const revenueByLocation: Record<string, number> = {};
-      (revenueTransactions || []).forEach((txn) => {
+      ((revenueTransactions || []) as Array<{ amount: number; appointment: { location_id: string } | null }>).forEach((txn) => {
         const apt = txn.appointment as { location_id: string } | null;
         const locId = apt?.location_id;
         if (locId) {
@@ -208,7 +208,7 @@ export function useSalonsOverview(dateRange: DateRange = "week") {
 
       // Count staff online by location
       const staffByLocation: Record<string, number> = {};
-      staffSessions?.forEach((session) => {
+      (staffSessions as Array<{ location_id: string | null }> | null)?.forEach((session) => {
         const locId = session.location_id || "unassigned";
         staffByLocation[locId] = (staffByLocation[locId] || 0) + 1;
       });

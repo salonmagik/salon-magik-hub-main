@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 
 const flows = {
   subscription: { endpoint: "verify-subscription-payment", result: "activated", title: "Subscription activated!", description: "Your plan is ready. Here’s to your salon’s next chapter." },
+  trialpayment: { endpoint: "verify-trial-payment-method", result: "captured", title: "Payment method saved", description: "Your card is saved securely. Your trial remains free, and billing starts when the trial ends." },
   planconfig: { endpoint: "verify-plan-configuration-payment", result: "applied", title: "Your plan is updated!", description: "Your new branches and team seats are ready to use." },
   billing: { endpoint: "verify-recurring-billing-retry-session", result: "applied", title: "You’re all set!", description: "Your payment method is updated and your subscription is active again." },
   themepurchase: { endpoint: "verify-theme-purchase-payment", result: "applied", title: "Your new look is ready!", description: "Your storefront theme is now active on your booking site." },

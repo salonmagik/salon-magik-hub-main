@@ -12,8 +12,6 @@ type PricingRow = {
 
 export function getCurrencySymbol(currency: string) {
 	switch (currency) {
-		case "USD":
-			return "$";
 		case "NGN":
 			return "₦";
 		case "GHS":
@@ -24,7 +22,7 @@ export function getCurrencySymbol(currency: string) {
 }
 
 export function usePlanPricing(currency: string) {
-	const cur = (currency || "USD").toUpperCase();
+	const cur = (currency || "GHS").toUpperCase();
 
 	return useQuery({
 		queryKey: ["plan-pricing", cur],

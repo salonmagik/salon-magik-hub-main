@@ -109,11 +109,11 @@ import {
 	useClaimTenantSalesPromo,
 	useTenantSalesPromo,
 } from "@/hooks/useSalesPromo";
-import { usePlans } from "@/hooks/usePlans";
 import { CustomDomainManager } from "./CustomDomainManager";
 import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
 import { useTenantRecurringTotal } from "@/hooks/useTenantRecurringTotal";
 import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
+import { useTrialEnforcement } from "@/hooks/useTrialEnforcement";
 import { BookingThemePreview } from "@/components/settings/BookingThemePreview";
 import { ActiveSessionsTab } from "@/components/session/ActiveSessionsTab";
 import { formatCurrency } from "@shared/currency";
@@ -215,6 +215,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 		refreshTenants,
 	} = useAuth();
 	const { data: activeTrialOverride } = useActiveTrialOverride(currentTenant?.id);
+	const { startPaymentMethodCapture } = useTrialEnforcement();
 
 	// /salon/settings is a legacy unscoped URL; always redirect to the correct scoped page.
 	useEffect(() => {
@@ -268,6 +269,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	>(null);
 	const [isApplyingPlanConfig, setIsApplyingPlanConfig] = useState(false);
 	const [isUpdatingPaymentMethod, setIsUpdatingPaymentMethod] = useState(false);
+	const [isCapturingPaymentMethod, setIsCapturingPaymentMethod] = useState(false);
 	const [upgradeConfirmOpen, setUpgradeConfirmOpen] = useState(false);
 	const [cancelSubscriptionOpen, setCancelSubscriptionOpen] = useState(false);
 	const [isResumingSubscription, setIsResumingSubscription] = useState(false);
@@ -281,10 +283,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 	const claimTenantPromo = useClaimTenantSalesPromo();
 	const { data: subscriptionPromo } = useTenantSalesPromo("subscription");
 	const { data: activeTenantPromo } = useTenantSalesPromo();
-	const { data: plans } = usePlans();
 	const { data: entitlements, refetch: refetchEntitlements } =
 		useTenantEntitlements(currentTenant?.id);
-	const currentPlan = plans?.find((plan) => plan.slug === currentTenant?.plan);
 	const { data: recurringTotal } = useTenantRecurringTotal();
 
 	const { data: ecommerceThemePricing } = useQuery({
@@ -636,6 +636,24 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 				variant: "destructive",
 			});
 			setIsUpdatingPaymentMethod(false);
+		}
+	};
+
+	const handleCapturePaymentMethod = async () => {
+		setIsCapturingPaymentMethod(true);
+		try {
+			const result = await startPaymentMethodCapture();
+			if (!result.success || !result.checkoutUrl) {
+				throw new Error(result.error || "Unable to start payment method setup.");
+			}
+			window.location.href = result.checkoutUrl;
+		} catch (error) {
+			toast({
+				title: "Couldn't save payment method",
+				description: error instanceof Error ? error.message : "Please try again.",
+				variant: "destructive",
+			});
+			setIsCapturingPaymentMethod(false);
 		}
 	};
 
@@ -2445,7 +2463,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										<Info className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
 									</TooltipTrigger>
 									<TooltipContent>
-										SMS uses credits; email is included with your plan.
+										SMS reminders use the complimentary monthly reminder allowance first, then purchased SMS credits. Email reminders are unlimited for now.
 									</TooltipContent>
 								</Tooltip>
 							</div>
@@ -3660,11 +3678,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					<CardHeader className="flex items-center gap-2">
 						<CardTitle>Subscription</CardTitle>
 						<CardDescription>
-							Your business is on the{" "}
-							<span className="font-medium capitalize">
-								{currentTenant?.plan || "Solo"}
-							</span>{" "}
-							plan.
+							One base subscription with add-ons that scale with your salon.
 						</CardDescription>
 					</CardHeader>
 				)}
@@ -3704,8 +3718,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 
 						<div className="relative flex flex-wrap items-center justify-between gap-3 mb-2">
 							<div>
-								<p className="font-serif text-xl capitalize text-white">
-									{currentTenant?.plan || "Solo"} Plan
+								<p className="font-serif text-xl text-white">
+									Salon Magik
 								</p>
 								<div className="mt-1.5 flex items-center gap-2">
 									<Badge className="capitalize bg-white/15 text-white hover:bg-white/15">
@@ -3748,6 +3762,18 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 										{isUpdatingPaymentMethod ? "Redirecting…" : "Add payment method"}
 									</Button>
 								)}
+								{isOwner && isTrialing && !currentTenant?.paystack_authorization_code && (
+									<Button
+										type="button"
+										size="sm"
+										variant="outline"
+										className="rounded-full border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white"
+										disabled={isCapturingPaymentMethod}
+										onClick={handleCapturePaymentMethod}
+									>
+										{isCapturingPaymentMethod ? "Redirecting…" : "Save payment method"}
+									</Button>
+								)}
 								{isOwner && subscriptionLifecycle.state === "cancellation_pending" && (
 									<Button
 										type="button"
@@ -3787,7 +3813,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						);
 					}}
 								>
-									Change plan
+										Manage add-ons
 								</Button>
 							</div>
 						</div>
@@ -3816,6 +3842,11 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								<p className="text-xs text-white/50 mt-1">
 									Ends {format(trialEndsAt, "MMM d, yyyy")}
 								</p>
+								{isOwner && !currentTenant?.paystack_authorization_code && (
+									<p className="mt-2 text-xs text-white/70">
+										Save a card before the trial ends. Paystack may place a small verification charge; your subscription starts after the trial.
+									</p>
+								)}
 							</div>
 						)}
 						{recurringTotal && (
@@ -3836,7 +3867,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 								</div>
 								<div className="subscription-hero-breakdown mt-3 space-y-1 border-t border-dashed border-white/15 pt-3 text-sm">
 									<div className="flex items-center justify-between text-white/60">
-										<span className="capitalize">{currentTenant?.plan || "Solo"} base plan</span>
+										<span>Base subscription</span>
 										<span>{formatCurrency(recurringTotal.breakdown.base_price, recurringTotal.currency)}</span>
 									</div>
 									{recurringTotal.breakdown.addon_breakdown.extra_seats > 0 && (
@@ -3877,27 +3908,20 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 						)}
 					</div>
 
-					<p className="subscription-section-label">Plan at a glance</p>
+					<p className="subscription-section-label">Subscription at a glance</p>
 					<div className="subscription-usage grid gap-4 md:grid-cols-3" data-tour-id="tour-subscription-usage">
 						<div className="rounded-xl bg-muted/50 p-4">
-							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Locations</p>
-							<p className="mt-1 font-serif text-2xl">
-								{entitlements?.used_locations ?? 0} of{" "}
-								{entitlements?.allowed_locations ?? currentPlan?.limits?.max_locations ?? 1}
-							</p>
+							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Active locations</p>
+							<p className="mt-1 font-serif text-2xl">{entitlements?.used_locations ?? 0}</p>
+							<p className="mt-1 text-xs text-muted-foreground">Additional locations are priced as your business grows.</p>
 						</div>
 						<div className="rounded-xl bg-muted/50 p-4">
-							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Team seats</p>
-							<p className="mt-1 font-serif text-2xl">
-								{entitlements?.used_staff ?? 0} of{" "}
-								{entitlements?.allowed_staff ??
-									currentPlan?.limits?.max_staff ??
-									1}
-							</p>
+							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">Active team seats</p>
+							<p className="mt-1 font-serif text-2xl">{entitlements?.used_staff ?? 0}</p>
 							<p className="mt-1 text-xs text-muted-foreground">
 								{Number(entitlements?.extra_staff_seats || 0) > 0
-									? `${entitlements?.allowed_staff ?? currentPlan?.limits?.max_staff ?? 1} included · +${entitlements?.extra_staff_seats} paid add-on`
-									: `${entitlements?.allowed_staff ?? currentPlan?.limits?.max_staff ?? 1} included · +0 paid add-on`}
+									? `+${entitlements?.extra_staff_seats} paid add-on seats`
+									: "Add seats as your team grows."}
 							</p>
 						</div>
 						<div className={cn("subscription-theme-usage-card rounded-xl bg-muted/50 p-4", themeIsExpiring && "subscription-theme-expiring")}>
@@ -3938,8 +3962,8 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							<span className="flex min-w-0 items-center gap-3 text-left">
 								<span className="subscription-config-icon"><Building2 className="h-4 w-4" /></span>
 								<span>
-									<span className="block text-sm font-medium">Adjust branches &amp; team seats</span>
-									<span className="mt-0.5 block text-xs text-muted-foreground">Change your plan by telling us what you need, we’ll do the math</span>
+									<span className="block text-sm font-medium">Adjust locations &amp; team seats</span>
+									<span className="mt-0.5 block text-xs text-muted-foreground">Add capacity as your salon grows — we’ll do the math</span>
 								</span>
 							</span>
 							<ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", subscriptionPlanConfigOpen && "rotate-180")} />
@@ -3949,22 +3973,16 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 					<div className="space-y-3">
 						<div className="rounded-lg border p-4 space-y-4">
 							<p className="text-sm text-muted-foreground">
-								Tell us how many branches and team seats you need. We'll
-								automatically put you on the right plan for it.
+									Tell us how many locations and team seats you need. Your base
+								subscription stays the same while we calculate the add-ons.
 							</p>
-							{(currentTenant?.plan === "chain" ||
-								planConfigQuote?.required_plan_slug === "chain") && (
-								<p className="text-xs text-muted-foreground">
-									On the Chain plan, each branch you add here includes 12 team
-									seats automatically. Opening a new branch location elsewhere
-									doesn't add seats on its own, only increasing the branch count
-									here does.
-								</p>
-							)}
+							<p className="text-xs text-muted-foreground">
+								Additional locations and seats are billed as separate add-ons.
+							</p>
 							<div className="divide-y rounded-lg border">
 								<div className="flex items-center justify-between gap-4 p-3.5">
 									<div>
-										<Label htmlFor="config-branches" className="text-sm font-medium">Branches</Label>
+										<Label htmlFor="config-branches" className="text-sm font-medium">Locations</Label>
 										<p className="text-xs text-muted-foreground">
 											{planConfigQuote
 														? `${planConfigQuote.current_allowed_locations} included on ${planConfigQuote.current_plan_slug.replace(/^./, (character) => character.toUpperCase())}`
@@ -4426,7 +4444,7 @@ export default function SettingsPage({ scope = "auto" }: SettingsPageProps) {
 							{recurringTotal ? (
 								<div className="space-y-1 rounded-lg bg-muted/50 p-3 text-sm">
 									<div className="flex items-center justify-between text-muted-foreground">
-										<span className="capitalize">{currentTenant?.plan || "Solo"} base plan</span>
+											<span>Base subscription</span>
 										<span>{formatCurrency(recurringTotal.breakdown.base_price, recurringTotal.currency)}</span>
 									</div>
 									{recurringTotal.breakdown.addon_breakdown.extra_seats > 0 && (

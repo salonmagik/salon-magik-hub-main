@@ -623,7 +623,8 @@ export default function MarketingPage() {
   const messageCharacterCount = message.length;
   const smsSegments = Math.max(1, Math.ceil(Math.max(messageCharacterCount, 1) / 160));
   const estimatedCost = selectedRecipientCount * CREDIT_COST[effectiveChannel] * (effectiveChannel === "sms" ? smsSegments : 1);
-  const balanceAfterSend = (credits?.balance || 0) - estimatedCost;
+  const marketingSmsBalance = Number(stats.marketingCreditsRemaining ?? stats.creditsRemaining ?? 0) + Number(stats.purchasedCreditsRemaining ?? 0);
+  const balanceAfterSend = marketingSmsBalance - estimatedCost;
   const tenantCountry = normalizeCountry(currentTenant?.country);
   const messagingCountry = normalizeCountry(activeLocation?.country || tenantCountry);
   const isGhanaTenant = messagingCountry === "GH";
@@ -704,8 +705,8 @@ export default function MarketingPage() {
             : !hasCreditWallet
               ? "A communication credit wallet is missing for this salon."
               : hasEnoughSmsCredits
-                ? `${estimatedCost} credit${estimatedCost === 1 ? "" : "s"} will be used for this SMS send.`
-                : `You need ${Math.abs(balanceAfterSend)} more credits before sending SMS.`,
+                ? `${estimatedCost} SMS credit${estimatedCost === 1 ? "" : "s"} will be used for this marketing send.`
+                : `You need ${Math.abs(balanceAfterSend)} more marketing SMS credit${Math.abs(balanceAfterSend) === 1 ? "" : "s"} before sending.`,
       },
       {
         id: "provider",
@@ -1193,7 +1194,7 @@ export default function MarketingPage() {
         </div>
 
         <div className="marketing-metrics" aria-busy={creditsLoading}>
-          <div className="marketing-metric"><span className="marketing-metric-icon"><Phone size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "—" : stats.creditsRemaining.toLocaleString()}</strong><p>SMS credits left</p></div></div>
+          <div className="marketing-metric"><span className="marketing-metric-icon"><Phone size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "—" : marketingSmsBalance.toLocaleString()}</strong><p>Marketing SMS credits left</p><small>{creditsLoading || creditsError ? "" : `${Number(stats.marketingCreditsRemaining ?? 0).toLocaleString()} complimentary · ${Number(stats.purchasedCreditsRemaining ?? 0).toLocaleString()} purchased`}</small></div></div>
           <div className="marketing-metric"><span className="marketing-metric-icon email"><Mail size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "—" : stats.emailsSentThisMonth.toLocaleString()}</strong><p>Emails sent this month · unlimited</p></div></div>
           <div className="marketing-metric unavailable"><span className="marketing-metric-icon"><MessageCircle size={18} /></span><div><p>WhatsApp</p><span className="marketing-badge">Coming soon</span></div></div>
         </div>

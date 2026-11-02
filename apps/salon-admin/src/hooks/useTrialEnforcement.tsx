@@ -99,6 +99,31 @@ export function useTrialEnforcement() {
     }
   }, [currentTenant?.id]);
 
+  const startPaymentMethodCapture = useCallback(async (): Promise<{ success: boolean; checkoutUrl: string | null; error?: string }> => {
+    if (!currentTenant?.id) {
+      return { success: false, checkoutUrl: null, error: "No active salon found." };
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke("create-trial-payment-method-session", {
+        body: {
+          tenantId: currentTenant.id,
+          successUrl: `${window.location.origin}/salon/subscription?trialpayment=success`,
+          cancelUrl: `${window.location.origin}/salon/subscription?trialpayment=cancelled`,
+        },
+      });
+      if (error || data?.error) {
+        const message = data?.error || (await getFunctionErrorMessage(error));
+        return { success: false, checkoutUrl: null, error: message };
+      }
+      if (!data?.url) return { success: false, checkoutUrl: null, error: "Something went wrong starting payment method setup." };
+      return { success: true, checkoutUrl: data.url };
+    } catch (err) {
+      console.error("Error creating payment method session:", err);
+      return { success: false, checkoutUrl: null, error: "Something went wrong starting payment method setup." };
+    }
+  }, [currentTenant?.id]);
+
   // Check if user should be blocked from accessing features
   const shouldBlockAccess = useMemo(() => {
     return trialStatus.isExpired && !trialStatus.isGracePeriod;
@@ -117,6 +142,7 @@ export function useTrialEnforcement() {
   return {
     trialStatus,
     startUpgradeCheckout,
+    startPaymentMethodCapture,
     shouldBlockAccess,
     shouldShowWarning,
     shouldShowUrgent,

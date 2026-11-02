@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "./useAuth";
 import { toast } from "@ui/ui/use-toast";
+import { useActiveTrialOverride } from "./useActiveTrialOverride";
 
 /**
  * Shared by StaffPage (where the add-on lives conceptually) and the
@@ -11,6 +12,7 @@ import { toast } from "@ui/ui/use-toast";
  */
 export function useStaffOperationsAddon() {
   const { currentTenant } = useAuth();
+  const { data: activeTrialOverride } = useActiveTrialOverride(currentTenant?.id);
   const queryClient = useQueryClient();
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -63,9 +65,12 @@ export function useStaffOperationsAddon() {
     enabled: Boolean(currentTenant?.id),
   });
 
-  const isEnabled = Boolean(entitlement?.id);
+  const trialEndsAt = activeTrialOverride?.ends_at ?? currentTenant?.trial_ends_at;
+  const isLiveTrial = Boolean(trialEndsAt && new Date(trialEndsAt).getTime() > Date.now()) &&
+    (Boolean(activeTrialOverride) || currentTenant?.subscription_status === "trialing");
+  const isEnabled = Boolean(entitlement?.id) || isLiveTrial;
   const expiresAt = entitlement?.ends_at ? new Date(entitlement.ends_at) : null;
-  const isPlanEligible = ["studio", "chain"].includes(String(currentTenant?.plan || "").toLowerCase());
+  const isPlanEligible = isLiveTrial || ["studio", "chain"].includes(String(currentTenant?.plan || "").toLowerCase());
   const monthlyTotal = Number(pricing?.unit_price_per_location || 0) * locationCount;
   const hasValidPrice =
     typeof pricing?.currency === "string" &&
@@ -87,6 +92,7 @@ export function useStaffOperationsAddon() {
   // term is up doesn't refund it and turning it back on starts a fresh term.
   const disable = async () => {
     if (!currentTenant?.id) return false;
+    if (isLiveTrial && !entitlement?.id) return true;
     setIsUpdating(true);
     try {
       const { error } = await (supabase.rpc as any)("cancel_staff_operations_addon", {
@@ -152,10 +158,11 @@ export function useStaffOperationsAddon() {
     }
   };
 
-  const toggle = async () => (isEnabled ? disable() : purchase());
+  const toggle = async () => (isLiveTrial && !entitlement?.id ? true : isEnabled ? disable() : purchase());
 
   return {
     isEnabled,
+    isLiveTrial,
     expiresAt,
     isPlanEligible,
     locationCount,

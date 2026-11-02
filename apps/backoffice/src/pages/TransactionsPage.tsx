@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
+import { useBackofficeAuth } from "@/hooks/useBackofficeAuth";
 import {
   useBackofficeTransactions,
   useBackofficeTransactionSummary,
@@ -86,6 +87,7 @@ function presetRange(days: number) {
 }
 
 export default function TransactionsPage() {
+  const { backofficeUser } = useBackofficeAuth();
   const [searchParams] = useSearchParams();
   const [datePreset, setDatePreset] = useState<string>("30d");
   const [range, setRange] = useState(() => presetRange(30));
@@ -121,7 +123,7 @@ export default function TransactionsPage() {
   const { data: blockedRefunds, isLoading: blockedRefundsLoading } = useBlockedRefunds({
     page: blockedRefundsPage,
     pageSize: PAGE_SIZE,
-  });
+  }, Boolean(backofficeUser?.user_id));
   const blockedRefundsTotal = blockedRefunds?.[0]?.total_count ?? 0;
   const blockedRefundsTotalPages = Math.max(1, Math.ceil(blockedRefundsTotal / PAGE_SIZE));
 

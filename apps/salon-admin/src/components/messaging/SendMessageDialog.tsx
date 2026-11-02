@@ -232,7 +232,7 @@ export function SendMessageDialog({ open, onOpenChange, customerId: providedCust
                         {ch === "email" ? "Email" : "SMS"}
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">
-                        {ch === "email" ? "Free with your plan" : "2 credits per send"}
+                        {ch === "email" ? "Unlimited with Resend" : "Uses marketing SMS credits"}
                       </div>
                       {reason && <div className="mt-1 text-xs text-muted-foreground">{reason}</div>}
                     </div>

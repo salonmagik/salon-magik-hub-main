@@ -263,7 +263,7 @@ serve(async (req) => {
       content = `
         ${heading(`Welcome to Salon Magik, ${firstName}!`)}
         ${paragraph(`Your salon <strong>${salonName}</strong> is all set up and ready to go on the <strong>${planLabel}</strong> plan.`)}
-        ${paragraph(`You have <strong>${trialDays} days free</strong> to explore everything Salon Magik has to offer — no credit card required during your trial.`)}
+        ${paragraph(`You have <strong>${trialDays} days free</strong> to explore everything Salon Magik has to offer — there is no charge during the trial. Add a payment method before it ends to keep your salon online.`)}
         <div style="background: ${EMAIL_STYLES.surfaceColor}; border-radius: 8px; padding: 20px; margin: 24px 0;">
           <p style="margin: 0 0 12px; font-weight: 600; color: ${EMAIL_STYLES.textColor}; font-size: 15px;">Your ${planLabel} plan includes:</p>
           ${features.map((f) => `

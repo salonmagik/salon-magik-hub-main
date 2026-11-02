@@ -395,6 +395,27 @@ export async function processWebhook(
       const actualServiceAmount = serviceAmount ?? amount;
       const paymentMethod = mapPaystackChannelToPaymentMethod(channel);
 
+      // Trial payment-method verification is deliberately separate from
+      // subscription activation. It stores the reusable authorization while
+      // leaving the tenant in its free trial; the lifecycle worker promotes
+      // the tenant and charges the first cycle when the trial actually ends.
+      if (intent === "trial_payment_method_capture" && tenantId && isValidUUID(tenantId)) {
+        if (authorizationReusable && authorizationCode) {
+          const { error: captureError } = await supabase
+            .from("tenants")
+            .update({
+              paystack_authorization_code: authorizationCode,
+              paystack_customer_code: customerCode || null,
+              paystack_authorization_email: customerEmail || null,
+              payment_method_captured_at: new Date().toISOString(),
+              payment_method_capture_reference: reference || null,
+            })
+            .eq("id", tenantId);
+          if (captureError) console.error("Failed to save trial payment method via webhook:", captureError);
+        }
+        return;
+      }
+
       // Subscription activation: payment was initiated from the upgrade/trial flow.
       //
       // This webhook is the ONLY reliable path here — the alternative,

@@ -11,6 +11,10 @@ export interface CommunicationCredits {
   last_reset_at: string;
   created_at: string;
   updated_at: string;
+  complimentary_reminder_sms_balance?: number;
+  complimentary_marketing_sms_balance?: number;
+  purchased_sms_balance?: number;
+  last_complimentary_reset_at?: string | null;
 }
 
 export interface MessageLog {
@@ -58,6 +62,30 @@ export function useMessagingCredits() {
 
       setCredits(creditsData as CommunicationCredits | null);
 
+      const { data: summaryData, error: summaryError } = await supabase.rpc("get_sms_credit_summary", {
+        p_tenant_id: currentTenant.id,
+      });
+      if (summaryError) {
+        console.warn("Purpose-specific SMS summary is not available yet; using the legacy balance:", summaryError);
+      }
+      const summary = summaryData?.[0] || (creditsData
+        ? {
+            reminder_complimentary: 0,
+            marketing_complimentary: 0,
+            purchased: Number((creditsData as CommunicationCredits).balance || 0),
+            total: Number((creditsData as CommunicationCredits).balance || 0),
+          }
+        : null);
+      if (summary && creditsData) {
+        setCredits({
+          ...(creditsData as CommunicationCredits),
+          complimentary_reminder_sms_balance: Number(summary.reminder_complimentary || 0),
+          complimentary_marketing_sms_balance: Number(summary.marketing_complimentary || 0),
+          purchased_sms_balance: Number(summary.purchased || 0),
+          balance: Number(summary.total || 0),
+        });
+      }
+
       // Fetch message logs
       const { data: logsData, error: logsError } = await supabase
         .from("message_logs")
@@ -104,7 +132,10 @@ export function useMessagingCredits() {
       emailsSentThisMonth,
       smsCreditsUsedThisMonth,
       creditsRemaining: credits?.balance || 0,
-      freeAllocation: credits?.free_monthly_allocation || 30,
+      freeAllocation: (credits?.complimentary_reminder_sms_balance || 0) + (credits?.complimentary_marketing_sms_balance || 0),
+      reminderCreditsRemaining: credits?.complimentary_reminder_sms_balance || 0,
+      marketingCreditsRemaining: credits?.complimentary_marketing_sms_balance || 0,
+      purchasedCreditsRemaining: credits?.purchased_sms_balance || 0,
     },
     isLoading,
     error,

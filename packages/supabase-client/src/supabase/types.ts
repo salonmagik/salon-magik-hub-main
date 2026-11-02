@@ -1674,31 +1674,43 @@ export type Database = {
       communication_credits: {
         Row: {
           balance: number
+          complimentary_marketing_sms_balance: number
+          complimentary_reminder_sms_balance: number
           created_at: string
           free_monthly_allocation: number
           id: string
           last_reset_at: string
+          last_complimentary_reset_at: string | null
           low_balance_alerted_at: string | null
+          purchased_sms_balance: number
           tenant_id: string
           updated_at: string
         }
         Insert: {
           balance?: number
+          complimentary_marketing_sms_balance?: number
+          complimentary_reminder_sms_balance?: number
           created_at?: string
           free_monthly_allocation?: number
           id?: string
           last_reset_at?: string
+          last_complimentary_reset_at?: string | null
           low_balance_alerted_at?: string | null
+          purchased_sms_balance?: number
           tenant_id: string
           updated_at?: string
         }
         Update: {
           balance?: number
+          complimentary_marketing_sms_balance?: number
+          complimentary_reminder_sms_balance?: number
           created_at?: string
           free_monthly_allocation?: number
           id?: string
           last_reset_at?: string
+          last_complimentary_reset_at?: string | null
           low_balance_alerted_at?: string | null
+          purchased_sms_balance?: number
           tenant_id?: string
           updated_at?: string
         }
@@ -7714,6 +7726,8 @@ export type Database = {
           paystack_authorization_code: string | null
           paystack_authorization_email: string | null
           paystack_customer_code: string | null
+          payment_method_captured_at: string | null
+          payment_method_capture_reference: string | null
           plan: Database["public"]["Enums"]["subscription_plan"]
           platform_percentage_charge: number
           platform_service_charge_borne_by_customer: boolean
@@ -7792,6 +7806,8 @@ export type Database = {
           paystack_authorization_code?: string | null
           paystack_authorization_email?: string | null
           paystack_customer_code?: string | null
+          payment_method_captured_at?: string | null
+          payment_method_capture_reference?: string | null
           plan?: Database["public"]["Enums"]["subscription_plan"]
           platform_percentage_charge?: number
           platform_service_charge_borne_by_customer?: boolean
@@ -7870,6 +7886,8 @@ export type Database = {
           paystack_authorization_code?: string | null
           paystack_authorization_email?: string | null
           paystack_customer_code?: string | null
+          payment_method_captured_at?: string | null
+          payment_method_capture_reference?: string | null
           plan?: Database["public"]["Enums"]["subscription_plan"]
           platform_percentage_charge?: number
           platform_service_charge_borne_by_customer?: boolean
@@ -9741,6 +9759,15 @@ export type Database = {
         Args: { p_amount: number; p_tenant_id: string }
         Returns: undefined
       }
+      get_sms_credit_summary: {
+        Args: { p_tenant_id: string }
+        Returns: {
+          marketing_complimentary: number
+          purchased: number
+          reminder_complimentary: number
+          total: number
+        }[]
+      }
       ensure_sales_agent_profile: {
         Args: { p_backoffice_user_id?: string }
         Returns: string
@@ -9820,6 +9847,8 @@ export type Database = {
         Returns: {
           balance: number
           birthday_sent_30d: number
+          complimentary_marketing_sms_balance: number
+          complimentary_reminder_sms_balance: number
           country: string
           delivered_30d: number
           email_sent_30d: number
@@ -9829,6 +9858,7 @@ export type Database = {
           last_purchase_at: string
           last_purchase_currency: string
           last_reset_at: string
+          purchased_sms_balance: number
           reminders_sent_30d: number
           sms_sent_30d: number
           tenant_id: string
@@ -10354,6 +10384,10 @@ export type Database = {
         Args: { p_amount: number; p_tenant_id: string }
         Returns: boolean
       }
+      reserve_sms_credits: {
+        Args: { p_amount: number; p_purpose: string; p_tenant_id: string }
+        Returns: Json
+      }
       reserve_customer_balance: {
         Args: {
           p_amount: number
@@ -10387,6 +10421,10 @@ export type Database = {
       resolve_user_contexts: { Args: { p_tenant_id: string }; Returns: Json }
       restore_communication_credits: {
         Args: { p_amount: number; p_tenant_id: string }
+        Returns: boolean
+      }
+      restore_sms_credits: {
+        Args: { p_reservation: Json; p_tenant_id: string }
         Returns: boolean
       }
       resume_subscription: { Args: { p_tenant_id: string }; Returns: string }

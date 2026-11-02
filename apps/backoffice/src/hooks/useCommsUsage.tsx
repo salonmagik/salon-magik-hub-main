@@ -6,6 +6,9 @@ export interface CommsUsageRow {
   tenant_name: string;
   country: string | null;
   balance: number | null;
+  complimentary_reminder_sms_balance: number | null;
+  complimentary_marketing_sms_balance: number | null;
+  purchased_sms_balance: number | null;
   free_monthly_allocation: number | null;
   last_reset_at: string | null;
   last_purchase_at: string | null;

@@ -205,6 +205,7 @@ Deno.serve(async (req) => {
         .from("communication_credits")
         .update({
           balance: existingCredits.balance + credits,
+          purchased_sms_balance: Number(existingCredits.purchased_sms_balance || 0) + credits,
           low_balance_alerted_at: null,
         })
         .eq("tenant_id", tenantId);
@@ -223,6 +224,7 @@ Deno.serve(async (req) => {
         .insert({
           tenant_id: tenantId,
           balance: credits,
+          purchased_sms_balance: credits,
         });
 
       if (insertError) {

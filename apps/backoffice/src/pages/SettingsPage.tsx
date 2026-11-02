@@ -93,7 +93,7 @@ const LEGAL_STATUS_OPTIONS: { value: LegalStatus; label: string }[] = [
   { value: "paused", label: "Paused" },
 ];
 
-const COMMON_CURRENCIES = ["USD", "GHS", "NGN", "KES", "ZAR", "GBP", "EUR"];
+const COMMON_CURRENCIES = ["GHS", "NGN"];
 
 function parseKillSwitch(value: Json | null): KillSwitchValue {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -171,7 +171,7 @@ export default function BackofficeSettingsPage() {
   const [maintSecurityError, setMaintSecurityError] = useState("");
 
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>("GH");
-  const [newCurrencyCode, setNewCurrencyCode] = useState("USD");
+  const [newCurrencyCode, setNewCurrencyCode] = useState("GHS");
   const [notesDraft, setNotesDraft] = useState("");
   const [trialDaysDraft, setTrialDaysDraft] = useState(14);
   const [otpLimitEnabled, setOtpLimitEnabled] = useState(true);
@@ -1677,7 +1677,7 @@ export default function BackofficeSettingsPage() {
               <CardHeader>
                 <CardTitle>Country Currency Policy</CardTitle>
                 <CardDescription>
-                  Set one default currency per market and optional enabled overrides (USD fallback supported).
+                  Set one default currency per market and enable only the currencies you currently support.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">

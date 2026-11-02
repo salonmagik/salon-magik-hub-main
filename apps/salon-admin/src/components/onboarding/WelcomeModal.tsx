@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
@@ -95,6 +96,32 @@ export function WelcomeModal({
   const activePlanPricing = getPlanPricing(selectedPlan);
   const initialPlanPricing = getPlanPricing(initialPlan);
 
+  // Chain pricing isn't flat -- it's the base plan price plus tiered
+  // per-location pricing, same as what create-checkout-session actually
+  // charges (compute_chain_price is the single source of truth for both).
+  // A Chain signup can configure multiple branches during onboarding
+  // (chainLocations), so showing just the 1-location base price here would
+  // quote a lower number than what Confirm & Pay actually charges.
+  const chainTotalLocations = Math.max(chainLocations.length, 1);
+  const { data: chainPriceQuote } = useQuery({
+    queryKey: ["chain-price-quote", selectedPlan, currency, chainTotalLocations],
+    queryFn: async () => {
+      const plan = (plans || []).find((p) => p.slug === "chain");
+      if (!plan) return null;
+      const { data, error } = await supabase.rpc("compute_chain_price", {
+        p_plan_id: plan.id,
+        p_currency: currency,
+        p_total_locations: chainTotalLocations,
+        p_billing_cycle: "monthly",
+      });
+      if (error) throw error;
+      return data?.[0] ?? null;
+    },
+    // Fetched regardless of which plan is currently selected: the plan-pill
+    // row below shows every available plan's price, chain included.
+    enabled: Boolean(plans?.length),
+  });
+
   const computeDiscountedPrice = (base: number): number | null => {
     if (!promoPreview?.valid || !promoPreview.discountValue) return null;
     const targets = promoPreview.billingTargets || [];
@@ -108,7 +135,9 @@ export function WelcomeModal({
     return null;
   };
 
-  const basePrice = activePlanPricing?.monthly_price ?? null;
+  const basePrice = selectedPlan === "chain"
+    ? (chainPriceQuote?.total_price ?? activePlanPricing?.monthly_price ?? null)
+    : (activePlanPricing?.monthly_price ?? null);
   const discountedPrice = basePrice !== null ? computeDiscountedPrice(basePrice) : null;
   const symbol = getCurrencySymbol(currency);
 
@@ -290,7 +319,9 @@ export function WelcomeModal({
                     <span className="block">{PLAN_NAMES[slug]}</span>
                     {pp && (
                       <span className="block text-xs text-muted-foreground mt-0.5">
-                        {symbol}{pp.monthly_price.toLocaleString()}/mo
+                        {symbol}
+                        {(slug === "chain" ? (chainPriceQuote?.total_price ?? pp.monthly_price) : pp.monthly_price).toLocaleString()}
+                        /mo
                       </span>
                     )}
                   </button>

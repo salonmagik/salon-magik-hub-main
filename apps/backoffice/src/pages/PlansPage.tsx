@@ -37,7 +37,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@ui/select";
-import { Separator } from "@ui/separator";
 import { Switch } from "@ui/switch";
 import {
   Table,
@@ -47,7 +46,6 @@ import {
   TableHeader,
   TableRow,
 } from "@ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Textarea } from "@ui/textarea";
 import { toast } from "sonner";
 import {
@@ -64,10 +62,9 @@ import {
   Trash2,
   Info,
 } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
 import { getCurrencySymbol } from "@/hooks/usePlanPricing";
 
-type CurrencyCode = "USD" | "NGN" | "GHS";
+type CurrencyCode = "NGN" | "GHS";
 
 interface Plan {
   id: string;
@@ -163,7 +160,7 @@ interface ChainTierRowDraft {
   tier_min: string;
   tier_max: string;
   price_per_location: string;
-  price_per_location_annual: string;
+  annual_discount_pct: string;
   is_custom: boolean;
 }
 
@@ -219,6 +216,37 @@ interface ThemeAddonPricingRow {
   effective_from: string;
 }
 
+interface SmsCreditTierDraft {
+  bundle_price: string;
+  arkesel_cost_per_sms: string;
+}
+
+interface SmsCreditPricingDraft {
+  margin_multiplier: string;
+  low_balance_threshold_credits: string;
+  tiers: Record<"NGN" | "GHS", SmsCreditTierDraft[]>;
+}
+
+interface SmsComplimentaryDraft {
+  reminder_segments: string;
+  marketing_segments: string;
+}
+
+interface ProgressionDraft {
+  planId: string;
+  planName: string;
+  nextPlanName: string;
+  maxLocations: string;
+  maxStaff: string;
+}
+
+interface MarketingAddonDraft {
+  key: string;
+  name: string;
+  description: string;
+  status: "available" | "coming_soon" | "hidden";
+}
+
 interface SeatPricingDraft {
   rowId: string | null;
   country_code: string;
@@ -254,13 +282,26 @@ interface ThemePricingDraft {
 type RolloutMode = "now" | "schedule";
 type PricingStatus = "draft" | "active" | "retired";
 
-const CURRENCIES: CurrencyCode[] = ["USD", "NGN", "GHS"];
+const CURRENCIES: CurrencyCode[] = ["NGN", "GHS"];
 const MAX_PLANS = 4;
 const MAX_BATCH_ITEMS = 3;
 const PRICING_STATUS_OPTIONS: Array<{ value: PricingStatus; label: string }> = [
   { value: "active", label: "Active" },
   { value: "draft", label: "Draft" },
   { value: "retired", label: "Retired" },
+];
+const MARKETING_ADDON_STATUS_OPTIONS: Array<{ value: MarketingAddonDraft["status"]; label: string }> = [
+  { value: "available", label: "Available" },
+  { value: "coming_soon", label: "Coming soon" },
+  { value: "hidden", label: "Hidden" },
+];
+
+const DEFAULT_MARKETING_ADDONS: MarketingAddonDraft[] = [
+  { key: "extra_communication_credits", name: "Extra communication credits", description: "Top up SMS credits when your complimentary monthly allowance runs low.", status: "available" },
+  { key: "staff_operations", name: "Staff Operations", description: "Track when your staff arrive, time off, and leave requests.", status: "available" },
+  { key: "ecommerce_themes", name: "E-commerce themes", description: "Give your booking page a polished storefront-style look with a paid theme.", status: "available" },
+  { key: "whatsapp_messaging", name: "WhatsApp messaging", description: "Send booking confirmations, reminders, and updates directly via WhatsApp.", status: "coming_soon" },
+  { key: "custom_booking_domain", name: "Custom booking domain", description: "Use your own domain for your client-facing booking page.", status: "coming_soon" },
 ];
 
 const sanitizeSlug = (value: string) =>
@@ -321,7 +362,6 @@ const createPricingSectionDraft = (): PricingSectionDraft => ({
   localId: crypto.randomUUID(),
   plan_id: "",
   currencies: {
-    USD: { enabled: true, monthly_price: "", annual_discount_pct: "" },
     NGN: { enabled: true, monthly_price: "", annual_discount_pct: "" },
     GHS: { enabled: true, monthly_price: "", annual_discount_pct: "" },
   },
@@ -337,8 +377,28 @@ const createChainTierRowDraft = (
   tier_min: tierMin,
   tier_max: tierMax,
   price_per_location: "",
-  price_per_location_annual: "",
+  annual_discount_pct: "",
   is_custom: isCustom,
+});
+
+const createSmsPricingDraft = (): SmsCreditPricingDraft => ({
+  margin_multiplier: "1.5",
+  low_balance_threshold_credits: "20",
+  tiers: {
+    NGN: [5000, 10000, 20000, 50000, 100000].map((bundlePrice) => ({
+      bundle_price: String(bundlePrice),
+      arkesel_cost_per_sms: "6.30",
+    })),
+    GHS: [20, 50, 100, 200, 500].map((bundlePrice) => ({
+      bundle_price: String(bundlePrice),
+      arkesel_cost_per_sms: "0.0300",
+    })),
+  },
+});
+
+const createSmsComplimentaryDraft = (): SmsComplimentaryDraft => ({
+  reminder_segments: "100",
+  marketing_segments: "25",
 });
 
 const errorToMessage = (error: unknown) => {
@@ -414,14 +474,13 @@ export default function PlansPage() {
   const [deletePlanTarget, setDeletePlanTarget] = useState<Plan | null>(null);
   const [deletePlanReason, setDeletePlanReason] = useState("");
   const [deletePlanTotp, setDeletePlanTotp] = useState("");
-  const [chainTierReason, setChainTierReason] = useState("");
+  const [locationPricingReason, setLocationPricingReason] = useState("");
+  const [seatPricingReason, setSeatPricingReason] = useState("");
   const [chainTierDrafts, setChainTierDrafts] = useState<Record<CurrencyCode, ChainTierRowDraft[]>>({
-    USD: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
     NGN: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
     GHS: [createChainTierRowDraft("2", "3"), createChainTierRowDraft("4", "10"), createChainTierRowDraft("11", "", true)],
   });
   const [chainTierDirty, setChainTierDirty] = useState(false);
-  const [seatPricingReason, setSeatPricingReason] = useState("");
   const [seatPricingDrafts, setSeatPricingDrafts] = useState<Record<string, SeatPricingDraft>>({});
   const [seatPricingDirty, setSeatPricingDirty] = useState(false);
   const [staffOperationsPricingReason, setStaffOperationsPricingReason] = useState("");
@@ -431,6 +490,18 @@ export default function PlansPage() {
   const [themePricingReason, setThemePricingReason] = useState("");
   const [themePricingDrafts, setThemePricingDrafts] = useState<Record<string, ThemePricingDraft>>({});
   const [themePricingDirty, setThemePricingDirty] = useState(false);
+  const [themeCatalogDraft, setThemeCatalogDraft] = useState({ name: "", description: "", is_active: true });
+  const [smsPricingReason, setSmsPricingReason] = useState("");
+  const [smsPricingDraft, setSmsPricingDraft] = useState<SmsCreditPricingDraft>(createSmsPricingDraft);
+  const [smsComplimentaryDraft, setSmsComplimentaryDraft] = useState<SmsComplimentaryDraft>(createSmsComplimentaryDraft);
+  const [smsPricingDirty, setSmsPricingDirty] = useState(false);
+  const [marketingAddonsDraft, setMarketingAddonsDraft] = useState<MarketingAddonDraft[]>(DEFAULT_MARKETING_ADDONS);
+  const [marketingAddonsDirty, setMarketingAddonsDirty] = useState(false);
+  const [marketingAddonsReason, setMarketingAddonsReason] = useState("");
+  const [editingAddon, setEditingAddon] = useState<"locations" | "seats" | "staff" | "themes" | "messaging" | null>(null);
+  const [progressionReason, setProgressionReason] = useState("");
+  const [progressionDrafts, setProgressionDrafts] = useState<Record<string, ProgressionDraft>>({});
+  const [progressionDirty, setProgressionDirty] = useState(false);
 
   // Paystack plan codes: per pricing-row drafts (NGN/GHS only)
   interface PaystackCodeDraft { monthly: string; annual: string; dirty: boolean; }
@@ -578,6 +649,45 @@ export default function PlansPage() {
     },
   });
 
+  const { data: smsPricingSetting } = useQuery({
+    queryKey: ["backoffice-platform-setting", "sms_credit_pricing"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "sms_credit_pricing")
+        .maybeSingle();
+      if (error) throw error;
+      return data?.value as Record<string, unknown> | null;
+    },
+  });
+
+  const { data: smsComplimentarySetting } = useQuery({
+    queryKey: ["backoffice-platform-setting", "sms_complimentary_allowances"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "sms_complimentary_allowances")
+        .maybeSingle();
+      if (error) throw error;
+      return data?.value as Record<string, unknown> | null;
+    },
+  });
+
+  const { data: marketingAddonsSetting } = useQuery({
+    queryKey: ["backoffice-platform-setting", "marketing_addons"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("platform_settings")
+        .select("value")
+        .eq("key", "marketing_addons")
+        .maybeSingle();
+      if (error) throw error;
+      return data?.value as { addons?: unknown } | null;
+    },
+  });
+
   const chainPlan = useMemo(
     () => (plans || []).find((plan) => plan.slug.trim().toLowerCase() === "chain") || null,
     [plans],
@@ -602,7 +712,9 @@ export default function PlansPage() {
       .map((country) => ({
         country_code: country.country_code,
         country_name: country.country_name,
-        currency: defaultCurrencyByCountry.get(country.country_code) || "USD",
+        currency:
+          defaultCurrencyByCountry.get(country.country_code) ||
+          (country.country_code === "NG" ? "NGN" : "GHS"),
       }))
       .sort((a, b) => a.country_name.localeCompare(b.country_name));
   }, [defaultCurrencyByCountry, marketCountries]);
@@ -664,7 +776,7 @@ export default function PlansPage() {
 
   useEffect(() => {
     if (!chainPlan?.id || chainTierDirty) return;
-    const grouped: Record<CurrencyCode, ChainTierRowDraft[]> = { USD: [], NGN: [], GHS: [] };
+    const grouped: Record<CurrencyCode, ChainTierRowDraft[]> = { NGN: [], GHS: [] };
     (chainTierPricing || []).forEach((row) => {
       grouped[row.currency].push({
         localId: crypto.randomUUID(),
@@ -672,7 +784,10 @@ export default function PlansPage() {
         tier_min: String(row.tier_min),
         tier_max: row.tier_max == null ? "" : String(row.tier_max),
         price_per_location: row.price_per_location == null ? "" : String(row.price_per_location),
-        price_per_location_annual: row.price_per_location_annual == null ? "" : String(row.price_per_location_annual),
+        annual_discount_pct:
+          row.price_per_location != null && row.price_per_location_annual != null
+            ? String(deriveDiscountFromEffective(Number(row.price_per_location), Number(row.price_per_location_annual) / 12))
+            : "",
         is_custom: Boolean(row.is_custom),
       });
     });
@@ -752,6 +867,67 @@ export default function PlansPage() {
   }, [latestThemePricingByCountry, pricingMarkets, themePricingDirty]);
 
   useEffect(() => {
+    if (!themeCatalog) return;
+    setThemeCatalogDraft({
+      name: themeCatalog.name,
+      description: themeCatalog.description || "",
+      is_active: themeCatalog.is_active,
+    });
+  }, [themeCatalog]);
+
+  useEffect(() => {
+    if (smsPricingDirty || !smsPricingSetting) return;
+    const defaults = createSmsPricingDraft();
+    const rawTiers = (smsPricingSetting.tiers || {}) as Record<string, unknown>;
+    const tiers = (Object.keys(defaults.tiers) as Array<"NGN" | "GHS">).reduce((result, currency) => {
+      const rows = Array.isArray(rawTiers[currency]) ? rawTiers[currency] : [];
+      result[currency] = rows.length > 0
+        ? rows.flatMap((row) => {
+            if (!row || typeof row !== "object") return [];
+            const value = row as Record<string, unknown>;
+            return [{
+              bundle_price: String(value.bundle_price ?? ""),
+              arkesel_cost_per_sms: String(value.arkesel_cost_per_sms ?? ""),
+            }];
+          })
+        : defaults.tiers[currency];
+      return result;
+    }, {} as SmsCreditPricingDraft["tiers"]);
+    setSmsPricingDraft({
+      margin_multiplier: String(smsPricingSetting.margin_multiplier ?? defaults.margin_multiplier),
+      low_balance_threshold_credits: String(
+        smsPricingSetting.low_balance_threshold_credits ?? defaults.low_balance_threshold_credits,
+      ),
+      tiers,
+    });
+  }, [smsPricingDirty, smsPricingSetting]);
+
+  useEffect(() => {
+    if (smsPricingDirty || !smsComplimentarySetting) return;
+    const defaults = createSmsComplimentaryDraft();
+    const defaultPolicy = smsComplimentarySetting.default;
+    const policy = defaultPolicy && typeof defaultPolicy === "object"
+      ? defaultPolicy as Record<string, unknown>
+      : {};
+    setSmsComplimentaryDraft({
+      reminder_segments: String(policy.reminder_segments ?? defaults.reminder_segments),
+      marketing_segments: String(policy.marketing_segments ?? defaults.marketing_segments),
+    });
+  }, [smsComplimentarySetting, smsPricingDirty]);
+
+  useEffect(() => {
+    if (marketingAddonsDirty || !marketingAddonsSetting?.addons || !Array.isArray(marketingAddonsSetting.addons)) return;
+    const parsed = marketingAddonsSetting.addons.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const row = item as Record<string, unknown>;
+      if (typeof row.key !== "string" || typeof row.name !== "string" || typeof row.description !== "string") return [];
+      if (row.status !== "available" && row.status !== "coming_soon" && row.status !== "hidden") return [];
+      return [{ key: row.key, name: row.name, description: row.description, status: row.status } satisfies MarketingAddonDraft];
+    });
+    if (parsed.length > 0) setMarketingAddonsDraft(parsed);
+  }, [marketingAddonsDirty, marketingAddonsSetting]);
+
+  useEffect(() => {
     if (!pricing) return;
     setPaystackCodeDrafts((prev) => {
       const next = { ...prev };
@@ -774,6 +950,34 @@ export default function PlansPage() {
     (limits || []).forEach((row) => map.set(row.plan_id, row));
     return map;
   }, [limits]);
+
+  const progressionPlans = useMemo(
+    () => [...(plans || [])].sort((a, b) => a.display_order - b.display_order),
+    [plans],
+  );
+
+  useEffect(() => {
+    if (progressionDirty || progressionPlans.length === 0) return;
+    const nextDrafts: Record<string, ProgressionDraft> = {};
+    progressionPlans.forEach((plan, index) => {
+      const nextPlan = progressionPlans[index + 1];
+      const limit = limitsByPlan.get(plan.id);
+      const firstChainLocationTier = plan.slug.trim().toLowerCase() === "chain"
+        ? CURRENCIES.flatMap((currency) => chainTierDrafts[currency] || [])
+          .map((row) => Number(row.tier_min))
+          .filter((value) => Number.isFinite(value) && value >= 1)
+          .sort((a, b) => a - b)[0]
+        : undefined;
+      nextDrafts[plan.id] = {
+        planId: plan.id,
+        planName: plan.name,
+        nextPlanName: nextPlan?.name || "Chain expansion",
+        maxLocations: String(firstChainLocationTier ?? limit?.max_locations ?? 1),
+        maxStaff: String(limit?.max_staff ?? 1),
+      };
+    });
+    setProgressionDrafts(nextDrafts);
+  }, [chainTierDrafts, limitsByPlan, progressionDirty, progressionPlans]);
 
   const featuresByPlan = useMemo(() => {
     const map = new Map<string, PlanFeature[]>();
@@ -805,6 +1009,21 @@ export default function PlansPage() {
     () => (plans || []).find((plan) => plan.is_recommended)?.id || null,
     [plans],
   );
+
+  // The public product now has one subscription. Keep the historic plan rows
+  // available for existing tenants and billing records, but make the solo
+  // row (or the first active row during a transition) the single customer-
+  // facing base subscription that operators configure.
+  const basePlan = useMemo(
+    () =>
+      (plans || []).find((plan) => plan.slug.trim().toLowerCase() === "solo") ||
+      (plans || []).find((plan) => plan.is_active) ||
+      (plans || [])[0] ||
+      null,
+    [plans],
+  );
+  const basePlanFeatures = basePlan ? featuresByPlan.get(basePlan.id) || [] : [];
+  const basePlanPricing = basePlan ? activePricingByPlan.get(basePlan.id) : undefined;
 
   const planCount = plans?.length || 0;
   const remainingPlanSlots = Math.max(0, MAX_PLANS - planCount);
@@ -1015,7 +1234,7 @@ export default function PlansPage() {
         min: Number(row.tier_min),
         max: row.tier_max.trim() ? Number(row.tier_max) : null,
         price: row.price_per_location.trim() ? Number(row.price_per_location) : null,
-        annualPrice: row.price_per_location_annual.trim() ? Number(row.price_per_location_annual) : null,
+        annualDiscountPct: row.annual_discount_pct.trim() ? Number(row.annual_discount_pct) : 0,
       }))
       .sort((a, b) => a.min - b.min);
 
@@ -1054,18 +1273,12 @@ export default function PlansPage() {
         if (item.price !== null) {
           errors.push(`${currency}: custom tier must not have a price.`);
         }
-        if (item.annualPrice !== null) {
-          errors.push(`${currency}: custom tier must not have an annual price.`);
-        }
       } else {
         if (item.price === null || !Number.isFinite(item.price) || item.price < 0) {
           errors.push(`${currency}: non-custom tiers require price >= 0.`);
         }
-        // Annual price is optional per tier. Leaving it blank just means
-        // annual Chain pricing isn't configured for that tier yet (AD-8),
-        // not a validation error.
-        if (item.annualPrice !== null && (!Number.isFinite(item.annualPrice) || item.annualPrice < 0)) {
-          errors.push(`${currency}: annual price must be empty or >= 0.`);
+        if (!Number.isFinite(item.annualDiscountPct) || item.annualDiscountPct < 0 || item.annualDiscountPct > 100) {
+          errors.push(`${currency}: annual discount must be between 0 and 100.`);
         }
       }
     });
@@ -1082,14 +1295,14 @@ export default function PlansPage() {
       errors.push("Chain plan not found.");
       return { isValid: false, errors };
     }
-    if (!chainTierReason.trim()) {
+    if (!locationPricingReason.trim()) {
       errors.push("Reason is required.");
     }
     CURRENCIES.forEach((currency) => {
       errors.push(...validateChainCurrencyDrafts(currency, chainTierDrafts[currency]));
     });
     return { isValid: errors.length === 0, errors };
-  }, [chainPlan?.id, chainTierDrafts, chainTierReason]);
+  }, [chainPlan?.id, chainTierDrafts, locationPricingReason]);
 
   const seatPricingValidation = useMemo(() => {
     const errors: string[] = [];
@@ -1288,7 +1501,7 @@ export default function PlansPage() {
         p_pricing_json: pricingRows,
         p_change_summary_json: {
           plan_name: draft.name.trim(),
-          changes: ["plan_core", "plan_limits", "plan_features"],
+          changes: ["base_subscription", "plan_features"],
           features: featurePayload,
         },
         p_rollout_mode: editPlanRolloutMode,
@@ -1538,23 +1751,28 @@ export default function PlansPage() {
           price_per_location: row.is_custom
             ? null
             : Number(row.price_per_location),
-          price_per_location_annual: row.is_custom || !row.price_per_location_annual.trim()
+          price_per_location_annual: row.is_custom
             ? null
-            : Number(row.price_per_location_annual),
+            : deriveAnnualTotal(
+                deriveEffectiveMonthly(
+                  Number(row.price_per_location),
+                  Math.max(0, Math.min(100, parseNumericInput(row.annual_discount_pct || "0"))),
+                ),
+              ),
           is_custom: row.is_custom,
         })),
       );
       const { error } = await (supabase.rpc as any)("backoffice_upsert_chain_location_pricing", {
         p_plan_id: chainPlan.id,
         p_tiers: tiers,
-        p_reason: chainTierReason.trim(),
+        p_reason: locationPricingReason.trim(),
       });
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Chain location tiers updated.");
-      setChainTierReason("");
       setChainTierDirty(false);
+      setLocationPricingReason("");
       queryClient.invalidateQueries({ queryKey: ["backoffice-chain-tier-pricing"] });
       queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
     },
@@ -1606,8 +1824,8 @@ export default function PlansPage() {
     },
     onSuccess: () => {
       toast.success("Seat add-on pricing updated.");
-      setSeatPricingReason("");
       setSeatPricingDirty(false);
+      setSeatPricingReason("");
       queryClient.invalidateQueries({ queryKey: ["backoffice-seat-addon-pricing"] });
       queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
     },
@@ -1729,6 +1947,178 @@ export default function PlansPage() {
     onError: (error) => {
       toast.error(errorToMessage(error));
     },
+  });
+
+  const saveThemeCatalogMutation = useMutation({
+    mutationFn: async () => {
+      if (!themeCatalogDraft.name.trim()) throw new Error("Theme add-on name is required.");
+      const { error } = await (supabase.from as any)("theme_catalog")
+        .update({
+          name: themeCatalogDraft.name.trim(),
+          description: themeCatalogDraft.description.trim() || null,
+          is_active: themeCatalogDraft.is_active,
+        })
+        .eq("theme_key", "ecommerce");
+      if (error) throw error;
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "theme_catalog_updated",
+        entity_type: "theme_catalog",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: { reason: themePricingReason.trim(), theme_key: "ecommerce", ...themeCatalogDraft },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      toast.success("E-commerce theme add-on updated.");
+      setThemePricingReason("");
+      queryClient.invalidateQueries({ queryKey: ["backoffice-theme-catalog", "ecommerce"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => toast.error(errorToMessage(error)),
+  });
+
+  const saveMarketingAddonsMutation = useMutation({
+    mutationFn: async () => {
+      const addons = marketingAddonsDraft.map((addon) => ({
+        key: addon.key.trim(),
+        name: addon.name.trim(),
+        description: addon.description.trim(),
+        status: addon.status,
+      }));
+      if (addons.some((addon) => !addon.key || !addon.name || !addon.description)) {
+        throw new Error("Every public add-on needs a name and description.");
+      }
+      const { error } = await supabase
+        .from("platform_settings")
+        .upsert({
+          key: "marketing_addons",
+          value: { addons },
+          description: "Customer-facing add-on names, descriptions, and availability shown on the marketing pricing page.",
+          updated_by_id: backofficeUser?.user_id || null,
+        }, { onConflict: "key" });
+      if (error) throw error;
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "marketing_addons_updated",
+        entity_type: "platform_settings",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: { reason: marketingAddonsReason.trim(), addons },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      toast.success("Public add-on list updated.");
+      setMarketingAddonsDirty(false);
+      setMarketingAddonsReason("");
+      queryClient.invalidateQueries({ queryKey: ["backoffice-platform-setting", "marketing_addons"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => toast.error(errorToMessage(error)),
+  });
+
+  const saveSmsPricingMutation = useMutation({
+    mutationFn: async () => {
+      const pricingValue = {
+        margin_multiplier: Number(smsPricingDraft.margin_multiplier),
+        low_balance_threshold_credits: Number(smsPricingDraft.low_balance_threshold_credits),
+        tiers: Object.fromEntries(
+          (Object.keys(smsPricingDraft.tiers) as Array<"NGN" | "GHS">).map((currency) => [
+            currency,
+            smsPricingDraft.tiers[currency].map((tier) => ({
+              bundle_price: Number(tier.bundle_price),
+              arkesel_cost_per_sms: Number(tier.arkesel_cost_per_sms),
+            })),
+          ]),
+        ),
+      };
+      const complimentaryValue = {
+        default: {
+          reminder_segments: Number(smsComplimentaryDraft.reminder_segments),
+          marketing_segments: Number(smsComplimentaryDraft.marketing_segments),
+        },
+      };
+
+      const { error: pricingError } = await supabase
+        .from("platform_settings")
+        .upsert({
+          key: "sms_credit_pricing",
+          value: pricingValue,
+          description: "SMS credit bundle pricing and margin settings.",
+          updated_by_id: backofficeUser?.user_id || null,
+        }, { onConflict: "key" });
+      if (pricingError) throw pricingError;
+
+      const { error: complimentaryError } = await supabase
+        .from("platform_settings")
+        .upsert({
+          key: "sms_complimentary_allowances",
+          value: complimentaryValue,
+          description: "Monthly complimentary SMS segments by purpose. Purchased SMS is separate and never reset.",
+          updated_by_id: backofficeUser?.user_id || null,
+        }, { onConflict: "key" });
+      if (complimentaryError) throw complimentaryError;
+
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "sms_pricing_updated",
+        entity_type: "platform_settings",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          reason: smsPricingReason.trim(),
+          pricing: pricingValue,
+          complimentary_allowances: complimentaryValue,
+        },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      toast.success("Messaging pricing updated.");
+      setSmsPricingReason("");
+      setSmsPricingDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["backoffice-platform-setting", "sms_credit_pricing"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-platform-setting", "sms_complimentary_allowances"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => toast.error(errorToMessage(error)),
+  });
+
+  const saveProgressionMutation = useMutation({
+    mutationFn: async () => {
+      const rows = Object.values(progressionDrafts);
+      for (const draft of rows) {
+        const { error } = await supabase
+          .from("plan_limits")
+          .update({
+            max_locations: Number(draft.maxLocations),
+            max_staff: Number(draft.maxStaff),
+          })
+          .eq("plan_id", draft.planId);
+        if (error) throw error;
+      }
+
+      const { error: auditError } = await supabase.from("audit_logs").insert({
+        action: "plan_growth_progression_updated",
+        entity_type: "plan_limits",
+        actor_user_id: backofficeUser?.user_id,
+        metadata: {
+          reason: progressionReason.trim(),
+          transitions: rows.map((draft) => ({
+            plan_id: draft.planId,
+            plan_name: draft.planName,
+            next_plan_name: draft.nextPlanName,
+            locations: Number(draft.maxLocations),
+            staff: Number(draft.maxStaff),
+          })),
+        },
+      });
+      if (auditError) throw auditError;
+    },
+    onSuccess: () => {
+      toast.success("Growth progression thresholds updated.");
+      setProgressionReason("");
+      setProgressionDirty(false);
+      queryClient.invalidateQueries({ queryKey: ["backoffice-limits"] });
+      queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
+    },
+    onError: (error) => toast.error(errorToMessage(error)),
   });
 
   const savePaystackCodeRow = async (rowId: string) => {
@@ -2059,6 +2449,53 @@ export default function PlansPage() {
     }));
   };
 
+  const updateSmsPricingTier = (
+    currency: "NGN" | "GHS",
+    index: number,
+    patch: Partial<SmsCreditTierDraft>,
+  ) => {
+    setSmsPricingDirty(true);
+    setSmsPricingDraft((prev) => ({
+      ...prev,
+      tiers: {
+        ...prev.tiers,
+        [currency]: prev.tiers[currency].map((tier, tierIndex) =>
+          tierIndex === index ? { ...tier, ...patch } : tier,
+        ),
+      },
+    }));
+  };
+
+  const addSmsPricingTier = (currency: "NGN" | "GHS") => {
+    setSmsPricingDirty(true);
+    setSmsPricingDraft((prev) => ({
+      ...prev,
+      tiers: {
+        ...prev.tiers,
+        [currency]: [...prev.tiers[currency], { bundle_price: "", arkesel_cost_per_sms: "" }],
+      },
+    }));
+  };
+
+  const removeSmsPricingTier = (currency: "NGN" | "GHS", index: number) => {
+    setSmsPricingDirty(true);
+    setSmsPricingDraft((prev) => ({
+      ...prev,
+      tiers: {
+        ...prev.tiers,
+        [currency]: prev.tiers[currency].filter((_, tierIndex) => tierIndex !== index),
+      },
+    }));
+  };
+
+  const updateProgressionDraft = (planId: string, patch: Partial<ProgressionDraft>) => {
+    setProgressionDirty(true);
+    setProgressionDrafts((prev) => ({
+      ...prev,
+      [planId]: { ...prev[planId], ...patch },
+    }));
+  };
+
   const canSubmitCreatePlans =
     isSuperAdmin && createPlansValidation.isValid && !createPlansMutation.isPending;
   const canSubmitCreatePricing =
@@ -2073,16 +2510,58 @@ export default function PlansPage() {
     && !saveStaffOperationsPricingMutation.isPending;
   const canSubmitThemePricing =
     isSuperAdmin && themePricingValidation.isValid && !saveThemePricingMutation.isPending;
+  const smsPricingValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!smsPricingReason.trim()) errors.push("Reason is required.");
+    const margin = parseNumericInput(smsPricingDraft.margin_multiplier);
+    const threshold = parseNumericInput(smsPricingDraft.low_balance_threshold_credits);
+    if (!Number.isFinite(margin) || margin <= 0) errors.push("Margin multiplier must be greater than 0.");
+    if (!Number.isFinite(threshold) || threshold < 0) errors.push("Low balance threshold must be 0 or greater.");
+    (Object.keys(smsPricingDraft.tiers) as Array<"NGN" | "GHS">).forEach((currency) => {
+      if (smsPricingDraft.tiers[currency].length === 0) errors.push(`${currency}: add at least one SMS bundle.`);
+      smsPricingDraft.tiers[currency].forEach((tier, index) => {
+        const bundlePrice = parseNumericInput(tier.bundle_price);
+        const providerCost = parseNumericInput(tier.arkesel_cost_per_sms);
+        if (!Number.isFinite(bundlePrice) || bundlePrice <= 0) errors.push(`${currency} bundle ${index + 1}: price must be greater than 0.`);
+        if (!Number.isFinite(providerCost) || providerCost <= 0) errors.push(`${currency} bundle ${index + 1}: provider cost must be greater than 0.`);
+      });
+    });
+    const reminder = parseNumericInput(smsComplimentaryDraft.reminder_segments);
+    const marketing = parseNumericInput(smsComplimentaryDraft.marketing_segments);
+    if (!Number.isInteger(reminder) || reminder < 0) errors.push("Complimentary reminder SMS must be a whole number.");
+    if (!Number.isInteger(marketing) || marketing < 0) errors.push("Complimentary marketing SMS must be a whole number.");
+    return { isValid: errors.length === 0, errors };
+  }, [smsComplimentaryDraft, smsPricingDraft, smsPricingReason]);
+  const canSubmitSmsPricing =
+    isSuperAdmin && smsPricingValidation.isValid && !saveSmsPricingMutation.isPending;
+  const canSubmitMarketingAddons =
+    isSuperAdmin &&
+    marketingAddonsReason.trim().length > 0 &&
+    marketingAddonsDraft.length > 0 &&
+    marketingAddonsDraft.every((addon) => addon.name.trim() && addon.description.trim()) &&
+    !saveMarketingAddonsMutation.isPending;
+  const progressionValidation = useMemo(() => {
+    const errors: string[] = [];
+    if (!progressionReason.trim()) errors.push("Growth progression reason is required.");
+    const drafts = Object.values(progressionDrafts);
+    if (!drafts.length) errors.push("No growth progression stages are configured.");
+    drafts.forEach((draft) => {
+      const locations = Number(draft.maxLocations);
+      const staff = Number(draft.maxStaff);
+      if (!Number.isInteger(locations) || locations < 1) errors.push(`${draft.planName}: locations must be a whole number of at least 1.`);
+      if (!Number.isInteger(staff) || staff < 1) errors.push(`${draft.planName}: staff must be a whole number of at least 1.`);
+    });
+    return { isValid: errors.length === 0, errors };
+  }, [progressionDrafts, progressionReason]);
+  const canSubmitProgression =
+    isSuperAdmin && progressionValidation.isValid && !saveProgressionMutation.isPending;
 
   const validateEditPlan = () => {
     const errors: string[] = [];
     if (!editPlanDraft || !editPlanId) return { isValid: false, errors: ["Plan form is empty."] };
 
     const name = editPlanDraft.name.trim().toLowerCase();
-    const slug = sanitizeSlug(editPlanDraft.slug).toLowerCase();
-
     if (!name) errors.push("Name is required.");
-    if (!slug) errors.push("Slug is required.");
     if (!editPlanDraft.reason.trim()) errors.push("Reason is required.");
     if (editPlanRolloutMode === "schedule" && !editPlanRolloutAt) {
       errors.push("Scheduled rollout requires date and time.");
@@ -2092,11 +2571,6 @@ export default function PlansPage() {
       (plan) => plan.id !== editPlanId && plan.name.trim().toLowerCase() === name,
     );
     if (duplicateName) errors.push("Plan name already exists.");
-
-    const duplicateSlug = (plans || []).some(
-      (plan) => plan.id !== editPlanId && plan.slug.trim().toLowerCase() === slug,
-    );
-    if (duplicateSlug) errors.push("Plan slug already exists.");
 
     const hasFeature = editPlanDraft.features.some((feature) => feature.feature_text.trim());
     if (!hasFeature) errors.push("Add at least one feature.");
@@ -2146,75 +2620,12 @@ export default function PlansPage() {
       <div className="space-y-6 p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Plans & Pricing</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">Base Subscription & Add-ons</h1>
             <p className="text-sm text-muted-foreground">
-              Manage plan catalog, pricing, limits, and display features.
+              Manage the base subscription, add-on pricing, and customer-facing feature copy. Market availability and currencies are managed in Settings → Markets.
             </p>
           </div>
-          {isSuperAdmin && (
-            <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={openCreatePlansDialog} disabled={remainingPlanSlots <= 0}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Plans
-              </Button>
-              <Button variant="outline" onClick={openCreatePricingDialog}>
-                <Coins className="mr-2 h-4 w-4" />
-                Add Pricing
-              </Button>
-            </div>
-          )}
         </div>
-
-        <Card className="border-dashed">
-          <CardContent className="pt-4 text-sm text-muted-foreground">
-            <div className="flex flex-wrap items-center gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="secondary" className="cursor-default">
-                    Plans {planCount}/{MAX_PLANS}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-56 text-xs">
-                  The platform enforces a hard cap of {MAX_PLANS} plans. You can't create more until one is removed.
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="secondary" className="cursor-default">
-                    Remaining slots: {remainingPlanSlots}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-56 text-xs">
-                  How many more plans you can create before hitting the {MAX_PLANS}-plan cap.
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Badge variant="secondary" className="cursor-default">
-                    Without active pricing: {plansWithoutActivePricing.length}
-                  </Badge>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-56 text-xs">
-                  Plans with no active pricing row, currently unsellable until pricing is added.
-                </TooltipContent>
-              </Tooltip>
-              {recommendedPlanId ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="default" className="cursor-default">
-                      Recommended: {getPlanName(recommendedPlanId)}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-56 text-xs">
-                    The plan highlighted as "recommended" to prospects on the pricing page.
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
-                <Badge variant="outline">No recommended plan set</Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
 
         {!isSuperAdmin && (
           <Card className="border-warning-bg bg-warning-bg/50">
@@ -2229,896 +2640,370 @@ export default function PlansPage() {
           </Card>
         )}
 
-        <Tabs defaultValue="plans">
-          <TabsList>
-            <TabsTrigger value="plans">Plans</TabsTrigger>
-            <TabsTrigger value="pricing">Pricing Matrix</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="plans" className="mt-4">
-            {isLoading ? (
-              <div className="rounded-md border bg-card p-6 text-sm text-muted-foreground">
-                Loading plans...
+        <Card className="border-primary/30 bg-primary/[0.03]">
+          <CardHeader>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>One base subscription</CardTitle>
+                <CardDescription>
+                  Configure the customer-facing subscription once. Locations, seats, SMS, themes, and Staff Operations are add-ons as a salon grows.
+                </CardDescription>
               </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {(plans || []).map((plan) => {
-                  const limit = limitsByPlan.get(plan.id);
-                  const planFeatures = featuresByPlan.get(plan.id) || [];
-                  const activePricing = activePricingByPlan.get(plan.id);
-
-                  return (
-                    <Card key={plan.id} className={plan.is_recommended ? "border-primary" : ""}>
-                      <CardHeader>
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <CardTitle className="text-lg">{plan.name}</CardTitle>
-                            <CardDescription>{plan.description || "No description"}</CardDescription>
-                          </div>
-                          <div className="flex flex-col items-end gap-1">
-                            {plan.is_recommended && <Badge>Recommended</Badge>}
-                            {!plan.is_active && <Badge variant="secondary">Inactive</Badge>}
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          <div>
-                            <p className="text-muted-foreground">Slug</p>
-                            <p className="font-medium">{plan.slug}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Display Order</p>
-                            <p className="font-medium">{plan.display_order}</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Trial</p>
-                            <p className="font-medium">{plan.trial_days} days</p>
-                          </div>
-                          <div>
-                            <p className="text-muted-foreground">Currencies</p>
-                            <p className="font-medium">{activePricing?.size || 0}/3 active</p>
-                          </div>
-                        </div>
-
-                        <Separator />
-
-                        <div className="space-y-1 text-sm">
-                          <p className="font-medium">Limits</p>
-                          <p className="text-muted-foreground">
-                            {limit?.max_locations || 1} locations · {limit?.max_staff || 1} staff ·{" "}
-                            {limit?.monthly_messages || 30} messages/mo
+              {basePlan && isSuperAdmin && (
+                <Button variant="outline" onClick={() => openEditPlanDialog(basePlan)}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit subscription
+                </Button>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {basePlan ? (
+              <>
+                <div className="grid gap-4 md:grid-cols-[1.4fr_1fr_1fr]">
+                  <div className="rounded-lg border bg-background p-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Customer-facing name</p>
+                    <p className="mt-1 text-lg font-semibold">{basePlan.name}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">{basePlan.description || "Add a short description for the pricing page."}</p>
+                  </div>
+                  <div className="rounded-lg border bg-background p-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Trial</p>
+                    <p className="mt-1 text-lg font-semibold">{basePlan.trial_days} days</p>
+                    <p className="mt-1 text-sm text-muted-foreground">Full product access during trial.</p>
+                  </div>
+                  <div className="rounded-lg border bg-background p-4">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Base price</p>
+                    <div className="mt-1 space-y-1">
+                      {CURRENCIES.map((currency) => {
+                        const row = basePlanPricing?.get(currency);
+                        return (
+                          <p key={currency} className="text-sm font-medium">
+                            {currency} {row ? `${getCurrencySymbol(currency)}${row.monthly_price.toLocaleString()}/month` : "Not configured"}
                           </p>
-                          <p className="text-muted-foreground">
-                            {limit?.max_services ?? "Unlimited"} services ·{" "}
-                            {limit?.max_products ?? "Unlimited"} products ·{" "}
-                            {limit?.max_packages ?? "Unlimited"} packages ·{" "}
-                            {limit?.max_vouchers ?? "Unlimited"} vouchers
-                          </p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium">Features</p>
-                          <ul className="space-y-1 text-sm text-muted-foreground">
-                            {planFeatures.slice(0, 4).map((feature) => (
-                              <li key={feature.id} className="flex items-center gap-2">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                                <span>{feature.feature_text}</span>
-                              </li>
-                            ))}
-                            {planFeatures.length === 0 && <li>No features configured.</li>}
-                          </ul>
-                        </div>
-
-                        {isSuperAdmin && (
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openEditPlanDialog(plan)}
-                            >
-                              <Pencil className="mr-2 h-3.5 w-3.5" />
-                              Edit Plan
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openEditPricingDialog(plan)}
-                              disabled={!activePricing || activePricing.size === 0}
-                            >
-                              <Coins className="mr-2 h-3.5 w-3.5" />
-                              Edit Pricing
-                            </Button>
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              onClick={() => openDeletePlanDialog(plan)}
-                            >
-                              <Trash2 className="mr-2 h-3.5 w-3.5" />
-                              Delete Plan
-                            </Button>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="pricing" className="mt-4">
-            <div className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Active Pricing</CardTitle>
-                  <CardDescription>One active row per plan/currency.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Plan</TableHead>
-                        {CURRENCIES.map((currency) => (
-                          <TableHead key={currency}>{currency}</TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(plans || []).map((plan) => (
-                        <TableRow key={plan.id}>
-                          <TableCell className="font-medium">{plan.name}</TableCell>
-                          {CURRENCIES.map((currency) => {
-                            const row = activePricingByPlan.get(plan.id)?.get(currency);
-                            return (
-                              <TableCell key={currency}>
-                                {row ? (
-                                  <div className="text-sm">
-                                    <p>
-                                      {getCurrencySymbol(currency)}
-                                      {row.monthly_price.toLocaleString()}/mo
-                                    </p>
-                                    <p className="text-muted-foreground">
-                                      annual {getCurrencySymbol(currency)}
-                                      {row.annual_price.toLocaleString()}
-                                    </p>
-                                  </div>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </TableCell>
-                            );
-                          })}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-
-              {canManagePaystackCodes && (
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <CardTitle>Paystack Plan Codes</CardTitle>
-                        <CardDescription>
-                          Monthly and annual PLN codes per plan, per Paystack account. Find codes in each
-                          dashboard under Products → Plans. Format:{" "}
-                          <span className="font-mono text-xs">PLN_xxxxxx</span>. Each row saves independently.
-                        </CardDescription>
-                      </div>
-                      <Badge variant="outline" className="shrink-0 gap-1 border-amber-300 text-amber-600">
-                        <Lock className="h-3 w-3" />
-                        Sensitive
-                      </Badge>
+                        );
+                      })}
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-5">
-                    {(
-                      [
-                        { currency: "NGN" as CurrencyCode, label: "Nigeria", flag: "🇳🇬" },
-                        { currency: "GHS" as CurrencyCode, label: "Ghana", flag: "🇬🇭" },
-                      ] as const
-                    ).map(({ currency, label, flag }) => (
-                      <div key={currency} className="overflow-hidden rounded-md border">
-                        <div className="border-b bg-muted/40 px-4 py-2.5">
-                          <p className="text-sm font-semibold">
-                            {flag} {label}{" "}
-                            <span className="font-normal text-muted-foreground">({currency} Paystack account)</span>
-                          </p>
+                    {isSuperAdmin && (
+                      <Button variant="link" className="h-auto p-0 pt-2" onClick={() => openEditPricingDialog(basePlan)}>
+                        Edit base price
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium">Included benefits</p>
+                      <p className="text-sm text-muted-foreground">This list feeds the marketing pricing page and customer subscription views.</p>
+                    </div>
+                    {isSuperAdmin && (
+                      <Button variant="outline" size="sm" onClick={() => openEditPlanDialog(basePlan)}>
+                        <Pencil className="mr-2 h-3.5 w-3.5" />
+                        Edit benefits
+                      </Button>
+                    )}
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {basePlanFeatures.map((feature) => (
+                      <div key={feature.id} className="flex items-start gap-2 rounded-md border bg-background px-3 py-2 text-sm">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                        <span>{feature.feature_text}</span>
+                      </div>
+                    ))}
+                    {basePlanFeatures.length === 0 && <p className="text-sm text-muted-foreground">No benefits configured yet.</p>}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-2">
+                    <p className="font-medium">Add-ons</p>
+                    <p className="text-sm text-muted-foreground">Keep optional growth features separate from the base subscription.</p>
+                  </div>
+                  <div className="mb-4 rounded-lg border bg-background p-4">
+                    <div className="mb-3">
+                      <p className="text-xs text-muted-foreground">These names, descriptions, and status badges feed the add-ons section on the marketing pricing page. Hidden items are omitted; coming-soon items remain visible with a badge.</p>
+                    </div>
+                    <div className="space-y-3">
+                      {marketingAddonsDraft.map((addon, index) => (
+                        <div key={addon.key} className="grid gap-2 rounded-md border p-3 md:grid-cols-[180px_1fr_150px]">
+                          <div className="flex items-center"><p className="text-sm font-medium">{addon.key.replace(/_/g, " ")}</p></div>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <Input value={addon.name} onChange={(event) => { setMarketingAddonsDirty(true); setMarketingAddonsDraft((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item)); }} placeholder="Customer-facing name" />
+                            <Input value={addon.description} onChange={(event) => { setMarketingAddonsDirty(true); setMarketingAddonsDraft((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, description: event.target.value } : item)); }} placeholder="Customer-facing description" />
+                          </div>
+                          <Select value={addon.status} onValueChange={(value) => { setMarketingAddonsDirty(true); setMarketingAddonsDraft((prev) => prev.map((item, itemIndex) => itemIndex === index ? { ...item, status: value as MarketingAddonDraft["status"] } : item)); }}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>{MARKETING_ADDON_STATUS_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+                          </Select>
                         </div>
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead className="w-[160px]">Plan</TableHead>
-                                <TableHead>Monthly PLN code</TableHead>
-                                <TableHead>Annual PLN code</TableHead>
-                                <TableHead className="w-[110px]" />
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {(plans || []).map((plan) => {
-                                const row = activePricingByPlan.get(plan.id)?.get(currency);
-                                if (!row) {
-                                  return (
-                                    <TableRow key={plan.id}>
-                                      <TableCell className="font-medium">{plan.name}</TableCell>
-                                      <TableCell colSpan={3} className="text-xs text-muted-foreground">
-                                        No {currency} pricing row, add pricing first
-                                      </TableCell>
-                                    </TableRow>
-                                  );
-                                }
-                                const draft = paystackCodeDrafts[row.id] ?? { monthly: "", annual: "", dirty: false };
-                                const isRevealed = paystackCodeRevealedRows.has(row.id);
-                                const isSaving = paystackCodeSavingRows.has(row.id);
-                                const isSyncing = paystackSyncingRows.has(row.id);
-                                const outOfSync = isOutOfSync(row);
-                                const inputType = isRevealed ? "text" : "password";
-                                return (
-                                  <TableRow key={plan.id} className={outOfSync ? "bg-amber-50/60" : ""}>
-                                    <TableCell className="font-medium">
-                                      <div className="flex flex-col gap-1">
-                                        <span>{plan.name}</span>
-                                        {outOfSync && (
-                                          <span className="inline-flex items-center gap-1 rounded-sm bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 w-fit">
-                                            ⚠ Prices not synced
-                                          </span>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                    <TableCell className="min-w-[200px]">
-                                      <Input
-                                        type={inputType}
-                                        placeholder="PLN_xxxxxx"
-                                        autoComplete="off"
-                                        value={draft.monthly}
-                                        onChange={(e) =>
-                                          setPaystackCodeDrafts((prev) => ({
-                                            ...prev,
-                                            [row.id]: { ...prev[row.id] ?? { monthly: "", annual: "", dirty: false }, monthly: e.target.value, dirty: true },
-                                          }))
-                                        }
-                                      />
-                                    </TableCell>
-                                    <TableCell className="min-w-[200px]">
-                                      <Input
-                                        type={inputType}
-                                        placeholder="PLN_xxxxxx"
-                                        autoComplete="off"
-                                        value={draft.annual}
-                                        onChange={(e) =>
-                                          setPaystackCodeDrafts((prev) => ({
-                                            ...prev,
-                                            [row.id]: { ...prev[row.id] ?? { monthly: "", annual: "", dirty: false }, annual: e.target.value, dirty: true },
-                                          }))
-                                        }
-                                      />
-                                    </TableCell>
-                                    <TableCell>
-                                      <div className="flex items-center gap-1.5">
-                                        <Button
-                                          type="button"
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-8 w-8 shrink-0"
-                                          title={isRevealed ? "Hide" : "Reveal"}
-                                            onClick={() =>
-                                            setPaystackCodeRevealedRows((prev) => {
-                                              const n = new Set(prev);
-                                              if (n.has(row.id)) {
-                                                n.delete(row.id);
-                                              } else {
-                                                n.add(row.id);
-                                              }
-                                              return n;
-                                            })
-                                          }
-                                        >
-                                          {isRevealed ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                                        </Button>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          disabled={!draft.dirty || isSaving}
-                                          onClick={() => savePaystackCodeRow(row.id)}
-                                        >
-                                          {isSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                                          {isSaving ? "Saving" : "Save"}
-                                        </Button>
-                                        {isSuperAdmin && (row.paystack_plan_code_monthly || row.paystack_plan_code_annual) && outOfSync && (
-                                          <Button
-                                            type="button"
-                                            variant="outline"
-                                            size="sm"
-                                            title="Push this plan's NGN/GHS price to its Paystack plan codes"
-                                            disabled={isSyncing}
-                                            onClick={() => syncPaystackPlanPricing(row.id)}
-                                            className={outOfSync ? "border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100" : ""}
-                                          >
-                                            {isSyncing ? (
-                                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                            ) : (
-                                              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                                            )}
-                                            {isSyncing ? "Syncing…" : "Sync to Paystack"}
-                                          </Button>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              })}
-                            </TableBody>
-                          </Table>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+                      <div className="min-w-[240px] flex-1"><Label>Reason</Label><Textarea value={marketingAddonsReason} onChange={(event) => { setMarketingAddonsDirty(true); setMarketingAddonsReason(event.target.value); }} placeholder="Why are you updating the public add-on list?" /></div>
+                      <Button onClick={() => saveMarketingAddonsMutation.mutate()} disabled={!canSubmitMarketingAddons}>{saveMarketingAddonsMutation.isPending ? "Saving…" : "Save public add-on list"}</Button>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {[
+                      { key: "locations" as const, label: "Additional locations", detail: "Tiered chain expansion pricing", prices: CURRENCIES.map((currency) => `${currency}: ${chainTierDrafts[currency].some((row) => !row.is_custom && row.price_per_location.trim()) ? "Configured" : "Not configured"}`) },
+                      { key: "seats" as const, label: "Additional seats", detail: "Per extra seat / month", prices: pricingMarkets.map((m) => `${m.country_name}: ${getCurrencySymbol(m.currency)}${latestSeatPricingByCountry.get(m.country_code)?.unit_price_per_extra_seat ?? "—"}/seat`) },
+                      { key: "staff" as const, label: "Staff Operations", detail: "Check-ins, leave, and approvals", prices: pricingMarkets.map((m) => `${m.country_name}: ${getCurrencySymbol(m.currency)}${latestStaffOperationsPricingByCountry.get(m.country_code)?.unit_price_per_location ?? "—"}/location`) },
+                      { key: "themes" as const, label: "E-commerce themes", detail: "Annual storefront theme add-on", prices: pricingMarkets.map((m) => `${m.country_name}: ${getCurrencySymbol(m.currency)}${latestThemePricingByCountry.get(m.country_code)?.unit_price ?? "—"}/year`) },
+                      { key: "messaging" as const, label: "Messaging SMS", detail: "Complimentary allowances and paid top-ups", prices: (Object.keys(smsPricingDraft.tiers) as Array<"NGN" | "GHS">).map((currency) => {
+                        const tiers = smsPricingDraft.tiers[currency];
+                        const prices = tiers.map((tier) => Number(tier.bundle_price)).filter((price) => Number.isFinite(price) && price > 0);
+                        return prices.length > 0
+                          ? `${currency}: from ${getCurrencySymbol(currency)}${Math.min(...prices).toLocaleString()}`
+                          : `${currency}: Not configured`;
+                      }) },
+                    ].map((addon) => (
+                      <div key={addon.label} className="rounded-lg border bg-background p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-medium">{addon.label}</p>
+                            <p className="mt-1 text-sm text-muted-foreground">{addon.detail}</p>
+                          </div>
+                          {isSuperAdmin && (
+                            <Button variant="outline" size="sm" onClick={() => setEditingAddon(editingAddon === addon.key ? null : addon.key)}>
+                              {editingAddon === addon.key ? "Close" : "Edit"}
+                            </Button>
+                          )}
+                        </div>
+                        <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                          {addon.prices.length > 0 ? addon.prices.map((price) => <p key={price}>{price}</p>) : <p>Configure market pricing below.</p>}
                         </div>
                       </div>
                     ))}
-                  </CardContent>
-                </Card>
-              )}
+                  </div>
 
-              {chainPlan && isSuperAdmin && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Chain Location Tiers</CardTitle>
-                    <CardDescription>
-                      Configure additional-location pricing for Chain across USD, NGN, and GHS.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {chainTierValidation.errors.length > 0 && (
-                      <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
-                        <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
-                          {chainTierValidation.errors.slice(0, 8).map((error) => (
-                            <li key={error}>{error}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {CURRENCIES.map((currency) => (
-                      <div key={currency} className="rounded-md border p-3">
-                        <div className="mb-3 flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">{currency}</p>
-                            <p className="text-xs text-muted-foreground">
-                              Tiers are for additional locations (starting at 2).
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => addChainTierRow(currency)}
-                          >
-                            <Plus className="mr-2 h-3.5 w-3.5" />
-                            Add tier
-                          </Button>
+                  {editingAddon === "locations" && (
+                    <div className="mt-4 rounded-lg border bg-background p-4">
+                      <p className="mb-3 text-sm font-medium">Edit additional location pricing</p>
+                      <div className="mt-4 rounded-md border p-3">
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <div><p className="text-sm font-medium">Additional locations</p><p className="text-xs text-muted-foreground">Set the monthly price and annual discount. Annual pricing is calculated automatically as monthly × 12 after the discount.</p></div>
+                          <Button type="button" variant="outline" size="sm" onClick={() => CURRENCIES.forEach((currency) => addChainTierRow(currency))}>Add tier</Button>
                         </div>
-
-                        <div className="space-y-2">
-                          {chainTierDrafts[currency].map((row) => (
-                            <div
-                              key={row.localId}
-                              className="grid gap-2 md:grid-cols-[1fr_110px_110px_150px_150px_110px_70px]"
-                            >
-                              <Input
-                                placeholder="2-3"
-                                value={row.tier_label}
-                                onChange={(event) =>
-                                  updateChainTierRow(currency, row.localId, {
-                                    tier_label: event.target.value,
-                                  })
-                                }
-                              />
-                              <Input
-                                type="number"
-                                placeholder="2"
-                                value={row.tier_min}
-                                onChange={(event) =>
-                                  updateChainTierRow(currency, row.localId, {
-                                    tier_min: event.target.value,
-                                  })
-                                }
-                              />
-                              <Input
-                                type="number"
-                                placeholder="3"
-                                value={row.tier_max}
-                                onChange={(event) =>
-                                  updateChainTierRow(currency, row.localId, {
-                                    tier_max: event.target.value,
-                                  })
-                                }
-                              />
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="Price per location"
-                                value={row.price_per_location}
-                                disabled={row.is_custom}
-                                onChange={(event) =>
-                                  updateChainTierRow(currency, row.localId, {
-                                    price_per_location: event.target.value,
-                                  })
-                                }
-                              />
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                placeholder="Annual price per location"
-                                value={row.price_per_location_annual}
-                                disabled={row.is_custom}
-                                onChange={(event) =>
-                                  updateChainTierRow(currency, row.localId, {
-                                    price_per_location_annual: event.target.value,
-                                  })
-                                }
-                              />
-                              <div className="flex items-center gap-2">
-                                <Switch
-                                  checked={row.is_custom}
-                                  onCheckedChange={(checked) =>
-                                    updateChainTierRow(currency, row.localId, {
-                                      is_custom: checked,
-                                      price_per_location: checked ? "" : row.price_per_location,
-                                      price_per_location_annual: checked ? "" : row.price_per_location_annual,
-                                    })
-                                  }
-                                />
-                                <Label className="text-xs">Custom</Label>
+                        <div className="space-y-3">
+                          {CURRENCIES.map((currency) => (
+                            <div key={currency}>
+                              <p className="mb-1 text-xs font-medium text-muted-foreground">{currency}</p>
+                              <div className="mb-1 hidden grid-cols-[100px_1fr_150px_1fr_auto_auto] gap-2 px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground sm:grid">
+                                <span>Tier</span>
+                                <span>Monthly / location</span>
+                                <span>Annual discount %</span>
+                                <span>Annual after discount</span>
+                                <span />
+                                <span />
                               </div>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                onClick={() => removeChainTierRow(currency, row.localId)}
-                                disabled={chainTierDrafts[currency].length <= 1}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              <div className="space-y-2">
+                                {chainTierDrafts[currency].map((row) => (
+                                  <div key={row.localId} className="grid gap-2 sm:grid-cols-[100px_1fr_150px_1fr_auto_auto]">
+                                    <Input value={row.tier_label} onChange={(e) => updateChainTierRow(currency, row.localId, { tier_label: e.target.value })} aria-label={`${currency} location tier`} />
+                                    <Input type="number" min="0" step="0.01" placeholder="Monthly / location" value={row.price_per_location} disabled={row.is_custom} onChange={(e) => updateChainTierRow(currency, row.localId, { price_per_location: e.target.value })} />
+                                    <Input type="number" min="0" max="100" step="0.01" placeholder="Annual discount %" value={row.annual_discount_pct} disabled={row.is_custom} onChange={(e) => updateChainTierRow(currency, row.localId, { annual_discount_pct: e.target.value })} aria-label={`${currency} annual discount percentage`} />
+                                    <Input type="number" placeholder="Annual after discount" value={row.is_custom || !row.price_per_location.trim() ? "" : deriveAnnualTotal(deriveEffectiveMonthly(Number(row.price_per_location), Math.max(0, Math.min(100, parseNumericInput(row.annual_discount_pct || "0")))))} disabled readOnly aria-label={`${currency} annual price per location after discount`} />
+                                    <div className="flex items-center gap-2 rounded-md border px-2"><Switch checked={row.is_custom} onCheckedChange={(checked) => updateChainTierRow(currency, row.localId, { is_custom: checked })} /><span className="text-xs">Custom</span></div>
+                                    <Button type="button" variant="ghost" size="icon" onClick={() => removeChainTierRow(currency, row.localId)} disabled={chainTierDrafts[currency].length <= 1} aria-label={`Remove ${currency} location tier`}><Trash2 className="h-4 w-4" /></Button>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           ))}
                         </div>
                       </div>
-                    ))}
-
-                    <div>
-                      <Label>Reason</Label>
-                      <Textarea
-                        value={chainTierReason}
-                        onChange={(event) => {
-                          setChainTierDirty(true);
-                          setChainTierReason(event.target.value);
-                        }}
-                        placeholder="Why are you updating chain location tiers?"
-                      />
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button onClick={() => saveChainTiersMutation.mutate()} disabled={!canSubmitChainTiers}>
-                        {saveChainTiersMutation.isPending ? "Saving..." : "Save Chain Tiers"}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Seat Add-on Pricing</CardTitle>
-                  <CardDescription>
-                    Manage monthly per-seat add-on pricing by market for Studio and Chain seat expansion.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {seatPricingValidation.errors.length > 0 && (
-                    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
-                      <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
-                        {seatPricingValidation.errors.slice(0, 8).map((error) => (
-                          <li key={error}>{error}</li>
-                        ))}
-                      </ul>
+                      <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+                        <div className="min-w-[240px] flex-1"><Label>Location pricing reason</Label><Textarea value={locationPricingReason} onChange={(e) => { setChainTierDirty(true); setLocationPricingReason(e.target.value); }} placeholder="Why are you updating additional location pricing?" /></div>
+                        <Button onClick={() => saveChainTiersMutation.mutate()} disabled={!canSubmitChainTiers}>{saveChainTiersMutation.isPending ? "Saving…" : "Save location pricing"}</Button>
+                      </div>
                     </div>
                   )}
 
-                  <div className="overflow-x-auto rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Market</TableHead>
-                          <TableHead>Currency</TableHead>
-                          <TableHead>Monthly Price</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Notes</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                  {editingAddon === "seats" && (
+                    <div className="mt-4 rounded-lg border bg-background p-4">
+                      <p className="mb-3 text-sm font-medium">Edit additional seat pricing</p>
+                      <div className="grid gap-3 md:grid-cols-2">
                         {pricingMarkets.map((market) => {
                           const draft = seatPricingDrafts[market.country_code];
                           return (
-                            <TableRow key={market.country_code}>
-                              <TableCell>
-                                <div className="space-y-1">
-                                  <p className="font-medium">{market.country_name}</p>
-                                  <p className="text-xs text-muted-foreground">{market.country_code}</p>
-                                </div>
-                              </TableCell>
-                              <TableCell className="min-w-[120px]">
-                                <Input
-                                  value={draft?.currency || market.currency}
-                                  maxLength={3}
-                                  onChange={(event) =>
-                                    updateSeatPricingDraft(market.country_code, {
-                                      currency: event.target.value.toUpperCase(),
-                                    })
-                                  }
-                                />
-                              </TableCell>
-                              <TableCell className="min-w-[160px]">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={draft?.unit_price || ""}
-                                  onChange={(event) =>
-                                    updateSeatPricingDraft(market.country_code, {
-                                      unit_price: event.target.value,
-                                    })
-                                  }
-                                />
-                              </TableCell>
-                              <TableCell className="min-w-[160px]">
-                                <Select
-                                  value={draft?.status || "active"}
-                                  onValueChange={(value) =>
-                                    updateSeatPricingDraft(market.country_code, {
-                                      status: value as PricingStatus,
-                                    })
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {PRICING_STATUS_OPTIONS.map((option) => (
-                                      <SelectItem key={option.value} value={option.value}>
-                                        {option.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
+                            <div key={market.country_code} className="rounded-md border p-3">
+                              <div className="mb-2"><p className="text-sm font-medium">{market.country_name}</p><p className="text-xs text-muted-foreground">Per extra seat / month</p></div>
+                              <div className="grid gap-2 sm:grid-cols-[1fr_130px]">
+                                <Input type="number" min="0" step="0.01" value={draft?.unit_price || ""} onChange={(e) => updateSeatPricingDraft(market.country_code, { unit_price: e.target.value })} aria-label={`${market.country_name} seat price`} />
+                                <Select value={draft?.status || "active"} onValueChange={(value) => updateSeatPricingDraft(market.country_code, { status: value as PricingStatus })}>
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>{PRICING_STATUS_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
                                 </Select>
-                              </TableCell>
-                              <TableCell className="min-w-[240px]">
-                                <Input
-                                  value={draft?.notes || ""}
-                                  placeholder="Optional internal note"
-                                  onChange={(event) =>
-                                    updateSeatPricingDraft(market.country_code, {
-                                      notes: event.target.value,
-                                    })
-                                  }
-                                />
-                              </TableCell>
-                            </TableRow>
+                              </div>
+                              <Input className="mt-2" value={draft?.notes || ""} onChange={(e) => updateSeatPricingDraft(market.country_code, { notes: e.target.value })} placeholder="Internal pricing note (optional)" />
+                            </div>
                           );
                         })}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  <div>
-                    <Label>Reason</Label>
-                    <Textarea
-                      value={seatPricingReason}
-                      onChange={(event) => {
-                        setSeatPricingDirty(true);
-                        setSeatPricingReason(event.target.value);
-                      }}
-                      placeholder="Why are you updating seat add-on pricing?"
-                    />
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button onClick={() => saveSeatPricingMutation.mutate()} disabled={!canSubmitSeatPricing}>
-                      {saveSeatPricingMutation.isPending ? "Saving..." : "Save Seat Pricing"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <CardTitle>Staff Operations Add-on</CardTitle>
-                      <CardDescription>
-                        Price location check-ins and time-off management as one monthly
-                        add-on, billed per active salon location.
-                      </CardDescription>
-                    </div>
-                    <Badge variant="outline">Monthly per location</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {staffOperationsPricingValidation.errors.length > 0 && (
-                    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
-                      <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
-                        {staffOperationsPricingValidation.errors.slice(0, 8).map((error) => (
-                          <li key={error}>{error}</li>
-                        ))}
-                      </ul>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+                        <div className="min-w-[240px] flex-1"><Label>Seat pricing reason</Label><Textarea value={seatPricingReason} onChange={(e) => { setSeatPricingDirty(true); setSeatPricingReason(e.target.value); }} placeholder="Why are you updating additional seat pricing?" /></div>
+                        <Button onClick={() => saveSeatPricingMutation.mutate()} disabled={!canSubmitSeatPricing}>{saveSeatPricingMutation.isPending ? "Saving…" : "Save seat pricing"}</Button>
+                      </div>
                     </div>
                   )}
 
-                  <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-                    Includes location-based staff check-ins, leave requests, leave
-                    allowances, and manager approval workflows.
-                  </div>
-
-                  <div className="overflow-x-auto rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Market</TableHead>
-                          <TableHead>Currency</TableHead>
-                          <TableHead>Monthly / location</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Notes</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                  {editingAddon === "staff" && (
+                    <div className="mt-4 rounded-lg border bg-background p-4">
+                      <p className="mb-3 text-sm font-medium">Edit Staff Operations pricing</p>
+                      <div className="grid gap-3 md:grid-cols-2">
                         {pricingMarkets.map((market) => {
-                          const draft =
-                            staffOperationsPricingDrafts[market.country_code];
+                          const draft = staffOperationsPricingDrafts[market.country_code];
                           return (
-                            <TableRow key={market.country_code}>
-                              <TableCell>
-                                <div className="space-y-1">
-                                  <p className="font-medium">{market.country_name}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {market.country_code}
-                                  </p>
-                                </div>
-                              </TableCell>
-                              <TableCell className="min-w-[120px]">
-                                <Input
-                                  value={draft?.currency || market.currency}
-                                  maxLength={3}
-                                  onChange={(event) =>
-                                    updateStaffOperationsPricingDraft(
-                                      market.country_code,
-                                      { currency: event.target.value.toUpperCase() },
-                                    )
-                                  }
-                                />
-                              </TableCell>
-                              <TableCell className="min-w-[180px]">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={draft?.unit_price || ""}
-                                  onChange={(event) =>
-                                    updateStaffOperationsPricingDraft(
-                                      market.country_code,
-                                      { unit_price: event.target.value },
-                                    )
-                                  }
-                                />
-                              </TableCell>
-                              <TableCell className="min-w-[160px]">
-                                <Select
-                                  value={draft?.status || "active"}
-                                  onValueChange={(value) =>
-                                    updateStaffOperationsPricingDraft(
-                                      market.country_code,
-                                      { status: value as PricingStatus },
-                                    )
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {PRICING_STATUS_OPTIONS.map((option) => (
-                                      <SelectItem key={option.value} value={option.value}>
-                                        {option.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
+                            <div key={market.country_code} className="rounded-md border p-3">
+                              <div className="mb-2"><p className="text-sm font-medium">{market.country_name}</p><p className="text-xs text-muted-foreground">Per active location / month</p></div>
+                              <div className="grid gap-2 sm:grid-cols-[1fr_130px]">
+                                <Input type="number" min="0" step="0.01" value={draft?.unit_price || ""} onChange={(e) => updateStaffOperationsPricingDraft(market.country_code, { unit_price: e.target.value })} aria-label={`${market.country_name} Staff Operations price`} />
+                                <Select value={draft?.status || "active"} onValueChange={(value) => updateStaffOperationsPricingDraft(market.country_code, { status: value as PricingStatus })}>
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>{PRICING_STATUS_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
                                 </Select>
-                              </TableCell>
-                              <TableCell className="min-w-[240px]">
-                                <Input
-                                  value={draft?.notes || ""}
-                                  placeholder="Optional internal note"
-                                  onChange={(event) =>
-                                    updateStaffOperationsPricingDraft(
-                                      market.country_code,
-                                      { notes: event.target.value },
-                                    )
-                                  }
-                                />
-                              </TableCell>
-                            </TableRow>
+                              </div>
+                              <Input className="mt-2" value={draft?.notes || ""} onChange={(e) => updateStaffOperationsPricingDraft(market.country_code, { notes: e.target.value })} placeholder="Internal pricing note (optional)" />
+                            </div>
                           );
                         })}
-                      </TableBody>
-                    </Table>
-                  </div>
-
-                  <div>
-                    <Label>Reason</Label>
-                    <Textarea
-                      value={staffOperationsPricingReason}
-                      onChange={(event) => {
-                        setStaffOperationsPricingDirty(true);
-                        setStaffOperationsPricingReason(event.target.value);
-                      }}
-                      placeholder="Why are you updating Staff Operations pricing?"
-                    />
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button
-                      onClick={() => saveStaffOperationsPricingMutation.mutate()}
-                      disabled={!canSubmitStaffOperationsPricing}
-                    >
-                      {saveStaffOperationsPricingMutation.isPending
-                        ? "Saving..."
-                        : "Save Staff Operations Pricing"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <CardTitle>E-commerce Theme Pricing</CardTitle>
-                      <CardDescription>
-                        Manage annual storefront theme pricing by market for the purchasable e-commerce theme add-on.
-                      </CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={themeCatalog?.is_active === false ? "secondary" : "default"}>
-                        {themeCatalog?.is_active === false ? "Catalog inactive" : "Catalog active"}
-                      </Badge>
-                      <Badge variant="outline">Annual only</Badge>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {themeCatalog?.description && (
-                    <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
-                      {themeCatalog.description}
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+                        <div className="min-w-[240px] flex-1"><Label>Reason</Label><Textarea value={staffOperationsPricingReason} onChange={(e) => { setStaffOperationsPricingDirty(true); setStaffOperationsPricingReason(e.target.value); }} placeholder="Why are you updating Staff Operations pricing?" /></div>
+                        <Button onClick={() => saveStaffOperationsPricingMutation.mutate()} disabled={!canSubmitStaffOperationsPricing}>{saveStaffOperationsPricingMutation.isPending ? "Saving…" : "Save Staff Operations pricing"}</Button>
+                      </div>
                     </div>
                   )}
 
-                  {themePricingValidation.errors.length > 0 && (
-                    <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
-                      <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
-                        {themePricingValidation.errors.slice(0, 8).map((error) => (
-                          <li key={error}>{error}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  <div className="overflow-x-auto rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Market</TableHead>
-                          <TableHead>Currency</TableHead>
-                          <TableHead>Annual Price</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Notes</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
+                  {editingAddon === "themes" && (
+                    <div className="mt-4 rounded-lg border bg-background p-4">
+                      <div className="mb-3">
+                        <p className="text-sm font-medium">Edit e-commerce theme add-on</p>
+                        <p className="text-xs text-muted-foreground">This name, description, availability, and annual market pricing feed the customer-facing add-on list.</p>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                        <div><Label>Name</Label><Input value={themeCatalogDraft.name} onChange={(e) => setThemeCatalogDraft((prev) => ({ ...prev, name: e.target.value }))} placeholder="E-commerce themes" /></div>
+                        <div><Label>Description</Label><Input value={themeCatalogDraft.description} onChange={(e) => setThemeCatalogDraft((prev) => ({ ...prev, description: e.target.value }))} placeholder="Annual storefront theme add-on" /></div>
+                        <div className="flex items-end gap-2 pb-2"><Switch checked={themeCatalogDraft.is_active} onCheckedChange={(checked) => setThemeCatalogDraft((prev) => ({ ...prev, is_active: checked }))} /><Label>Available</Label></div>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
                         {pricingMarkets.map((market) => {
                           const draft = themePricingDrafts[market.country_code];
                           return (
-                            <TableRow key={market.country_code}>
-                              <TableCell>
-                                <div className="space-y-1">
-                                  <p className="font-medium">{market.country_name}</p>
-                                  <p className="text-xs text-muted-foreground">{market.country_code}</p>
-                                </div>
-                              </TableCell>
-                              <TableCell className="min-w-[120px]">
-                                <Input
-                                  value={draft?.currency || market.currency}
-                                  maxLength={3}
-                                  onChange={(event) =>
-                                    updateThemePricingDraft(market.country_code, {
-                                      currency: event.target.value.toUpperCase(),
-                                    })
-                                  }
-                                />
-                              </TableCell>
-                              <TableCell className="min-w-[160px]">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={draft?.unit_price || ""}
-                                  onChange={(event) =>
-                                    updateThemePricingDraft(market.country_code, {
-                                      unit_price: event.target.value,
-                                    })
-                                  }
-                                />
-                              </TableCell>
-                              <TableCell className="min-w-[160px]">
-                                <Select
-                                  value={draft?.status || "active"}
-                                  onValueChange={(value) =>
-                                    updateThemePricingDraft(market.country_code, {
-                                      status: value as PricingStatus,
-                                    })
-                                  }
-                                >
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {PRICING_STATUS_OPTIONS.map((option) => (
-                                      <SelectItem key={option.value} value={option.value}>
-                                        {option.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
+                            <div key={market.country_code} className="rounded-md border p-3">
+                              <div className="mb-2"><p className="text-sm font-medium">{market.country_name}</p><p className="text-xs text-muted-foreground">Per theme / year</p></div>
+                              <div className="grid gap-2 sm:grid-cols-[1fr_130px]">
+                                <Input type="number" min="0" step="0.01" value={draft?.unit_price || ""} onChange={(e) => updateThemePricingDraft(market.country_code, { unit_price: e.target.value })} aria-label={`${market.country_name} theme price`} />
+                                <Select value={draft?.status || "active"} onValueChange={(value) => updateThemePricingDraft(market.country_code, { status: value as PricingStatus })}>
+                                  <SelectTrigger><SelectValue /></SelectTrigger>
+                                  <SelectContent>{PRICING_STATUS_OPTIONS.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
                                 </Select>
-                              </TableCell>
-                              <TableCell className="min-w-[240px]">
-                                <Input
-                                  value={draft?.notes || ""}
-                                  placeholder="Optional internal note"
-                                  onChange={(event) =>
-                                    updateThemePricingDraft(market.country_code, {
-                                      notes: event.target.value,
-                                    })
-                                  }
-                                />
-                              </TableCell>
-                            </TableRow>
+                              </div>
+                              <Input className="mt-2" value={draft?.notes || ""} onChange={(e) => updateThemePricingDraft(market.country_code, { notes: e.target.value })} placeholder="Internal pricing note (optional)" />
+                            </div>
                           );
                         })}
-                      </TableBody>
-                    </Table>
-                  </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+                        <div className="min-w-[240px] flex-1"><Label>Reason</Label><Textarea value={themePricingReason} onChange={(e) => { setThemePricingDirty(true); setThemePricingReason(e.target.value); }} placeholder="Why are you updating theme pricing?" /></div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button variant="outline" onClick={() => saveThemeCatalogMutation.mutate()} disabled={!isSuperAdmin || saveThemeCatalogMutation.isPending || !themeCatalogDraft.name.trim() || !themePricingReason.trim()}>{saveThemeCatalogMutation.isPending ? "Saving…" : "Save add-on details"}</Button>
+                          <Button onClick={() => saveThemePricingMutation.mutate()} disabled={!canSubmitThemePricing}>{saveThemePricingMutation.isPending ? "Saving…" : "Save theme pricing"}</Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
+                  {editingAddon === "messaging" && (
+                    <div className="mt-4 rounded-lg border bg-background p-4">
+                      <div className="mb-4">
+                        <p className="text-sm font-medium">Edit messaging SMS pricing</p>
+                        <p className="text-xs text-muted-foreground">
+                          Set the provider cost and margin used to calculate credits, plus the monthly complimentary allowances.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div><Label>Margin multiplier</Label><Input type="number" min="0.01" step="0.01" value={smsPricingDraft.margin_multiplier} onChange={(e) => { setSmsPricingDirty(true); setSmsPricingDraft((prev) => ({ ...prev, margin_multiplier: e.target.value })); }} /></div>
+                        <div><Label>Low balance alert threshold</Label><Input type="number" min="0" step="1" value={smsPricingDraft.low_balance_threshold_credits} onChange={(e) => { setSmsPricingDirty(true); setSmsPricingDraft((prev) => ({ ...prev, low_balance_threshold_credits: e.target.value })); }} /></div>
+                        <div className="rounded-md border bg-muted/20 p-3 text-xs text-muted-foreground">Credits are calculated from bundle price ÷ provider cost ÷ margin. Purchased SMS never expires.</div>
+                      </div>
+                      <div className="mt-4 grid gap-4 md:grid-cols-2">
+                        {(Object.keys(smsPricingDraft.tiers) as Array<"NGN" | "GHS">).map((currency) => (
+                          <div key={currency} className="rounded-md border p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2"><div><p className="text-sm font-medium">{currency} bundles</p><p className="text-xs text-muted-foreground">Bundle price and provider cost per SMS</p></div><Button type="button" variant="outline" size="sm" onClick={() => addSmsPricingTier(currency)}><Plus className="mr-1 h-3.5 w-3.5" />Add tier</Button></div>
+                            <div className="space-y-2">
+                              {smsPricingDraft.tiers[currency].map((tier, index) => (
+                                <div key={`${currency}-${index}`} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                                  <Input type="number" min="0" step="0.01" placeholder="Bundle price" value={tier.bundle_price} onChange={(e) => updateSmsPricingTier(currency, index, { bundle_price: e.target.value })} aria-label={`${currency} bundle price ${index + 1}`} />
+                                  <Input type="number" min="0" step="0.0001" placeholder="Provider cost / SMS" value={tier.arkesel_cost_per_sms} onChange={(e) => updateSmsPricingTier(currency, index, { arkesel_cost_per_sms: e.target.value })} aria-label={`${currency} provider cost ${index + 1}`} />
+                                  <Button type="button" variant="ghost" size="icon" onClick={() => removeSmsPricingTier(currency, index)} aria-label={`Remove ${currency} bundle ${index + 1}`}><Trash2 className="h-4 w-4" /></Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-4 rounded-md border p-3">
+                        <p className="mb-2 text-sm font-medium">Monthly complimentary SMS</p>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div><Label>Appointment reminders</Label><Input type="number" min="0" step="1" value={smsComplimentaryDraft.reminder_segments} onChange={(e) => { setSmsPricingDirty(true); setSmsComplimentaryDraft((prev) => ({ ...prev, reminder_segments: e.target.value })); }} /></div>
+                          <div><Label>Marketing campaigns</Label><Input type="number" min="0" step="1" value={smsComplimentaryDraft.marketing_segments} onChange={(e) => { setSmsPricingDirty(true); setSmsComplimentaryDraft((prev) => ({ ...prev, marketing_segments: e.target.value })); }} /></div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+                        <div className="min-w-[240px] flex-1"><Label>Reason</Label><Textarea value={smsPricingReason} onChange={(e) => { setSmsPricingDirty(true); setSmsPricingReason(e.target.value); }} placeholder="Why are you updating messaging pricing?" /></div>
+                        <Button onClick={() => saveSmsPricingMutation.mutate()} disabled={!canSubmitSmsPricing}>{saveSmsPricingMutation.isPending ? "Saving…" : "Save messaging pricing"}</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Loading the base subscription…</p>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Growth progression</CardTitle>
+            <CardDescription>
+              Configure when a salon should be offered the next growth stage based on locations or team members. These thresholds do not limit the salon; they trigger the next plan or add-on conversation.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {progressionValidation.errors.length > 0 && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
+                  {progressionValidation.errors.slice(0, 8).map((error) => <li key={error}>{error}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="space-y-3">
+              {Object.values(progressionDrafts).map((draft) => (
+                <div key={draft.planId} className="grid gap-3 rounded-lg border p-4 md:grid-cols-[1.2fr_1fr_1fr] md:items-end">
                   <div>
-                    <Label>Reason</Label>
-                    <Textarea
-                      value={themePricingReason}
-                      onChange={(event) => {
-                        setThemePricingDirty(true);
-                        setThemePricingReason(event.target.value);
-                      }}
-                      placeholder="Why are you updating e-commerce theme pricing?"
-                    />
+                    <p className="text-sm font-medium">{draft.planName} → {draft.nextPlanName}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {draft.nextPlanName === "Chain expansion"
+                        ? "Continue growth through additional location and seat pricing."
+                        : "Offer the next stage when either threshold is reached."}
+                    </p>
                   </div>
-
-                  <div className="flex justify-end">
-                    <Button onClick={() => saveThemePricingMutation.mutate()} disabled={!canSubmitThemePricing}>
-                      {saveThemePricingMutation.isPending ? "Saving..." : "Save Theme Pricing"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  <div><Label>Locations to trigger</Label><Input type="number" min="1" step="1" value={draft.maxLocations} onChange={(e) => updateProgressionDraft(draft.planId, { maxLocations: e.target.value })} /></div>
+                  <div><Label>Staff to trigger</Label><Input type="number" min="1" step="1" value={draft.maxStaff} onChange={(e) => updateProgressionDraft(draft.planId, { maxStaff: e.target.value })} /></div>
+                </div>
+              ))}
+              {Object.keys(progressionDrafts).length === 0 && <p className="text-sm text-muted-foreground">Configure at least two plan stages to add progression thresholds.</p>}
             </div>
-          </TabsContent>
-        </Tabs>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div className="min-w-[240px] flex-1"><Label>Growth progression reason</Label><Textarea value={progressionReason} onChange={(e) => { setProgressionDirty(true); setProgressionReason(e.target.value); }} placeholder="Why are you updating growth progression thresholds?" /></div>
+              <Button onClick={() => saveProgressionMutation.mutate()} disabled={!canSubmitProgression}>{saveProgressionMutation.isPending ? "Saving…" : "Save progression thresholds"}</Button>
+            </div>
+          </CardContent>
+        </Card>
+
       </div>
 
       <Dialog open={createPlanOpen} onOpenChange={setCreatePlanOpen}>
@@ -3278,89 +3163,8 @@ export default function PlansPage() {
                           </p>
                         )}
 
-                        <div className="grid gap-4 md:grid-cols-3">
-                          <div>
-                            <Label>Max Locations</Label>
-                            <Input
-                              type="number"
-                              value={draft.max_locations}
-                              onChange={(event) =>
-                                updateCreatePlanDraft(
-                                  draft.localId,
-                                  "max_locations",
-                                  Number(event.target.value || 0),
-                                )
-                              }
-                            />
-                          </div>
-                          <div>
-                            <Label>Max Staff</Label>
-                            <Input
-                              type="number"
-                              value={draft.max_staff}
-                              onChange={(event) =>
-                                updateCreatePlanDraft(
-                                  draft.localId,
-                                  "max_staff",
-                                  Number(event.target.value || 0),
-                                )
-                              }
-                            />
-                          </div>
-                          <div>
-                            <Label>Monthly Messages</Label>
-                            <Input
-                              type="number"
-                              value={draft.monthly_messages}
-                              onChange={(event) =>
-                                updateCreatePlanDraft(
-                                  draft.localId,
-                                  "monthly_messages",
-                                  Number(event.target.value || 0),
-                                )
-                              }
-                            />
-                          </div>
-                          <div>
-                            <Label>Max Services (optional)</Label>
-                            <Input
-                              type="number"
-                              value={draft.max_services}
-                              onChange={(event) =>
-                                updateCreatePlanDraft(draft.localId, "max_services", event.target.value)
-                              }
-                            />
-                          </div>
-                          <div>
-                            <Label>Max Products (optional)</Label>
-                            <Input
-                              type="number"
-                              value={draft.max_products}
-                              onChange={(event) =>
-                                updateCreatePlanDraft(draft.localId, "max_products", event.target.value)
-                              }
-                            />
-                          </div>
-                          <div>
-                            <Label>Max Packages (optional)</Label>
-                            <Input
-                              type="number"
-                              value={draft.max_packages}
-                              onChange={(event) =>
-                                updateCreatePlanDraft(draft.localId, "max_packages", event.target.value)
-                              }
-                            />
-                          </div>
-                          <div>
-                            <Label>Max Vouchers (optional)</Label>
-                            <Input
-                              type="number"
-                              value={draft.max_vouchers}
-                              onChange={(event) =>
-                                updateCreatePlanDraft(draft.localId, "max_vouchers", event.target.value)
-                              }
-                            />
-                          </div>
+                        <div className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                          Growth progression thresholds are configured in the Growth progression section. Services, products, packages, vouchers, and SMS allowances are configured separately.
                         </div>
 
                         <div className="space-y-2">
@@ -3457,264 +3261,117 @@ export default function PlansPage() {
       </Dialog>
 
       <Dialog open={editPlanOpen} onOpenChange={setEditPlanOpen}>
-        <DialogContent className="sm:max-w-[900px]">
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-[980px]">
           <DialogHeader>
-            <DialogTitle>Edit Plan</DialogTitle>
-            <DialogDescription>Update plan fields, limits, and display features.</DialogDescription>
+            <DialogTitle>Edit base subscription</DialogTitle>
+            <DialogDescription>
+              Manage the single customer-facing subscription. Add-ons, market prices, and growth progression are configured in their own sections so each setting has one source of truth.
+            </DialogDescription>
           </DialogHeader>
 
           {editPlanDraft && (
-            <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
+            <div className={cn(DIALOG_BODY_PADDING, "space-y-6")}>
               {editPlanValidation.errors.length > 0 && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
                   <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
-                    {editPlanValidation.errors.slice(0, 6).map((error) => (
-                      <li key={error}>{error}</li>
-                    ))}
+                    {editPlanValidation.errors.slice(0, 6).map((error) => <li key={error}>{error}</li>)}
                   </ul>
                 </div>
               )}
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <Label>Name</Label>
-                  <Input
-                    value={editPlanDraft.name}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              name: event.target.value,
-                            }
-                          : prev,
-                      )
-                    }
-                  />
+              <section className="rounded-lg border bg-muted/20 p-4">
+                <div className="mb-3">
+                  <p className="font-medium">Customer-facing subscription</p>
+                  <p className="text-sm text-muted-foreground">This name and description are shown on pricing, onboarding, and subscription screens.</p>
                 </div>
-                <div>
-                  <Label>Slug</Label>
-                  <Input
-                    value={editPlanDraft.slug}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              slug: sanitizeSlug(event.target.value),
-                            }
-                          : prev,
-                      )
-                    }
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label>Description</Label>
-                <Textarea
-                  value={editPlanDraft.description}
-                  onChange={(event) =>
-                    setEditPlanDraft((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            description: event.target.value,
-                          }
-                        : prev,
-                    )
-                  }
-                />
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <Label>Display Order</Label>
-                  <Input
-                    type="number"
-                    value={editPlanDraft.display_order}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              display_order: Number(event.target.value || 0),
-                            }
-                          : prev,
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Trial Days</Label>
-                  <Input
-                    type="number"
-                    value={editPlanDraft.trial_days}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              trial_days: Number(event.target.value || 0),
-                            }
-                          : prev,
-                      )
-                    }
-                  />
-                </div>
-                <div className="flex items-end gap-4 pb-2">
-                  <div className="flex items-center gap-2">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <Label>Subscription name</Label>
+                    <Input
+                      value={editPlanDraft.name}
+                      onChange={(event) => setEditPlanDraft((prev) => prev ? { ...prev, name: event.target.value } : prev)}
+                    />
+                  </div>
+                  <div className="flex items-end gap-3 pb-2">
                     <Switch
                       checked={editPlanDraft.is_active}
-                      onCheckedChange={(checked) =>
-                        setEditPlanDraft((prev) => (prev ? { ...prev, is_active: checked } : prev))
-                      }
+                      onCheckedChange={(checked) => setEditPlanDraft((prev) => prev ? { ...prev, is_active: checked } : prev)}
                     />
-                    <Label>Active</Label>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Switch
-                      checked={editPlanDraft.is_recommended}
-                      onCheckedChange={(checked) =>
-                        setEditPlanDraft((prev) =>
-                          prev ? { ...prev, is_recommended: checked } : prev,
-                        )
-                      }
-                      disabled={Boolean(recommendedPlanId && recommendedPlanId !== editPlanId)}
-                    />
-                    <Label>Recommended</Label>
+                    <div>
+                      <Label>Visible to customers</Label>
+                      <p className="text-xs text-muted-foreground">Turn off only when retiring this subscription.</p>
+                    </div>
                   </div>
                 </div>
-              </div>
+                <div className="mt-4">
+                  <Label>Description</Label>
+                  <Textarea
+                    value={editPlanDraft.description}
+                    onChange={(event) => setEditPlanDraft((prev) => prev ? { ...prev, description: event.target.value } : prev)}
+                    placeholder="Explain who this subscription is for."
+                  />
+                </div>
+              </section>
 
-              {recommendedPlanId && recommendedPlanId !== editPlanId && (
-                <p className="text-xs text-muted-foreground">
-                  Recommended is currently locked to {getPlanName(recommendedPlanId)}.
-                </p>
-              )}
+              <section className="rounded-lg border p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">Trial and base price</p>
+                    <p className="text-sm text-muted-foreground">Trial access is configured here. Prices are edited once per market in the base price editor.</p>
+                  </div>
+                  {editPlanId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setEditPlanOpen(false);
+                        const plan = (plans || []).find((item) => item.id === editPlanId);
+                        if (plan) openEditPricingDialog(plan);
+                      }}
+                    >
+                      <Coins className="mr-2 h-3.5 w-3.5" />
+                      Edit base price
+                    </Button>
+                  )}
+                </div>
+                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                  <div>
+                    <Label>Trial days</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      value={editPlanDraft.trial_days}
+                      onChange={(event) => setEditPlanDraft((prev) => prev ? { ...prev, trial_days: Number(event.target.value || 0) } : prev)}
+                    />
+                  </div>
+                  {CURRENCIES.map((currency) => {
+                    const row = editPlanId ? activePricingByPlan.get(editPlanId)?.get(currency) : undefined;
+                    return (
+                      <div key={currency} className="rounded-md border bg-muted/20 p-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{currency}</p>
+                        <p className="mt-1 text-sm font-semibold">{row ? `${getCurrencySymbol(currency)}${row.monthly_price.toLocaleString()}/month` : "Not configured"}</p>
+                        <p className="text-xs text-muted-foreground">{row ? `Annual ${getCurrencySymbol(currency)}${row.annual_price.toLocaleString()}` : "Add a market price before publishing."}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
 
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <Label>Max Locations</Label>
-                  <Input
-                    type="number"
-                    value={editPlanDraft.max_locations}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              max_locations: Number(event.target.value || 0),
-                            }
-                          : prev,
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Max Staff</Label>
-                  <Input
-                    type="number"
-                    value={editPlanDraft.max_staff}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              max_staff: Number(event.target.value || 0),
-                            }
-                          : prev,
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Monthly Messages</Label>
-                  <Input
-                    type="number"
-                    value={editPlanDraft.monthly_messages}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              monthly_messages: Number(event.target.value || 0),
-                            }
-                          : prev,
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Max Services (optional)</Label>
-                  <Input
-                    type="number"
-                    value={editPlanDraft.max_services}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev ? { ...prev, max_services: event.target.value } : prev,
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Max Products (optional)</Label>
-                  <Input
-                    type="number"
-                    value={editPlanDraft.max_products}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev ? { ...prev, max_products: event.target.value } : prev,
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Max Packages (optional)</Label>
-                  <Input
-                    type="number"
-                    value={editPlanDraft.max_packages}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev ? { ...prev, max_packages: event.target.value } : prev,
-                      )
-                    }
-                  />
-                </div>
-                <div>
-                  <Label>Max Vouchers (optional)</Label>
-                  <Input
-                    type="number"
-                    value={editPlanDraft.max_vouchers}
-                    onChange={(event) =>
-                      setEditPlanDraft((prev) =>
-                        prev ? { ...prev, max_vouchers: event.target.value } : prev,
-                      )
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Plan Features</Label>
+              <section className="rounded-lg border p-4">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium">Included benefits</p>
+                    <p className="text-sm text-muted-foreground">This list feeds the marketing pricing page and customer subscription views.</p>
+                  </div>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() =>
-                      setEditPlanDraft((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              features: [...prev.features, createFeatureDraft(prev.features.length)],
-                            }
-                          : prev,
-                      )
-                    }
+                    onClick={() => setEditPlanDraft((prev) => prev ? { ...prev, features: [...prev.features, createFeatureDraft(prev.features.length)] } : prev)}
                   >
                     <Plus className="mr-2 h-3.5 w-3.5" />
-                    Add feature
+                    Add benefit
                   </Button>
                 </div>
                 <div className="space-y-2">
@@ -3722,108 +3379,61 @@ export default function PlansPage() {
                     <div key={feature.localId} className="grid gap-2 md:grid-cols-[1fr_120px_80px]">
                       <Input
                         value={feature.feature_text}
-                        onChange={(event) =>
-                          setEditPlanDraft((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  features: prev.features.map((item) =>
-                                    item.localId === feature.localId
-                                      ? { ...item, feature_text: event.target.value }
-                                      : item,
-                                  ),
-                                }
-                              : prev,
-                          )
-                        }
-                        placeholder="Feature text"
+                        onChange={(event) => setEditPlanDraft((prev) => prev ? { ...prev, features: prev.features.map((item) => item.localId === feature.localId ? { ...item, feature_text: event.target.value } : item) } : prev)}
+                        placeholder="e.g. Unlimited email marketing"
                       />
                       <Input
                         type="number"
                         value={feature.sort_order}
-                        onChange={(event) =>
-                          setEditPlanDraft((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  features: prev.features.map((item) =>
-                                    item.localId === feature.localId
-                                      ? { ...item, sort_order: Number(event.target.value || 0) }
-                                      : item,
-                                  ),
-                                }
-                              : prev,
-                          )
-                        }
+                        onChange={(event) => setEditPlanDraft((prev) => prev ? { ...prev, features: prev.features.map((item) => item.localId === feature.localId ? { ...item, sort_order: Number(event.target.value || 0) } : item) } : prev)}
+                        aria-label="Benefit order"
                       />
                       <Button
                         type="button"
                         variant="outline"
                         size="icon"
-                        onClick={() =>
-                          setEditPlanDraft((prev) =>
-                            prev
-                              ? {
-                                  ...prev,
-                                  features: prev.features.filter(
-                                    (item) => item.localId !== feature.localId,
-                                  ),
-                                }
-                              : prev,
-                          )
-                        }
+                        onClick={() => setEditPlanDraft((prev) => prev ? { ...prev, features: prev.features.filter((item) => item.localId !== feature.localId) } : prev)}
                         disabled={editPlanDraft.features.length <= 1}
+                        aria-label="Remove benefit"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   ))}
                 </div>
-              </div>
+              </section>
+
+              <section className="rounded-lg border border-dashed p-4">
+                <p className="font-medium">Configured separately</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Growth progression thresholds, additional locations and seats, Staff Operations, paid themes, SMS bundles, and complimentary SMS allowances each have their own editor below. This keeps pricing changes auditable and prevents conflicting settings.
+                </p>
+              </section>
 
               <div>
-                <Label>Reason</Label>
+                <Label>Reason for change</Label>
                 <Textarea
                   value={editPlanDraft.reason}
-                  onChange={(event) =>
-                    setEditPlanDraft((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            reason: event.target.value,
-                          }
-                        : prev,
-                    )
-                  }
-                  placeholder="Describe why this edit is needed."
+                  onChange={(event) => setEditPlanDraft((prev) => prev ? { ...prev, reason: event.target.value } : prev)}
+                  placeholder="Describe why this subscription or benefit copy is changing."
                 />
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
-                  <Label>Rollout</Label>
-                  <Select
-                    value={editPlanRolloutMode}
-                    onValueChange={(value) => setEditPlanRolloutMode(value as RolloutMode)}
-                  >
-                    <SelectTrigger className="mt-2">
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Label>Publishing</Label>
+                  <Select value={editPlanRolloutMode} onValueChange={(value) => setEditPlanRolloutMode(value as RolloutMode)}>
+                    <SelectTrigger className="mt-2"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="now">Roll out now</SelectItem>
-                      <SelectItem value="schedule">Schedule rollout</SelectItem>
+                      <SelectItem value="now">Publish now</SelectItem>
+                      <SelectItem value="schedule">Schedule publishing</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 {editPlanRolloutMode === "schedule" && (
                   <div>
-                    <Label>Rollout at</Label>
-                    <Input
-                      className="mt-2"
-                      type="datetime-local"
-                      value={editPlanRolloutAt}
-                      onChange={(event) => setEditPlanRolloutAt(event.target.value)}
-                    />
+                    <Label>Publish at</Label>
+                    <Input className="mt-2" type="datetime-local" value={editPlanRolloutAt} onChange={(event) => setEditPlanRolloutAt(event.target.value)} />
                   </div>
                 )}
               </div>
@@ -3831,9 +3441,7 @@ export default function PlansPage() {
           )}
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditPlanOpen(false)}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setEditPlanOpen(false)}>Cancel</Button>
             <Button
               onClick={() => {
                 if (updatePlanMutation.isPending || editPlanSaveRef.current) return;
@@ -3842,7 +3450,7 @@ export default function PlansPage() {
               }}
               disabled={!canSubmitEditPlan}
             >
-              {updatePlanMutation.isPending ? "Saving..." : "Save Changes"}
+              {updatePlanMutation.isPending ? "Saving..." : "Save subscription"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -4017,7 +3625,7 @@ export default function PlansPage() {
                                     />
                                   </div>
                                   <div>
-                                    <Label>Annual total</Label>
+                                    <Label>Annual price after discount</Label>
                                     <Input
                                       value={Number.isFinite(annualTotal) ? annualTotal : 0}
                                       readOnly
@@ -4145,9 +3753,9 @@ export default function PlansPage() {
       <Dialog open={editPricingOpen} onOpenChange={setEditPricingOpen}>
         <DialogContent className="sm:max-w-[760px]">
           <DialogHeader>
-            <DialogTitle>Edit Pricing</DialogTitle>
+            <DialogTitle>Edit base subscription price</DialogTitle>
             <DialogDescription>
-              Update existing active pricing rows for {editPricingPlanId ? getPlanName(editPricingPlanId) : "plan"}.
+              Set the monthly price and annual discount for each enabled market. This is the only customer-facing base subscription price editor.
             </DialogDescription>
           </DialogHeader>
 
@@ -4215,7 +3823,7 @@ export default function PlansPage() {
                       <Input value={effectiveMonthly} readOnly disabled />
                     </div>
                     <div>
-                      <Label>Annual total</Label>
+                      <Label>Annual price after discount</Label>
                       <Input value={annualTotal} readOnly disabled />
                     </div>
                   </div>

@@ -126,31 +126,49 @@ serve(async (req) => {
     const isChain = tenant.plan?.toLowerCase() === "chain";
     const isAnnual = billingCycle === "annual";
 
-    // Chain-annual is only available once its annual per-location pricing
-    // model is fully configured for this currency (AD-8) — never a code
-    // flag, so this check disappears the moment backoffice enters real
-    // pricing rather than needing a follow-up deploy.
-    if (isChain && isAnnual) {
+    // Chain pricing isn't flat — it's the base plan price plus tiered
+    // per-location pricing (additional_location_pricing), for BOTH billing
+    // cycles, not just annual. This used to only run for annual, and even
+    // then always quoted as if the tenant had exactly 1 location — so a
+    // Chain tenant with, say, 3 branches was quoted (and charged) for 1.
+    // compute_chain_price is the single source of truth for this; quote it
+    // against the tenant's actual current (non-paused) location count.
+    if (isChain) {
       if (!planId) {
         return new Response(
-          JSON.stringify({ error: `Annual billing isn't available for the Chain plan in ${currency} yet.` }),
+          JSON.stringify({ error: `Billing isn't available for the Chain plan in ${currency} yet.` }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      const { data: chainAnnualQuote, error: chainAnnualError } = await supabase.rpc("compute_chain_price", {
+      const { count: locationCount, error: locationCountError } = await supabase
+        .from("locations")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantId)
+        .not("is_paused", "is", true);
+      if (locationCountError) {
+        return new Response(
+          JSON.stringify({ error: locationCountError.message || "Could not resolve this tenant's active locations." }),
+          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      const totalLocations = Math.max(locationCount || 0, 1);
+
+      const { data: chainQuote, error: chainQuoteError } = await supabase.rpc("compute_chain_price", {
         p_plan_id: planId,
         p_currency: currency,
-        p_total_locations: 1,
-        p_billing_cycle: "annual",
+        p_total_locations: totalLocations,
+        p_billing_cycle: isAnnual ? "annual" : "monthly",
       });
-      const chainAnnualTotal = chainAnnualQuote?.[0]?.total_price;
-      if (chainAnnualError || chainAnnualTotal === null || chainAnnualTotal === undefined) {
+      const chainTotal = chainQuote?.[0]?.total_price;
+      if (chainQuoteError || chainTotal === null || chainTotal === undefined) {
         return new Response(
-          JSON.stringify({ error: `Annual billing isn't available for the Chain plan in ${currency} yet.` }),
+          JSON.stringify({
+            error: `${isAnnual ? "Annual" : "Monthly"} billing isn't available for the Chain plan in ${currency} yet.`,
+          }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }
-      localPlanAmount = chainAnnualTotal;
+      localPlanAmount = chainTotal;
     }
 
     // Any active subscription-surface promo discount applies to the first charge.

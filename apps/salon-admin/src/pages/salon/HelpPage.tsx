@@ -70,7 +70,7 @@ const faqs = [
   {
     question: "How do communication credits work?",
     answer:
-      "Credits are used to send notifications (emails and SMS) to your customers. You get 30 free credits each month. Emails use 1 credit, SMS uses 2 credits. You can purchase additional credits if needed.",
+      "Email messages are unlimited for now. SMS appointment reminders and marketing campaigns use separate complimentary monthly allowances, and you can purchase additional SMS credits when needed.",
   },
   {
     question: "Can I offer packages and bundles?",

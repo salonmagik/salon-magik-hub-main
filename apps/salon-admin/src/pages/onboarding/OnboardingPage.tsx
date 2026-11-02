@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useToast } from "@ui/ui/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,7 +11,7 @@ import { cn, generateUUID } from "@shared/utils";
 
 import { RoleStep, type UserRole } from "@/components/onboarding/RoleStep";
 import { OwnerInviteStep, type OwnerInviteInfo } from "@/components/onboarding/OwnerInviteStep";
-import { PlanStep, type SubscriptionPlan } from "@/components/onboarding/PlanStep";
+import type { SubscriptionPlan } from "@/components/onboarding/PlanStep";
 import { BusinessStep, type BusinessInfo } from "@/components/onboarding/BusinessStep";
 import { LocationsStep, type LocationsConfig, type LocationInfo } from "@/components/onboarding/LocationsStep";
 import { ReviewStep } from "@/components/onboarding/ReviewStep";
@@ -59,22 +58,9 @@ export default function OnboardingPage() {
   const { data: plans } = usePlans();
   const [searchParams] = useSearchParams();
   const planFromUrl = searchParams.get("plan") as SubscriptionPlan | null;
-  const { data: trialSetting } = useQuery({
-    queryKey: ["default-trial-days"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("platform_settings")
-        .select("value")
-        .eq("key", "default_trial_days")
-        .maybeSingle();
-      if (error) throw error;
-      const rawDays = Number((data?.value as any)?.days);
-      return Number.isFinite(rawDays) ? Math.max(0, rawDays) : null;
-    },
-  });
   const [step, setStep] = useState<OnboardingStep>("role");
   const [isLoading, setIsLoading] = useState(false);
-  const [expectedChainLocationsInput, setExpectedChainLocationsInput] = useState("2");
+  const [expectedChainLocationsInput, setExpectedChainLocationsInput] = useState("1");
   const expectedChainLocations = useMemo(() => {
     const trimmed = expectedChainLocationsInput.trim();
     if (!trimmed) return null;
@@ -82,7 +68,7 @@ export default function OnboardingPage() {
     if (!Number.isInteger(parsed) || parsed < 1) return null;
     return parsed;
   }, [expectedChainLocationsInput]);
-  const effectiveExpectedChainLocations = expectedChainLocations ?? 2;
+  const effectiveExpectedChainLocations = expectedChainLocations ?? 1;
 
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
 
@@ -95,8 +81,13 @@ export default function OnboardingPage() {
   const [isCheckingOwnerEmail, setIsCheckingOwnerEmail] = useState(false);
 
   const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(
-    planFromUrl && VALID_PLAN_SLUGS.includes(planFromUrl) ? planFromUrl : null,
+    planFromUrl && VALID_PLAN_SLUGS.includes(planFromUrl) ? planFromUrl : "solo",
   );
+
+  useEffect(() => {
+    if (expectedChainLocations == null) return;
+    setSelectedPlan(expectedChainLocations > 1 ? "chain" : "solo");
+  }, [expectedChainLocations]);
 
   const [businessInfo, setBusinessInfo] = useState<BusinessInfo>({
     name: "",
@@ -138,7 +129,7 @@ export default function OnboardingPage() {
   const googleOAuthIntent = readGoogleOAuthIntent();
 
   const isOwner = selectedRole === "owner";
-  const isChain = selectedPlan === "chain";
+  const isChain = selectedPlan === "chain" || effectiveExpectedChainLocations > 1;
   const chainPlan = (plans || []).find((plan) => plan.slug === "chain");
 
   const currency = businessInfo.country
@@ -158,8 +149,14 @@ export default function OnboardingPage() {
     currency,
     configuredChainLocations,
   );
+  // The selected plan is the source of truth for a new tenant's base trial.
+  // The old platform_settings default could drift from plan configuration and
+  // make onboarding show a stale trial length after Backoffice edits.
   const onboardingTrialDays =
-    trialSetting ?? plans?.find((plan) => plan.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
+    plans?.find((plan) => plan.slug === selectedPlan)?.trial_days ??
+    plans?.find((plan) => plan.is_recommended)?.trial_days ??
+    plans?.[0]?.trial_days ??
+    14;
   const onboardingTrialEndsAt = new Date(Date.now() + onboardingTrialDays * 24 * 60 * 60 * 1000).toISOString();
 
   const getStepFlow = (): OnboardingStep[] => {
@@ -322,6 +319,29 @@ export default function OnboardingPage() {
     setIsLoading(true);
 
     try {
+      // Google OAuth does not provide a verified phone number. The completion
+      // screen verifies it through the same OTP flow as password signup, and
+      // this final check prevents a direct navigation to onboarding from
+      // bypassing that requirement.
+      if (user.app_metadata?.provider === "google") {
+        const { data: phoneProfile, error: phoneProfileError } = await supabase
+          .from("profiles")
+          .select("phone_verified_at")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (phoneProfileError) throw phoneProfileError;
+        if (!phoneProfile?.phone_verified_at) {
+          toast({
+            title: "Verify your phone number",
+            description: "Please verify your phone number before finishing onboarding.",
+            variant: "destructive",
+          });
+          navigate("/complete-signup", { replace: true });
+          return;
+        }
+      }
+
       const tenantId = generateUUID();
       let creatorDefaultLocationId: string | null = null;
 
@@ -457,11 +477,27 @@ export default function OnboardingPage() {
 
       const { error: creditsError } = await supabase.from("communication_credits").insert({
         tenant_id: tenantId,
-        balance: selectedPlan === "chain" ? 500 : selectedPlan === "studio" ? 100 : 30,
-        free_monthly_allocation: selectedPlan === "chain" ? 500 : selectedPlan === "studio" ? 100 : 30,
+        // SMS allowances are purpose-specific and configured centrally. The
+        // database initializes the current monthly complimentary reminder and
+        // marketing grants; onboarding must not derive them from legacy plan
+        // names.
+        balance: 0,
+        free_monthly_allocation: 0,
       });
 
       if (creditsError) throw creditsError;
+
+      // Initialize the current monthly complimentary SMS grants from the
+      // centrally configured policy rather than legacy plan-specific values.
+      const { error: creditPolicyError } = await supabase.rpc("get_sms_credit_summary", {
+        p_tenant_id: tenantId,
+      });
+      if (creditPolicyError) {
+        // The monthly allowance is also initialized lazily by the send path.
+        // Do not block account creation during a rolling deployment where the
+        // new RPC may not be available on every project yet.
+        console.warn("Could not initialize complimentary SMS allowances yet:", creditPolicyError);
+      }
 
       try {
         await seedDefaultPermissions(tenantId);
@@ -879,29 +915,31 @@ export default function OnboardingPage() {
 
             {step === "plan" && (
               <>
-                <PlanStep
-                  selectedPlan={selectedPlan}
-                  onPlanSelect={setSelectedPlan}
-                  currency={currency}
-                />
+                <div className="mx-auto max-w-[620px] rounded-[22px] border border-[#2E1F4E]/15 bg-white px-7 py-8 shadow-sm">
+                  <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#6B5A8E]">Your Salon Magik plan</p>
+                  <h2 className="mt-2 font-serif text-[28px] font-medium text-[#231A35]">One base subscription, built to grow</h2>
+                  <p className="mt-3 text-[15px] leading-relaxed text-black/55">
+                    Every salon gets the full product during the trial. Locations, team seats, paid themes, Staff Operations, and SMS top-ups are added only when you need them.
+                  </p>
+                  <div className="mt-6 space-y-1.5">
+                    <Label htmlFor="expectedLocations" className="text-[13.5px] font-medium text-gray-700">
+                      How many locations do you have today?
+                    </Label>
+                    <Input
+                      id="expectedLocations"
+                      type="number"
+                      min={1}
+                      value={expectedChainLocationsInput}
+                      onChange={(event) => setExpectedChainLocationsInput(event.target.value)}
+                      className="h-[44px] text-[14px]"
+                    />
+                    <p className="text-[12.5px] text-black/40">
+                      Your base subscription covers one location. Additional locations are priced automatically as your business grows.
+                    </p>
+                  </div>
+                </div>
                 {isChain && (
                   <div className="space-y-4 px-7 pb-6 pt-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="expectedLocations" className="text-[13.5px] font-medium text-gray-700">
-                        How many branches do you have?
-                      </Label>
-                      <Input
-                        id="expectedLocations"
-                        type="number"
-                        min={1}
-                        value={expectedChainLocationsInput}
-                        onChange={(event) => setExpectedChainLocationsInput(event.target.value)}
-                        className="h-[44px] text-[14px]"
-                      />
-                      <p className="text-[12.5px] text-black/40">
-                        Chain tiers apply to additional branches beyond the first.
-                      </p>
-                    </div>
 
                     {chainQuote && (
                       <div className="rounded-[18px] bg-[#EDE9E4] px-5 py-5">
@@ -1025,7 +1063,7 @@ export default function OnboardingPage() {
               )}
             </button>
           </div>
-          <p className="mt-5 text-center text-[12.5px] text-black/35">No credit card needed · takes about 2 minutes</p>
+          <p className="mt-5 text-center text-[12.5px] text-black/35">No charge during your trial · takes about 2 minutes</p>
         </div>
       </div>
     </div>

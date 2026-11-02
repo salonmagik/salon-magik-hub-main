@@ -115,7 +115,7 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, backofficeUser, signOut, hasBackofficePageAccess, hasBackofficePermission } = useBackofficeAuth();
-  const { data: blockedRefundsCount } = useBlockedRefundsCount();
+  const { data: blockedRefundsCount } = useBlockedRefundsCount(Boolean(backofficeUser?.user_id));
   const canSeeItem = (item: NavItem) => {
     if (backofficeUser?.role === "super_admin") return true;
     if (item.pageKey && !hasBackofficePageAccess(item.pageKey)) return false;

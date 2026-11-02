@@ -176,7 +176,7 @@ export function ReviewStep({
         >
           <div className="inline-flex items-center gap-2.5 rounded-full bg-[#2E1F4E]/8 px-4 py-[9px]">
             <span className="text-[14px] font-medium text-[#2E1F4E]">{PLAN_NAMES[plan]}</span>
-            <span className="text-[13px] text-black/40">{trialDays}-day free trial, no card required</span>
+            <span className="text-[13px] text-black/40">{trialDays}-day free trial, no charge during the trial</span>
           </div>
         </ReviewCard>
 

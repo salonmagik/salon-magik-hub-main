@@ -1118,7 +1118,7 @@ export default function CustomersPage() {
 									</SelectTrigger>
 									<SelectContent>
 										<SelectItem value="email">Email (free)</SelectItem>
-										<SelectItem value="sms">SMS (2 credits)</SelectItem>
+										<SelectItem value="sms">SMS (uses marketing credits)</SelectItem>
 									</SelectContent>
 								</Select>
 							</div>

@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendArkeselSMS, extractArkeselMessageId, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 import { checkAndAlertLowSmsBalance } from "../_shared/check-low-balance.ts";
+import { hasOperationalAccess, OPERATIONAL_ACCESS_ERROR } from "../_shared/tenant-access.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -158,12 +159,24 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    if (!hasOperationalAccess(tenant)) {
+      return new Response(
+        JSON.stringify({ error: OPERATIONAL_ACCESS_ERROR, code: "TENANT_OFFLINE" }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // TS drops the index signature when spreading a Record<string, any> into
+    // an object literal, keeping only the explicitly-named properties below
+    // -- cast the result back to Record<string, any> so the manual_messages
+    // columns spread in (tenant_id, status, channel, subject, message,
+    // template_variables, ...) stay accessible.
     const message = {
-      ...messageRecord,
+      ...(messageRecord as Record<string, any>),
       customer,
       tenant,
       template,
-    };
+    } as Record<string, any>;
 
     // Verify user has permission for tenant
     const { data: userRole } = await supabase
@@ -191,16 +204,15 @@ const handler = async (req: Request): Promise<Response> => {
     // Calculate credits required
     const creditsRequired = CREDIT_COST[message.channel] || 1;
 
-    // Only check credit balance for paid channels (SMS, WhatsApp). Email is always free.
-    let creditBalance: { balance: number } | null = null;
-    if (creditsRequired > 0) {
-      const { data, error: creditError } = await supabase
-        .from("communication_credits")
-        .select("balance")
-        .eq("tenant_id", message.tenant_id)
-        .single();
+    // Email through Resend is unlimited for now. Only SMS uses the credit wallet.
+    let availableSmsCredits = 0;
+    if (message.channel === "sms") {
+      const { data, error: creditError } = await supabase.rpc("get_sms_credit_summary", {
+        p_tenant_id: message.tenant_id,
+      });
 
-      if (creditError || !data) {
+      availableSmsCredits = Number(data?.[0]?.total ?? 0);
+      if (creditError || !data?.[0]) {
         console.error("Failed to fetch credit balance:", creditError);
         await supabase
           .from("manual_messages")
@@ -216,20 +228,18 @@ const handler = async (req: Request): Promise<Response> => {
         );
       }
 
-      creditBalance = data;
-
-      if (creditBalance.balance < creditsRequired) {
+      if (availableSmsCredits < creditsRequired) {
         await supabase
           .from("manual_messages")
           .update({
             status: "failed",
-            error_message: `Insufficient credits. Required: ${creditsRequired}, Available: ${creditBalance.balance}`,
+            error_message: `Insufficient SMS credits. Required: ${creditsRequired}, Available: ${availableSmsCredits}`,
           })
           .eq("id", messageId);
 
         return new Response(
           JSON.stringify({
-            error: `Insufficient credits. Required: ${creditsRequired}, Available: ${creditBalance.balance}. Please purchase more credits.`,
+            error: `Insufficient SMS credits. Required: ${creditsRequired}, Available: ${availableSmsCredits}. Please purchase more credits.`,
           }),
           { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -240,6 +250,7 @@ const handler = async (req: Request): Promise<Response> => {
     let provider = "";
     let success = false;
     let errorMessage = null;
+    let smsReservation: Record<string, unknown> | null = null;
 
     try {
       if (message.channel === "email") {
@@ -291,11 +302,21 @@ const handler = async (req: Request): Promise<Response> => {
         success = true;
 
       } else if (message.channel === "sms") {
-        const senderID = resolveArkeselSenderId(message.customer.phone, message.tenant.sms_sender_name, "promotional");
-
         if (!message.customer?.phone) {
           throw new Error("Customer phone number not found");
         }
+
+        const { data: reservation, error: reservationError } = await supabase.rpc("reserve_sms_credits", {
+          p_tenant_id: message.tenant_id,
+          p_amount: creditsRequired,
+          p_purpose: "marketing",
+        });
+        smsReservation = reservation as Record<string, unknown> | null;
+        if (reservationError || !smsReservation?.reserved) {
+          throw new Error("Insufficient SMS credits. Please purchase more credits.");
+        }
+
+        const senderID = resolveArkeselSenderId(message.customer.phone, message.tenant.sms_sender_name, "promotional");
 
         provider = "arkesel_sms";
         const smsResponse = await sendArkeselSMS({
@@ -313,25 +334,22 @@ const handler = async (req: Request): Promise<Response> => {
       }
     } catch (error: any) {
       console.error(`Error sending ${message.channel} message:`, error);
+      if (smsReservation?.reserved) {
+        await supabase.rpc("restore_sms_credits", {
+          p_tenant_id: message.tenant_id,
+          p_reservation: smsReservation,
+        });
+      }
       errorMessage = error.message || "Failed to send message";
       success = false;
     }
 
-    // If message sent successfully, deduct credits
-    if (success) {
-      const newBalance = creditBalance.balance - creditsRequired;
-      const { error: deductError } = await supabase
-        .from("communication_credits")
-        .update({
-          balance: newBalance,
-        })
-        .eq("tenant_id", message.tenant_id);
-
-      if (deductError) {
-        console.error("Failed to deduct credits:", deductError);
-        // Continue - message was sent, credit deduction is secondary
-      } else {
-        await checkAndAlertLowSmsBalance(supabase, message.tenant_id, newBalance, {
+    if (success && message.channel === "sms") {
+      const { data: creditSummary } = await supabase.rpc("get_sms_credit_summary", {
+        p_tenant_id: message.tenant_id,
+      });
+      if (creditSummary?.[0]) {
+        await checkAndAlertLowSmsBalance(supabase, message.tenant_id, Number(creditSummary[0].total), {
           resendApiKey: RESEND_API_KEY,
         });
       }

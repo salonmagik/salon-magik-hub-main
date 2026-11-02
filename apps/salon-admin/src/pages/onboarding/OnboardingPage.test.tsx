@@ -66,12 +66,6 @@ vi.mock("@/components/onboarding/BusinessStep", () => ({
   ),
 }));
 
-vi.mock("@/components/onboarding/PlanStep", () => ({
-  PlanStep: ({ onPlanSelect }: { onPlanSelect: (plan: "chain") => void }) => (
-    <button onClick={() => onPlanSelect("chain")}>Pick Chain</button>
-  ),
-}));
-
 vi.mock("@/components/onboarding/OwnerInviteStep", () => ({ OwnerInviteStep: () => <div>Owner Invite</div> }));
 vi.mock("@/components/onboarding/LocationsStep", () => ({ LocationsStep: () => <div>Locations</div> }));
 vi.mock("@/components/onboarding/ReviewStep", () => ({ ReviewStep: () => <div>Review</div> }));
@@ -81,13 +75,12 @@ vi.mock("@/hooks/usePlanPricing", () => ({ getCurrencyForCountry: () => "GHS" })
 vi.mock("@/lib/supabase", () => ({ supabase: { from: vi.fn(), rpc: vi.fn() } }));
 
 describe("OnboardingPage", () => {
-  it("shows chain branch count input on plan step", () => {
+  it("shows the location count input on the single-plan step", () => {
     render(<OnboardingPage />);
     fireEvent.click(screen.getByRole("button", { name: /pick owner/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /fill business/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    fireEvent.click(screen.getByRole("button", { name: /pick chain/i }));
-    expect(screen.getByLabelText(/how many branches do you have/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/how many locations do you have today/i)).toBeInTheDocument();
   });
 });

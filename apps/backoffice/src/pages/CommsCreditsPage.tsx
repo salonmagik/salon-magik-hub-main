@@ -49,7 +49,7 @@ export default function CommsCreditsPage() {
     const totalDelivered = rows.reduce((sum, r) => sum + r.delivered_30d, 0);
     const totalFailed = rows.reduce((sum, r) => sum + r.failed_30d, 0);
     const deliveryRate = totalDelivered + totalFailed > 0 ? (totalDelivered / (totalDelivered + totalFailed)) * 100 : null;
-    const lowBalance = rows.filter((r) => (r.balance ?? 0) < 10).length;
+    const lowBalance = rows.filter((r) => (Number(r.complimentary_marketing_sms_balance || 0) + Number(r.purchased_sms_balance || 0)) < 10).length;
     return { totalSent, totalSms, totalEmail, deliveryRate, lowBalance };
   }, [rows]);
 
@@ -113,8 +113,9 @@ export default function CommsCreditsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Salon</TableHead>
-                      <TableHead>Balance</TableHead>
-                      <TableHead>Free allotment used</TableHead>
+                      <TableHead>Marketing SMS</TableHead>
+                      <TableHead>Reminder SMS</TableHead>
+                      <TableHead>Purchased SMS</TableHead>
                       <TableHead>Last purchase</TableHead>
                       <TableHead>Sent (30d)</TableHead>
                       <TableHead>Reminders</TableHead>
@@ -129,14 +130,16 @@ export default function CommsCreditsPage() {
                           <div className="text-xs text-muted-foreground">{row.country || "—"}</div>
                         </TableCell>
                         <TableCell>
-                          <span className={(row.balance ?? 0) < 10 ? "text-red-600 font-medium" : "font-medium"}>
-                            {row.balance ?? "0"}
+                          <span className={(Number(row.complimentary_marketing_sms_balance || 0) + Number(row.purchased_sms_balance || 0)) < 10 ? "text-red-600 font-medium" : "font-medium"}>
+                            {Number(row.complimentary_marketing_sms_balance || 0) + Number(row.purchased_sms_balance || 0)}
                           </span>
+                          <div className="text-xs text-muted-foreground">{Number(row.complimentary_marketing_sms_balance || 0)} complimentary</div>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {row.free_monthly_allocation
-                            ? `${Math.max(0, row.free_monthly_allocation - (row.balance ?? 0))} / ${row.free_monthly_allocation}`
-                            : "0"}
+                          {Number(row.complimentary_reminder_sms_balance || 0)}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {Number(row.purchased_sms_balance || 0)}
                         </TableCell>
                         <TableCell className="text-sm">
                           {row.last_purchase_at

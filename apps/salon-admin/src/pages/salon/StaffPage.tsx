@@ -746,7 +746,7 @@ export default function StaffPage() {
 							<p className="mt-0.5 text-sm text-muted-foreground">
 								Track when your staff arrive, time off and their leave requests.
 								{!staffOperationsEnabled && !staffOperationsPlanEligible
-									? " Available on Studio and Chain plans."
+									? " Available as a paid add-on after your trial."
 									: ""}
 							</p>
 							{!staffOperationsEnabled && staffOperationsPlanEligible && staffOperationsPriceLabel && (

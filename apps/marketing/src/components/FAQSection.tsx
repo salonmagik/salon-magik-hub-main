@@ -13,7 +13,7 @@ export function FAQSection() {
   const faqs = [
     {
       q: "Do I need a card to start?",
-      a: `No. Every plan starts with a ${trialDays}-day free trial and no card is required to begin.`,
+      a: `No. Every plan starts with a ${trialDays}-day free trial. You can explore everything first, then add a payment method before the trial ends to keep your salon online.`,
     },
     {
       q: "Can my clients book without downloading an app?",

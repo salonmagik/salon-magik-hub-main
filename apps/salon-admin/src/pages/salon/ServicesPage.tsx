@@ -346,11 +346,10 @@ export default function ServicesPage() {
   };
 
   const resourceLimit = useMemo(() => {
-    const max = currentPlan?.limits?.max_services ?? null;
     const count = services.filter((s) => s.status === "active").length;
-    return { count, max, label: "service", pluralLabel: "services" };
-  }, [currentPlan?.limits, services]);
-  const isResourceFull = resourceLimit.max != null && resourceLimit.count >= resourceLimit.max;
+    return { count, max: null, label: "service", pluralLabel: "services" };
+  }, [services]);
+  const isResourceFull = false;
 
   const mobileQuickAction = useMemo<MobileQuickAction | null>(() => {
     if (selectedItems.size > 0) return null;

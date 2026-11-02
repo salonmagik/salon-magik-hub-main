@@ -37,7 +37,7 @@ export function CTASection({ isWaitlistMode, onWaitlistClick }: CTASectionProps)
         <p className="mx-auto mb-9 max-w-[480px] text-[16.5px] text-white/55">
           {isWaitlistMode
             ? "We're in private beta. Get exclusive early access and special launch pricing."
-            : `Set up takes about ten minutes. No credit card, no contracts, no learning curve. ${trialDays}-day free trial.`}
+            : `Set up takes about ten minutes. No charge during your trial, no contracts, no learning curve. ${trialDays}-day free trial.`}
         </p>
 
         {isWaitlistMode ? (
