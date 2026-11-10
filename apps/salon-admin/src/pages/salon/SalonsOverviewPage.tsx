@@ -138,9 +138,9 @@ export default function SalonsOverviewPage() {
   if (!currentTenant) return <SalonSidebar><LoadingState variant="section" /></SalonSidebar>;
 
   const marketingCards = [
-    { title: "Targeted marketing", icon: MessageSquare, tone: "purple", email: 140, sms: 60 },
-    { title: "Birthday messages", icon: Gift, tone: "pink", email: 24, sms: 14 },
-    { title: "Bulk messages", icon: Send, tone: "gray", email: 122, sms: 60 },
+    { title: "Targeted marketing", icon: MessageSquare, tone: "purple", email: 0, sms: 0 },
+    { title: "Birthday messages", icon: Gift, tone: "pink", email: 0, sms: 0 },
+    { title: "Bulk messages", icon: Send, tone: "gray", email: 0, sms: 0 },
   ];
 
   return (
