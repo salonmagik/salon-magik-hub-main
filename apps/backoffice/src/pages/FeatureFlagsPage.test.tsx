@@ -2,8 +2,10 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import FeatureFlagsPage from "./FeatureFlagsPage";
 
+const { mockQueryData } = vi.hoisted(() => ({ mockQueryData: { current: [] as unknown[] } }));
+
 vi.mock("@tanstack/react-query", () => ({
-  useQuery: () => ({ data: [], isLoading: false }),
+  useQuery: () => ({ data: mockQueryData.current, isLoading: false }),
   useMutation: () => ({ mutate: vi.fn(), isPending: false }),
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -24,20 +26,43 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 describe("FeatureFlagsPage", () => {
-  it("renders feature flag management sections", () => {
+  it("renders the page heading and security notice", () => {
+    mockQueryData.current = [];
     render(<FeatureFlagsPage />);
     expect(screen.getByRole("heading", { name: /feature flags/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /marketing master toggles/i })).toBeInTheDocument();
-    expect(screen.getByText(/deterministic master toggles only/i)).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /rollout rules \(overrides\)/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/2fa required for writes/i)).toBeInTheDocument();
   });
 
-  it("renders the master toggle table and security notice", () => {
+  it("shows an empty state when no toggles are configured", () => {
+    mockQueryData.current = [];
     render(<FeatureFlagsPage />);
-    expect(screen.getByText(/2fa required for writes/i)).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: /feature/i })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: /key/i })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: /status/i })).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: /last updated/i })).toBeInTheDocument();
+    expect(screen.getByText(/no feature flags configured yet/i)).toBeInTheDocument();
+  });
+
+  it("renders a row per configured toggle with its live/off status", () => {
+    mockQueryData.current = [
+      {
+        id: "flag-1",
+        feature_key: "waitlist_enabled",
+        display_name: "Waitlist signups",
+        description: "Public waitlist capture form",
+        master_enabled: true,
+        updated_at: "2026-10-01T00:00:00Z",
+      },
+      {
+        id: "flag-2",
+        feature_key: "other_countries_interest_enabled",
+        display_name: "Other countries interest",
+        description: null,
+        master_enabled: false,
+        updated_at: "2026-10-01T00:00:00Z",
+      },
+    ];
+    render(<FeatureFlagsPage />);
+    expect(screen.getByText("Waitlist signups")).toBeInTheDocument();
+    expect(screen.getByText("Live")).toBeInTheDocument();
+    expect(screen.getByText("Other countries interest")).toBeInTheDocument();
+    expect(screen.getByText("Off")).toBeInTheDocument();
+    expect(screen.queryByText(/no feature flags configured yet/i)).not.toBeInTheDocument();
   });
 });

@@ -1,6 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 import SubscriptionLedgerPage from "./SubscriptionLedgerPage";
+
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <SubscriptionLedgerPage />
+    </MemoryRouter>,
+  );
+}
 
 vi.mock("@/components/BackofficeLayout", () => ({
   BackofficeLayout: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -65,19 +74,19 @@ vi.mock("@/hooks", () => ({
 
 describe("SubscriptionLedgerPage", () => {
   it("renders a cancellation-pending row with a distinct label", () => {
-    render(<SubscriptionLedgerPage />);
+    renderPage();
     expect(screen.getByText("Cancel Pending Salon")).toBeInTheDocument();
     expect(screen.getByText("cancellation pending")).toBeInTheDocument();
   });
 
   it("renders a suspended row with a distinct status label", () => {
-    render(<SubscriptionLedgerPage />);
+    renderPage();
     expect(screen.getByText("Suspended Salon")).toBeInTheDocument();
     expect(screen.getByText("suspended")).toBeInTheDocument();
   });
 
   it("shows cancellation reason, requester and timestamps in the tenant drawer", () => {
-    render(<SubscriptionLedgerPage />);
+    renderPage();
     fireEvent.click(screen.getByText("Cancel Pending Salon"));
 
     expect(screen.getByText(/Cancellation pending: access until/)).toBeInTheDocument();
@@ -87,7 +96,7 @@ describe("SubscriptionLedgerPage", () => {
   });
 
   it("shows the suspended timestamp in the tenant drawer", () => {
-    render(<SubscriptionLedgerPage />);
+    renderPage();
     fireEvent.click(screen.getByText("Suspended Salon"));
 
     expect(screen.getByText(/Suspended since/)).toBeInTheDocument();

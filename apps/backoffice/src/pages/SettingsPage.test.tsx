@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@ui/tooltip";
 import SettingsPage from "./SettingsPage";
@@ -31,13 +31,24 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 describe("SettingsPage", () => {
-  it("renders settings and market management tab", () => {
+  it("renders the Settings nav with Safety controls as the default section", () => {
     render(
       <TooltipProvider>
         <SettingsPage />
       </TooltipProvider>,
     );
-    expect(screen.getByRole("heading", { name: /settings/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /markets/i })).toBeInTheDocument();
+    expect(screen.getByText("Settings")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /safety controls/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /markets & currency/i })).toBeInTheDocument();
+  });
+
+  it("switches sections when a left-nav item is clicked", () => {
+    render(
+      <TooltipProvider>
+        <SettingsPage />
+      </TooltipProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /markets & currency/i }));
+    expect(screen.getByRole("heading", { name: /markets & currency/i })).toBeInTheDocument();
   });
 });

@@ -2,10 +2,10 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { supabase } from "@/lib/supabase";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
 import { Badge } from "@ui/badge";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
+import { Loader2 } from "lucide-react";
+import { SupportTicketsPanel, useSupportTickets } from "@/pages/customers/CustomersSupportPage";
 
 type OpsView = "imports" | "assistance" | "reactivation";
 
@@ -51,27 +51,64 @@ export default function CustomersOpsMonitorPage() {
     },
   });
 
+  const { data: supportTickets = [] } = useSupportTickets();
+  const openTicketCount = supportTickets.filter((t) => t.status === "open").length;
+
   const isLoading = isImportJobsLoading || isAssistanceLoading || isReactivationLoading;
+
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const recentImportCount = importJobs.filter((j: any) => new Date(j.created_at).getTime() >= sevenDaysAgo).length;
 
   return (
     <BackofficeLayout>
-      <div className="p-6 space-y-6">
+      <div className="backoffice-page">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Customers Ops Monitor</h1>
-          <p className="text-muted-foreground">Operational monitor for imports, setup assistance, and reactivation activity.</p>
+          <h1 className="text-[20px] font-bold tracking-tight">Ops monitor &amp; support</h1>
+          <p className="mt-[3px] text-[12.5px] text-muted-foreground">
+            Cross-functional telemetry (imports, plan-config requests, broadcasts) alongside the live support ticket queue.
+          </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2"><RefreshCw className="h-5 w-5" />Ops Monitor</CardTitle>
-            <CardDescription>Cross-functional operations telemetry across growth workflows.</CardDescription>
-          </CardHeader>
-          <CardContent>
+        <Tabs defaultValue="telemetry" className="space-y-4">
+          <TabsList className="h-auto justify-start gap-[22px] rounded-none border-b border-border bg-transparent p-0">
+            <TabsTrigger
+              value="telemetry"
+              className="rounded-none border-b-2 border-transparent px-1 py-[9px] text-[13.5px] font-semibold text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+            >
+              Ops telemetry
+            </TabsTrigger>
+            <TabsTrigger
+              value="support"
+              className="rounded-none border-b-2 border-transparent px-1 py-[9px] text-[13.5px] font-semibold text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+            >
+              Support tickets
+              {openTicketCount > 0 && (
+                <Badge variant="destructive" className="ml-1.5 rounded-full">{openTicketCount} open</Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="telemetry" className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="backoffice-panel p-4">
+                <div className="text-[11.5px] font-semibold text-muted-foreground">Catalog imports, 7d</div>
+                <div className="mt-1 text-[22px] font-bold tabular-nums">{recentImportCount}</div>
+              </div>
+              <div className="backoffice-panel p-4">
+                <div className="text-[11.5px] font-semibold text-muted-foreground">Setup assistance requests</div>
+                <div className="mt-1 text-[22px] font-bold tabular-nums">{assistanceRequests.length}</div>
+              </div>
+              <div className="backoffice-panel p-4">
+                <div className="text-[11.5px] font-semibold text-muted-foreground">Reactivation campaigns</div>
+                <div className="mt-1 text-[22px] font-bold tabular-nums">{reactivationCampaigns.length}</div>
+              </div>
+            </div>
+
             <Tabs value={opsView} onValueChange={(value) => setOpsView(value as OpsView)}>
               <TabsList>
-                <TabsTrigger value="imports">Catalog Imports</TabsTrigger>
-                <TabsTrigger value="assistance">Setup Assistance</TabsTrigger>
-                <TabsTrigger value="reactivation">Reactivation Campaigns</TabsTrigger>
+                <TabsTrigger value="imports">Catalog imports</TabsTrigger>
+                <TabsTrigger value="assistance">Setup assistance</TabsTrigger>
+                <TabsTrigger value="reactivation">Reactivation campaigns</TabsTrigger>
               </TabsList>
 
               <TabsContent value="imports" className="mt-4 space-y-3">
@@ -81,7 +118,7 @@ export default function CustomersOpsMonitorPage() {
                   <p className="text-sm text-muted-foreground">No import jobs yet.</p>
                 ) : (
                   importJobs.map((job: any) => (
-                    <div key={job.id} className="rounded-md border p-3">
+                    <div key={job.id} className="rounded-2xl border border-border p-3">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium">{job.import_type} · Tenant {job.tenant_id?.slice?.(0, 8) || "-"}</p>
@@ -101,7 +138,7 @@ export default function CustomersOpsMonitorPage() {
                   <p className="text-sm text-muted-foreground">No assistance requests yet.</p>
                 ) : (
                   assistanceRequests.map((request: any) => (
-                    <div key={request.id} className="rounded-md border p-3">
+                    <div key={request.id} className="rounded-2xl border border-border p-3">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium">{request.request_type}</p>
@@ -121,7 +158,7 @@ export default function CustomersOpsMonitorPage() {
                   <p className="text-sm text-muted-foreground">No reactivation campaigns yet.</p>
                 ) : (
                   reactivationCampaigns.map((campaign: any) => (
-                    <div key={campaign.id} className="rounded-md border p-3">
+                    <div key={campaign.id} className="rounded-2xl border border-border p-3">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium">{campaign.name || campaign.channel}</p>
@@ -134,8 +171,12 @@ export default function CustomersOpsMonitorPage() {
                 )}
               </TabsContent>
             </Tabs>
-          </CardContent>
-        </Card>
+          </TabsContent>
+
+          <TabsContent value="support">
+            <SupportTicketsPanel />
+          </TabsContent>
+        </Tabs>
       </div>
     </BackofficeLayout>
   );

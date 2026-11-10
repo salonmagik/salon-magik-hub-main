@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
 import { useToast } from "@ui/ui/use-toast";
 import { supabase } from "@/lib/supabase";
-import { Loader2, Shield, Eye, EyeOff, KeyRound, AlertCircle } from "lucide-react";
+import { Loader2, Shield, Eye, EyeOff, AlertCircle, Check, Circle } from "lucide-react";
+import { cn } from "@shared/utils";
 
 export default function BackofficeResetPasswordPage() {
   const navigate = useNavigate();
@@ -124,55 +124,64 @@ export default function BackofficeResetPasswordPage() {
     }
   };
 
+  const checks = [
+    { ok: password.length >= 8, label: "At least 8 characters" },
+    { ok: /[A-Z]/.test(password), label: "One uppercase letter" },
+    { ok: /[0-9]/.test(password), label: "One number" },
+    { ok: password.length > 0 && password === confirmPassword, label: "Passwords match" },
+  ];
+
   if (isVerifying) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </CardContent>
-        </Card>
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="flex w-full max-w-[400px] justify-center rounded-2xl border border-border bg-card py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
       </div>
     );
   }
 
   if (!tokenValid) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 rounded-full bg-destructive/10 p-3 w-fit">
-              <AlertCircle className="h-8 w-8 text-destructive" />
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="w-full max-w-[400px]">
+          <div className="mb-7 flex flex-col items-center">
+            <div className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-[13px] bg-destructive">
+              <AlertCircle className="h-5 w-5 text-destructive-foreground" />
             </div>
-            <CardTitle className="text-2xl">Invalid Reset Link</CardTitle>
-            <CardDescription>{tokenError}</CardDescription>
-          </CardHeader>
-          <CardContent className="text-center">
-            <Button onClick={() => navigate("/forgot-password")} className="w-full">
-              Request New Reset Link
+            <div className="text-lg font-bold text-foreground">Invalid reset link</div>
+            <div className="mt-0.5 text-center text-[12.5px] text-muted-foreground">{tokenError}</div>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-7">
+            <Button
+              onClick={() => navigate("/forgot-password")}
+              className="w-full rounded-full py-[11px] text-[13.5px] font-semibold"
+            >
+              Request new reset link
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 rounded-full bg-destructive/10 p-3 w-fit">
-            <Shield className="h-8 w-8 text-destructive" />
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="w-full max-w-[400px]">
+        <div className="mb-7 flex flex-col items-center">
+          <div className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-[13px] bg-primary">
+            <Shield className="h-5 w-5 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">Reset Your Password</CardTitle>
-          <CardDescription>
-            Enter your new password and authenticator code for {email}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="password">New Password</Label>
+          <div className="text-lg font-bold text-foreground">Set a new password</div>
+          <div className="mt-0.5 text-center text-[12.5px] text-muted-foreground">For {email}</div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-7">
+          <form onSubmit={handleSubmit} className="space-y-0">
+            <div className="mb-3.5">
+              <Label htmlFor="password" className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                New password
+              </Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -182,7 +191,7 @@ export default function BackofficeResetPasswordPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={8}
-                  className="pr-10"
+                  className="h-auto rounded-[8px] border-input px-[13px] py-[11px] pr-10 text-[13.5px]"
                 />
                 <Button
                   type="button"
@@ -200,8 +209,10 @@ export default function BackofficeResetPasswordPage() {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <div className="mb-[18px]">
+              <Label htmlFor="confirmPassword" className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                Confirm new password
+              </Label>
               <Input
                 id="confirmPassword"
                 type={showPassword ? "text" : "password"}
@@ -210,42 +221,55 @@ export default function BackofficeResetPasswordPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 minLength={8}
+                className="h-auto rounded-[8px] border-input px-[13px] py-[11px] text-[13.5px]"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <KeyRound className="h-4 w-4" />
-                Authenticator Code
+            <div className="mb-[22px] flex flex-col gap-1.5">
+              {checks.map((c) => (
+                <div
+                  key={c.label}
+                  className={cn("flex items-center gap-1.5 text-xs", c.ok ? "text-success" : "text-muted-foreground")}
+                >
+                  {c.ok ? <Check className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
+                  {c.label}
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-[18px]">
+              <Label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                Authenticator code
               </Label>
               <div className="flex justify-center">
-                <InputOTP
-                  maxLength={6}
-                  value={totpCode}
-                  onChange={setTotpCode}
-                >
-                  <InputOTPGroup>
-                    <InputOTPSlot index={0} />
-                    <InputOTPSlot index={1} />
-                    <InputOTPSlot index={2} />
-                    <InputOTPSlot index={3} />
-                    <InputOTPSlot index={4} />
-                    <InputOTPSlot index={5} />
+                <InputOTP maxLength={6} value={totpCode} onChange={setTotpCode}>
+                  <InputOTPGroup className="gap-2">
+                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                      <InputOTPSlot
+                        key={i}
+                        index={i}
+                        className={cn(
+                          "h-12 w-10 rounded-[8px] border-l text-lg font-bold",
+                          totpCode.length > i && "border-primary bg-primary/10",
+                        )}
+                      />
+                    ))}
                   </InputOTPGroup>
                 </InputOTP>
               </div>
-              <p className="text-xs text-muted-foreground text-center">
-                Enter the 6-digit code from your authenticator app
-              </p>
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full rounded-full py-[11px] text-[13.5px] font-semibold"
+            >
               {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Reset Password
+              Update password
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { useBackofficeAuth } from "@/hooks/useBackofficeAuth";
@@ -44,11 +44,18 @@ function formatMoney(amount: number, currency: string) {
   return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function formatCompactMoney(amount: number, currency: string) {
+  const symbol = CURRENCY_SYMBOLS[currency] || `${currency} `;
+  if (amount >= 1_000_000) return `${symbol}${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `${symbol}${(amount / 1_000).toFixed(1)}K`;
+  return `${symbol}${amount.toFixed(0)}`;
+}
+
 const TYPE_META: Record<string, { label: string; className: string }> = {
-  payment: { label: "Payment", className: "bg-sky-50 text-sky-700" },
-  deposit: { label: "Deposit", className: "bg-amber-50 text-amber-700" },
-  refund: { label: "Refund", className: "bg-red-50 text-red-700" },
-  purse_topup: { label: "Store-credit top-up", className: "bg-emerald-50 text-emerald-700" },
+  payment: { label: "Payment", className: "bg-info-bg text-info" },
+  deposit: { label: "Deposit", className: "bg-warning-bg text-warning" },
+  refund: { label: "Refund", className: "bg-destructive-bg text-destructive" },
+  purse_topup: { label: "Store-credit top-up", className: "bg-success-bg text-success" },
   purse_redemption: { label: "Store-credit used", className: "bg-muted text-muted-foreground" },
 };
 
@@ -101,6 +108,7 @@ export default function TransactionsPage() {
   const [selected, setSelected] = useState<BackofficeTransactionRow | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [blockedRefundsPage, setBlockedRefundsPage] = useState(0);
+  const blockedRefundsSectionRef = useRef<HTMLDivElement>(null);
 
   const { data: tenants } = useTenants();
   const { data: summary, isLoading: summaryLoading } = useBackofficeTransactionSummary(range.from, range.to);
@@ -199,15 +207,12 @@ export default function TransactionsPage() {
 
   return (
     <BackofficeLayout>
-      <div className="space-y-5 p-6">
+      <div className="backoffice-page">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-semibold flex items-center gap-2">
-              <Receipt className="h-6 w-6 text-primary" />
-              All Transactions
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1 max-w-xl">
-              Every customer payment across every tenant: bookings, deposits, refunds, and store-credit activity, in one place. Read-only; refunds and disputes are actioned from each tenant's own Cashflow tab.
+            <h1 className="text-[20px] font-bold">Transactions</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px] max-w-xl">
+              Every customer payment across every salon. Disputes and refunds are actioned from each salon's own Cashflow tab, not here.
             </p>
           </div>
           <Button variant="outline" onClick={handleExport} disabled={isExporting}>
@@ -217,50 +222,42 @@ export default function TransactionsPage() {
         </div>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {summaryLoading ? (
             <div className="col-span-full flex justify-center py-6">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <>
-              {(summary?.byCurrency.length ? summary.byCurrency : [{ currency: "NGN", volume: 0, tx_count: 0 }]).map((c) => (
-                <Card key={c.currency}>
-                  <CardContent className="p-4">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
-                      Volume · {c.currency}
-                    </p>
-                    <p className="text-xl font-semibold tabular-nums">{formatMoney(c.volume, c.currency)}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{c.tx_count} transactions</p>
-                  </CardContent>
-                </Card>
-              ))}
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Refunded</p>
-                  <p className="text-xl font-semibold tabular-nums text-destructive">{summary?.totals.refund_count ?? 0}</p>
-                  <p className="text-xs text-muted-foreground mt-1">across all currencies</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2 flex items-center gap-1">
-                    <Gauge className="h-3 w-3" /> Success rate
-                  </p>
-                  <p className="text-xl font-semibold tabular-nums">
-                    {successRate === null ? "0.0%" : `${successRate.toFixed(1)}%`}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {summary?.totals.failed_count ?? 0} failed of {summary?.totals.total_count ?? 0}
-                  </p>
-                </CardContent>
-              </Card>
+              <div className="backoffice-panel p-4">
+                <p className="text-[11.5px] text-muted-foreground font-semibold">Volume, {datePreset === "today" ? "today" : datePreset}</p>
+                <p className="text-[22px] font-bold tabular-nums mt-1">
+                  {(summary?.byCurrency.length ? summary.byCurrency : []).map((c, i) => (
+                    <span key={c.currency} className={i > 0 ? "text-sm text-muted-foreground font-medium ml-1.5" : ""}>
+                      {i > 0 ? "+ " : ""}{formatCompactMoney(c.volume, c.currency)}
+                    </span>
+                  ))}
+                  {!summary?.byCurrency.length && formatCompactMoney(0, "NGN")}
+                </p>
+              </div>
+              <div className="backoffice-panel p-4">
+                <p className="text-[11.5px] text-muted-foreground font-semibold flex items-center gap-1">
+                  <Gauge className="h-3 w-3" /> Success rate
+                </p>
+                <p className="text-[22px] font-bold tabular-nums mt-1 text-success">
+                  {successRate === null ? "0.0%" : `${successRate.toFixed(1)}%`}
+                </p>
+              </div>
+              <div className="backoffice-panel p-4 border-destructive/60">
+                <p className="text-[11.5px] text-muted-foreground font-semibold">Blocked refunds</p>
+                <p className="text-[22px] font-bold tabular-nums mt-1 text-destructive">{blockedRefundsTotal}</p>
+              </div>
             </>
           )}
         </div>
 
         {/* Filters */}
-        <Card>
+        <Card className="backoffice-panel">
           <CardContent className="p-3 flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 flex-1 min-w-[220px] bg-muted/50 border rounded-md px-3 py-1.5">
               <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -352,10 +349,21 @@ export default function TransactionsPage() {
               {meta.label} <span className="opacity-70 tabular-nums">{typeCountFor(key)}</span>
             </button>
           ))}
+          <button
+            onClick={() => blockedRefundsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border bg-card text-muted-foreground"
+          >
+            Blocked
+            {blockedRefundsTotal > 0 && (
+              <span className="rounded-full bg-destructive-bg px-1.5 text-[10px] font-semibold text-destructive">
+                {blockedRefundsTotal}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Table */}
-        <Card className="overflow-hidden">
+        <Card className="backoffice-panel overflow-hidden">
           <CardContent className="p-0">
             {rowsLoading ? (
               <div className="flex items-center justify-center py-16">
@@ -451,17 +459,13 @@ export default function TransactionsPage() {
         </Card>
 
         {/* Blocked refunds: refunds rejected because the salon had already
-            withdrawn the money. See refund-clawback-safeguard design. */}
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-destructive" />
-            Blocked refunds
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1 max-w-xl">
-            Refund attempts rejected because the salon's wallet could no longer cover the amount: the salon had already withdrawn the money. Follow up with these salons directly.
-          </p>
-        </div>
-        <Card className="overflow-hidden">
+            withdrawn the money. Read-only — the salon is followed up with directly. */}
+        <Card ref={blockedRefundsSectionRef} className="backoffice-panel overflow-hidden border-destructive/60">
+          <div className="flex items-center gap-2 border-b px-[18px] py-3.5">
+            <ShieldAlert className="h-4 w-4 text-destructive" />
+            <span className="text-sm font-bold">Blocked refunds</span>
+            <span className="text-xs text-muted-foreground">— the salon had already withdrawn the funds. Read-only.</span>
+          </div>
           <CardContent className="p-0">
             {blockedRefundsLoading ? (
               <div className="flex items-center justify-center py-16">
@@ -491,7 +495,7 @@ export default function TransactionsPage() {
                       </TableCell>
                       <TableCell className="text-sm">{row.tenant_name}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="bg-red-50 text-red-700 capitalize">{row.refund_type}</Badge>
+                        <Badge variant="secondary" className="bg-destructive-bg text-destructive capitalize">{row.refund_type}</Badge>
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-semibold text-destructive">
                         {formatMoney(row.attempted_amount, row.currency)}

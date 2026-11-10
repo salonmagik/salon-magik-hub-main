@@ -45,6 +45,11 @@ const preset: Pick<Config, "theme" | "plugins"> = {
           foreground: "hsl(var(--warning-foreground))",
           bg: "hsl(var(--warning-bg))",
         },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+          bg: "hsl(var(--info-bg))",
+        },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",

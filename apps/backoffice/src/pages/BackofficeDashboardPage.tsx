@@ -1,38 +1,85 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
-import { useBackofficeAuth, useWaitlist, useTenants } from "@/hooks";
+import { useBackofficeAuth, useWaitlist, useTenants, useBlockedRefundsCount, useBackofficeUsers } from "@/hooks";
+import { useCommsUsage } from "@/hooks/useCommsUsage";
 import { supabase } from "@/lib/supabase";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
-import { Button } from "@ui/button";
-import { StatCard } from "@ui/stat-card";
-import { Badge } from "@ui/badge";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@ui/chart";
 import { Link, Navigate } from "react-router-dom";
-import { Users, Building2, Clock, UserCog, Sparkles, Globe2, Info } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
+import {
+  AlertTriangle,
+  Building2,
+  Clock,
+  CreditCard,
+  Wallet,
+  ChevronRight,
+} from "lucide-react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Line,
-  LineChart,
+  Cell,
   XAxis,
   YAxis,
 } from "recharts";
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@ui/chart";
+
+const CURRENCY_BY_COUNTRY_CODE: Record<string, "NGN" | "GHS"> = {
+  NG: "NGN",
+  GH: "GHS",
+};
+
+const CURRENCY_SYMBOL: Record<"NGN" | "GHS", string> = {
+  NGN: "₦",
+  GHS: "₵",
+};
+
+function formatCompactMoney(amount: number, currency: "NGN" | "GHS") {
+  const symbol = CURRENCY_SYMBOL[currency];
+  if (amount >= 1_000_000) return `${symbol}${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `${symbol}${(amount / 1_000).toFixed(1)}k`;
+  return `${symbol}${amount.toFixed(0)}`;
+}
+
+function formatAuditActionText(action: string, entityType: string) {
+  const readable = action.replace(/[._]+/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  return entityType ? `${readable} (${entityType.replace(/_/g, " ")})` : readable;
+}
+
+function adminDisplayName(user: { full_name: string | null; first_name: string | null; last_name: string | null; email: string | null } | undefined) {
+  if (!user) return "A team member";
+  if (user.full_name?.trim()) {
+    const parts = user.full_name.trim().split(/\s+/);
+    if (parts.length > 1) return `${parts[0]} ${parts[parts.length - 1][0]}.`;
+    return parts[0];
+  }
+  if (user.first_name) return user.last_name ? `${user.first_name} ${user.last_name[0]}.` : user.first_name;
+  if (user.email) return user.email.split("@")[0];
+  return "A team member";
+}
+
+function timeAgoLabel(iso: string) {
+  const date = new Date(iso);
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  if (sameDay) return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
 
 const growthChartConfig: ChartConfig = {
   count: { label: "New tenants", color: "hsl(var(--primary))" },
-};
-
-const planChartConfig: ChartConfig = {
-  count: { label: "Tenants", color: "hsl(var(--primary))" },
 };
 
 export default function BackofficeDashboardPage() {
   const { backofficeUser, hasBackofficePageAccess, hasBackofficePermission } = useBackofficeAuth();
   const { data: pendingLeads } = useWaitlist("pending");
   const { data: tenants } = useTenants();
+  const { data: blockedRefundsCount = 0 } = useBlockedRefundsCount(Boolean(backofficeUser?.user_id));
+  const { data: commsUsage } = useCommsUsage();
+  const { data: backofficeUsers } = useBackofficeUsers();
+
   const { data: marketCountries } = useQuery({
     queryKey: ["backoffice-dashboard-market-countries"],
     queryFn: async () => {
@@ -46,39 +93,91 @@ export default function BackofficeDashboardPage() {
     },
   });
 
+  const { data: chainUnlockRequests = [] } = useQuery({
+    queryKey: ["chain-unlock-requests"],
+    queryFn: async () => {
+      const { data, error } = await (supabase
+        .from("tenant_chain_unlock_requests" as any)
+        .select("id, tenant_id, status, tenant:tenants(id,name)")
+        .eq("status", "pending") as any);
+      if (error) throw error;
+      return (data || []) as Array<{ id: string; tenant_id: string; tenant?: { name: string | null } | null }>;
+    },
+  });
+
+  const { data: incompletePayoutSetups = [] } = useQuery({
+    queryKey: ["payout-recipient-setup-queue-count"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("salon_payout_destinations")
+        .select("id")
+        .is("paystack_recipient_code", null);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const { data: planPricingRows } = useQuery({
+    queryKey: ["backoffice-dashboard-plan-pricing"],
+    queryFn: async () => {
+      const [{ data: plans, error: plansError }, { data: pricing, error: pricingError }] = await Promise.all([
+        supabase.from("plans").select("id, slug"),
+        supabase.from("plan_pricing").select("plan_id, currency, monthly_price").is("valid_until", null),
+      ]);
+      if (plansError) throw plansError;
+      if (pricingError) throw pricingError;
+      const slugById = new Map((plans || []).map((p) => [p.id, p.slug]));
+      return (pricing || []).map((row) => ({
+        slug: slugById.get(row.plan_id) || "",
+        currency: row.currency as "NGN" | "GHS",
+        monthlyPrice: Number(row.monthly_price) || 0,
+      }));
+    },
+  });
+
+  const { data: recentAuditLogs = [] } = useQuery({
+    queryKey: ["backoffice-dashboard-recent-audit-logs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("audit_logs")
+        .select("id, action, entity_type, actor_user_id, created_at")
+        .order("created_at", { ascending: false })
+        .limit(3);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   const pendingCount = pendingLeads?.length || 0;
+  const lowSmsSalonsCount = useMemo(
+    () => (commsUsage || []).filter(
+      (r) => (Number(r.complimentary_marketing_sms_balance || 0) + Number(r.purchased_sms_balance || 0)) < 10,
+    ).length,
+    [commsUsage],
+  );
 
   const {
     activeCount,
     trialingCount,
-    totalStaff,
-    newThisMonth,
-    regions,
+    pastDueCount,
+    mrrByCurrency,
     growthSeries,
     planSeries,
   } = useMemo(() => {
     const rows = tenants || [];
     const now = new Date();
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const active = rows.filter((t) => t.subscription_status === "active").length;
     const trialing = rows.filter((t) => t.subscription_status === "trialing").length;
-    const staffSum = rows.reduce((sum, t) => sum + (t.staff_count || 0), 0);
-    const recent = rows.filter((t) => t.created_at && new Date(t.created_at) >= thirtyDaysAgo).length;
+    const pastDue = rows.filter((t) => t.subscription_status === "past_due").length;
 
-    const byCountry = new Map<string, { tenants: number; active: number; staff: number }>();
-    // Seed every active market with zeros first, so a country with no tenants
-    // yet still shows up in the overview instead of disappearing entirely.
-    (marketCountries || []).forEach((market) => {
-      byCountry.set(market.country_code, { tenants: 0, active: 0, staff: 0 });
-    });
+    const priceLookup = new Map((planPricingRows || []).map((r) => [`${r.slug}:${r.currency}`, r.monthlyPrice]));
+    const mrr: Record<"NGN" | "GHS", number> = { NGN: 0, GHS: 0 };
     rows.forEach((t) => {
-      const key = t.country || "Other";
-      const entry = byCountry.get(key) || { tenants: 0, active: 0, staff: 0 };
-      entry.tenants += 1;
-      if (t.subscription_status === "active" || t.subscription_status === "trialing") entry.active += 1;
-      entry.staff += t.staff_count || 0;
-      byCountry.set(key, entry);
+      if (t.subscription_status !== "active") return;
+      const currency = CURRENCY_BY_COUNTRY_CODE[t.country || ""];
+      if (!currency || !t.plan) return;
+      mrr[currency] += priceLookup.get(`${t.plan}:${currency}`) || 0;
     });
 
     const byPlan = new Map<string, number>();
@@ -86,6 +185,7 @@ export default function BackofficeDashboardPage() {
       const key = t.plan || "unknown";
       byPlan.set(key, (byPlan.get(key) || 0) + 1);
     });
+    const totalForPlanShare = rows.length || 1;
 
     const months: { key: string; label: string }[] = [];
     for (let i = 5; i >= 0; i -= 1) {
@@ -100,25 +200,21 @@ export default function BackofficeDashboardPage() {
       if (monthCounts.has(key)) monthCounts.set(key, (monthCounts.get(key) || 0) + 1);
     });
 
-    const countryNameByCode = new Map((marketCountries || []).map((m) => [m.country_code, m.country_name]));
-
     return {
       activeCount: active,
       trialingCount: trialing,
-      totalStaff: staffSum,
-      newThisMonth: recent,
-      regions: Array.from(byCountry.entries()).map(([country, stats]) => ({
-        country,
-        countryName: countryNameByCode.get(country) || country,
-        ...stats,
-      })),
+      pastDueCount: pastDue,
+      mrrByCurrency: mrr,
       growthSeries: months.map((m) => ({ month: m.label, count: monthCounts.get(m.key) || 0 })),
-      planSeries: Array.from(byPlan.entries()).map(([plan, count]) => ({
-        plan: plan.charAt(0).toUpperCase() + plan.slice(1),
-        count,
-      })),
+      planSeries: Array.from(byPlan.entries())
+        .map(([plan, count]) => ({
+          plan: plan.charAt(0).toUpperCase() + plan.slice(1),
+          count,
+          pct: Math.round((count / totalForPlanShare) * 100),
+        }))
+        .sort((a, b) => b.count - a.count),
     };
-  }, [tenants, marketCountries]);
+  }, [tenants, planPricingRows]);
 
   if (backofficeUser?.role !== "super_admin") {
     const routeCandidates: Array<{ route: string; pageKey: string; permissionKey?: string }> = [
@@ -145,201 +241,220 @@ export default function BackofficeDashboardPage() {
     }
   }
 
-  const stats = [
-    {
-      title: "Total Tenants",
-      value: tenants?.length || 0,
-      description: "All salons",
-      tooltip: "Every tenant record, regardless of subscription status. Includes trialing, past due, and canceled.",
-      icon: Users,
-      href: "/customers/tenants",
-      tone: "info" as const,
+  const needsAttentionItems = [
+    blockedRefundsCount > 0 && {
+      key: "blocked-refunds",
+      href: "/transactions",
+      icon: AlertTriangle,
+      tone: "destructive" as const,
+      title: `${blockedRefundsCount} blocked refund ${blockedRefundsCount === 1 ? "attempt" : "attempts"}`,
+      description: "Salon already withdrew the funds — review in Payments",
+      chip: "Critical",
     },
-    {
-      title: "Active Tenants",
-      value: activeCount,
-      description: "Currently active",
-      tooltip: "Subscription status is exactly \"active\". Trialing tenants are counted separately below, not included here.",
+    chainUnlockRequests.length > 0 && {
+      key: "chain-unlocks",
+      href: "/customers/tenants",
       icon: Building2,
-      href: "/customers/tenants",
-      tone: "success" as const,
-    },
-    {
-      title: "Trialing",
-      value: trialingCount,
-      description: "In free trial",
-      tooltip: "Subscription status is \"trialing\" and hasn't converted to a paid plan yet.",
-      icon: Sparkles,
-      href: "/customers/tenants",
-      tone: "default" as const,
-    },
-    {
-      title: "Pending Leads",
-      value: pendingCount,
-      description: "Awaiting review",
-      tooltip: "Waitlist signups with status \"pending\". Still awaiting approval and an invite from the backoffice team.",
-      icon: Clock,
-      href: "/customers/waitlists",
       tone: "warning" as const,
+      title: `${chainUnlockRequests.length} chain-location unlock ${chainUnlockRequests.length === 1 ? "request" : "requests"}`,
+      description: "Chain-plan salons asking to exceed their default location cap",
+      chip: "Needs review",
     },
-    {
-      title: "Total Staff",
-      value: totalStaff,
-      description: "Across all tenants",
-      tooltip: "Sum of staff counts across every tenant, regardless of that tenant's subscription status.",
-      icon: UserCog,
-      href: "/admins",
-      tone: "default" as const,
+    lowSmsSalonsCount > 0 && {
+      key: "low-sms",
+      href: "/comms-credits",
+      icon: Clock,
+      tone: "warning" as const,
+      title: `${lowSmsSalonsCount} ${lowSmsSalonsCount === 1 ? "salon" : "salons"} under 10 SMS credits`,
+      description: "Reminders will silently stop sending",
+      chip: "Needs review",
     },
-    {
-      title: "New This Month",
-      value: newThisMonth,
-      description: "Signed up in the last 30 days",
-      tooltip: "A rolling 30-day window from today. Not the current calendar month.",
-      icon: Globe2,
-      href: "/customers/tenants",
+    incompletePayoutSetups.length > 0 && {
+      key: "payout-setup",
+      href: "/verification-queue",
+      icon: Wallet,
       tone: "info" as const,
+      title: `${incompletePayoutSetups.length} ${incompletePayoutSetups.length === 1 ? "salon" : "salons"} mid payout setup`,
+      description: "Started but haven't finished bank verification",
+      chip: "In progress",
+    },
+    pendingCount > 0 && {
+      key: "pending-leads",
+      href: "/customers/waitlists",
+      icon: Clock,
+      tone: "warning" as const,
+      title: `${pendingCount} waitlist ${pendingCount === 1 ? "lead" : "leads"} awaiting review`,
+      description: "Still awaiting approval and an invite from the backoffice team",
+      chip: "Needs review",
+    },
+  ].filter(Boolean) as Array<{
+    key: string;
+    href: string;
+    icon: typeof AlertTriangle;
+    tone: "destructive" | "warning" | "info";
+    title: string;
+    description: string;
+    chip: string;
+  }>;
+
+  const toneClasses: Record<string, { iconWrap: string; icon: string; chip: string }> = {
+    destructive: { iconWrap: "bg-destructive-bg", icon: "text-destructive", chip: "bg-destructive-bg text-destructive" },
+    warning: { iconWrap: "bg-warning-bg", icon: "text-warning", chip: "bg-warning-bg text-warning" },
+    info: { iconWrap: "bg-info-bg", icon: "text-info", chip: "bg-info-bg text-info" },
+  };
+
+  const statCards = [
+    {
+      label: "Active salons",
+      value: activeCount.toLocaleString(),
+      sub: null,
+      subTone: "text-success",
+    },
+    {
+      label: "On trial",
+      value: trialingCount.toLocaleString(),
+      sub: null,
+      subTone: "text-muted-foreground",
+    },
+    {
+      label: "Past due",
+      value: pastDueCount.toLocaleString(),
+      valueTone: pastDueCount > 0 ? "text-destructive" : undefined,
+      sub: "Billing retry in progress",
+      subTone: "text-muted-foreground",
+    },
+    {
+      label: "MRR (NGN + GHS)",
+      value: `${formatCompactMoney(mrrByCurrency.NGN, "NGN")} + ${formatCompactMoney(mrrByCurrency.GHS, "GHS")}`,
+      sub: null,
+      subTone: "text-success",
     },
   ];
 
+  const backofficeUserById = new Map((backofficeUsers || []).map((u) => [u.user_id, u]));
+
   return (
     <BackofficeLayout>
-      <div className="p-6 space-y-6">
+      <div className="backoffice-page">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-muted-foreground">
-            Platform overview and quick actions
-          </p>
+          <h1 className="text-2xl font-bold tracking-tight">Overview</h1>
+          <p className="text-muted-foreground">Everything that needs a human, in one place.</p>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {stats.map((stat) => (
-            <StatCard
-              key={stat.title}
-              label={stat.title}
-              value={stat.value}
-              description={stat.description}
-              tooltip={stat.tooltip}
-              icon={stat.icon}
-              tone={stat.tone}
-              href={stat.href}
-            />
+        {needsAttentionItems.length > 0 && (
+          <div className="backoffice-panel overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border px-[22px] py-[18px]">
+              <div className="flex items-center gap-2">
+                <span className="text-[15px] font-bold">Needs attention</span>
+                <span className="rounded-full bg-destructive-bg px-2.5 py-0.5 text-[11.5px] font-semibold text-destructive">
+                  {needsAttentionItems.length} open
+                </span>
+              </div>
+              <span className="text-xs text-muted-foreground">Pulled from every module below — nothing to hunt for</span>
+            </div>
+            <div className="flex flex-col">
+              {needsAttentionItems.map((item, index) => {
+                const tone = toneClasses[item.tone];
+                return (
+                  <Link
+                    key={item.key}
+                    to={item.href}
+                    className={`flex items-center gap-3.5 px-[22px] py-3.5 hover:bg-muted/50 ${index < needsAttentionItems.length - 1 ? "border-b border-border" : ""}`}
+                  >
+                    <div className={`flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full ${tone.iconWrap}`}>
+                      <item.icon className={`h-4 w-4 ${tone.icon}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13.5px] font-semibold">{item.title}</div>
+                      <div className="text-xs text-muted-foreground">{item.description}</div>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold ${tone.chip}`}>{item.chip}</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {statCards.map((stat) => (
+            <div key={stat.label} className="backoffice-panel p-[18px]">
+              <div className="text-xs font-semibold text-muted-foreground">{stat.label}</div>
+              <div className={`mt-1.5 text-[26px] font-bold tabular-nums ${stat.valueTone || ""}`}>{stat.value}</div>
+              {stat.sub && <div className={`mt-1 text-[11.5px] font-semibold ${stat.subTone}`}>{stat.sub}</div>}
+            </div>
           ))}
         </div>
 
-        {pendingCount > 0 && (
-          <Card className="border-warning-bg bg-warning-bg/50">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-warning">
-                <Clock className="h-5 w-5" />
-                Action Required
-              </CardTitle>
-              <CardDescription className="text-warning/80">
-                You have {pendingCount} waitlist {pendingCount === 1 ? "lead" : "leads"} awaiting review.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button asChild>
-                <Link to="/customers/waitlists">Review Waitlist</Link>
-              </Button>
-            </CardContent>
-          </Card>
+        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+          <div className="backoffice-panel p-5">
+            <div className="mb-3.5 text-[13.5px] font-bold">Tenant growth — last 6 months</div>
+            <ChartContainer config={growthChartConfig} className="h-[130px] w-full">
+              <BarChart data={growthSeries}>
+                <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                <YAxis tickLine={false} axisLine={false} allowDecimals={false} width={28} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <Bar dataKey="count" radius={[5, 5, 0, 0]}>
+                  {growthSeries.map((_, index) => (
+                    <Cell
+                      key={index}
+                      fill={index === growthSeries.length - 1 ? "hsl(var(--primary))" : "hsl(var(--primary) / 0.18)"}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ChartContainer>
+          </div>
+
+          <div className="backoffice-panel p-5">
+            <div className="mb-3.5 text-[13.5px] font-bold">Plan distribution</div>
+            <div className="flex flex-col gap-3">
+              {planSeries.map((p) => (
+                <div key={p.plan}>
+                  <div className="mb-[5px] flex justify-between text-[12.5px]">
+                    <span>{p.plan}</span>
+                    <span className="tabular-nums text-muted-foreground">{p.pct}%</span>
+                  </div>
+                  <div className="h-[7px] rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${p.pct}%` }} />
+                  </div>
+                </div>
+              ))}
+              {planSeries.length === 0 && (
+                <p className="text-sm text-muted-foreground">No tenants yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {recentAuditLogs.length > 0 && (
+          <div className="backoffice-panel overflow-hidden mb-7">
+            <div className="flex items-center justify-between border-b border-border px-[22px] py-4">
+              <span className="text-[13.5px] font-bold">Recent admin activity</span>
+              <Link to="/audit-logs" className="text-xs font-semibold text-primary">
+                View audit log
+              </Link>
+            </div>
+            <div className="flex flex-col">
+              {recentAuditLogs.map((log, index) => (
+                <div
+                  key={log.id}
+                  className={`flex items-center gap-3 px-[22px] py-3 text-[13px] ${index < recentAuditLogs.length - 1 ? "border-b border-border" : ""}`}
+                >
+                  <span className="w-[72px] shrink-0 tabular-nums text-muted-foreground">{timeAgoLabel(log.created_at)}</span>
+                  <span className="font-semibold">{adminDisplayName(backofficeUserById.get(log.actor_user_id || ""))}</span>
+                  <span className="text-muted-foreground">{formatAuditActionText(log.action, log.entity_type)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
-        {regions.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Regional Overview</CardTitle>
-              <CardDescription>Tenants broken down by country</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 md:grid-cols-2">
-                {regions.map((region) => {
-                  const activeRate = region.tenants > 0 ? Math.round((region.active / region.tenants) * 100) : 0;
-                  return (
-                    <div key={region.country} className="rounded-lg border p-5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-base font-medium">{region.countryName}</span>
-                        <Badge variant="info">{region.tenants} tenants</Badge>
-                      </div>
-                      <div className="mt-4 grid grid-cols-3 gap-3 text-sm">
-                        <div>
-                          <div className="flex items-center gap-1">
-                            <p className="text-muted-foreground">Active/Trialing</p>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-3 w-3 text-muted-foreground cursor-default" />
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-56 text-xs">
-                                Active and trialing tenants combined. Note this is broader than the "Active Tenants" stat above, which excludes trialing.
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <p className="text-xl font-semibold">{region.active}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Staff</p>
-                          <p className="text-xl font-semibold">{region.staff}</p>
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-1">
-                            <p className="text-muted-foreground">Active Rate</p>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Info className="h-3 w-3 text-muted-foreground cursor-default" />
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-56 text-xs">
-                                Active-or-trialing tenants as a share of all tenants in this country.
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <p className="text-xl font-semibold">{activeRate}%</p>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Tenant Growth</CardTitle>
-              <CardDescription>New tenants per month, last 6 months</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer config={growthChartConfig} className="h-64 w-full">
-                <LineChart data={growthSeries}>
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                  <YAxis tickLine={false} axisLine={false} allowDecimals={false} width={28} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line type="monotone" dataKey="count" stroke="var(--color-count)" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Plan Distribution</CardTitle>
-              <CardDescription>Tenants by plan tier</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <ChartContainer config={planChartConfig} className="h-64 w-full">
-                <BarChart data={planSeries}>
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                  <XAxis dataKey="plan" tickLine={false} axisLine={false} />
-                  <YAxis tickLine={false} axisLine={false} allowDecimals={false} width={28} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Bar dataKey="count" fill="var(--color-count)" radius={4} />
-                </BarChart>
-              </ChartContainer>
-            </CardContent>
-          </Card>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <CreditCard className="h-3.5 w-3.5" />
+          {marketCountries?.length || 0} active markets · {tenants?.length || 0} total tenants
         </div>
       </div>
     </BackofficeLayout>

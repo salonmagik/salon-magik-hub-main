@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { cn } from "@shared/utils";
@@ -20,7 +21,9 @@ import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
 import { Badge } from "@ui/badge";
+import { Avatar, AvatarFallback } from "@ui/avatar";
 import { Checkbox } from "@ui/checkbox";
+import { Switch } from "@ui/switch";
 import {
   Table,
   TableBody,
@@ -38,6 +41,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@ui/dialog";
+import {
+  ArtifactDialogContent,
+  ArtifactDialogHeader,
+  ArtifactDialogFooter,
+  ArtifactDialogTitle,
+  ARTIFACT_DIALOG_BODY_PADDING,
+} from "@/components/dialogs/ArtifactDialogChrome";
 import {
   Select,
   SelectContent,
@@ -424,11 +434,13 @@ export default function AdminsPage() {
 
   return (
     <BackofficeLayout>
-      <div className="p-6 space-y-6">
+      <div className="backoffice-page">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Admins</h1>
-            <p className="text-muted-foreground">Manage team members and custom roles.</p>
+            <h1 className="text-[20px] font-bold tracking-tight">Admins & roles</h1>
+            <p className="mt-[3px] text-[12.5px] text-muted-foreground">
+              Team access and role permissions, with sales-agent compliance one click away on each agent's row — three different jobs, not one overflow menu.
+            </p>
           </div>
           {canManageAdmins ? (
             <div className="flex items-center gap-2">
@@ -437,52 +449,48 @@ export default function AdminsPage() {
                 <DialogTrigger asChild>
                   <Button>
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Admin
+                    Invite admin
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Add Admin</DialogTitle>
-                    <DialogDescription>
+                <ArtifactDialogContent>
+                  <ArtifactDialogHeader>
+                    <ArtifactDialogTitle>Invite admin</ArtifactDialogTitle>
+                  </ArtifactDialogHeader>
+                  <div className={cn(ARTIFACT_DIALOG_BODY_PADDING)}>
+                    <DialogDescription className="text-[12.5px]">
                       Invite a team member and assign a role.
                     </DialogDescription>
-                  </DialogHeader>
-                  <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={newIsSalesAgent}
-                        onCheckedChange={(checked) => setNewIsSalesAgent(Boolean(checked))}
-                      />
-                      Is sales agent
-                    </label>
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-2">
-                        <Label>First Name</Label>
+                      <div className="space-y-1.5">
+                        <Label className="text-[11.5px] font-semibold text-muted-foreground">First name</Label>
                         <Input value={newFirstName} onChange={(event) => setNewFirstName(event.target.value)} />
                       </div>
-                      <div className="space-y-2">
-                        <Label>Last Name</Label>
+                      <div className="space-y-1.5">
+                        <Label className="text-[11.5px] font-semibold text-muted-foreground">Last name</Label>
                         <Input value={newLastName} onChange={(event) => setNewLastName(event.target.value)} />
                       </div>
                     </div>
-                    <div className="space-y-2">
-                      <Label>Email Address</Label>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11.5px] font-semibold text-muted-foreground">Work email</Label>
                       <Input
                         type="email"
                         placeholder={newIsSalesAgent ? "agent@example.com" : "admin@salonmagik.com"}
                         value={newEmail}
                         onChange={(event) => setNewEmail(event.target.value)}
                       />
+                      <p className="text-[11px] text-muted-foreground">
+                        Must be @salonmagik.com, unless flagged as a sales agent below.
+                      </p>
                       {inviteEmailError ? (
                         <p className="text-xs text-destructive">{inviteEmailError}</p>
                       ) : null}
                     </div>
-                    <div className="space-y-2">
-                      <Label>Phone Number (optional)</Label>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11.5px] font-semibold text-muted-foreground">Phone number (optional)</Label>
                       <Input value={newPhone} onChange={(event) => setNewPhone(event.target.value)} />
                     </div>
-                    <div className="space-y-2">
-                      <Label>Role</Label>
+                    <div className="space-y-1.5">
+                      <Label className="text-[11.5px] font-semibold text-muted-foreground">Role template</Label>
                       <Select value={newRoleId} onValueChange={setNewRoleId}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select role" />
@@ -494,8 +502,20 @@ export default function AdminsPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="flex items-center gap-2.5 rounded-lg bg-muted px-3.5 py-3">
+                      <div className="flex-1">
+                        <div className="text-[13px] font-semibold">Flag as sales agent</div>
+                        <div className="text-[11.5px] text-muted-foreground">
+                          Relaxes the email domain rule and enables KYC/commission tracking
+                        </div>
+                      </div>
+                      <Switch
+                        checked={newIsSalesAgent}
+                        onCheckedChange={(checked) => setNewIsSalesAgent(Boolean(checked))}
+                      />
+                    </div>
                   </div>
-                  <DialogFooter>
+                  <ArtifactDialogFooter>
                     <Button variant="outline" onClick={() => setAddDialogOpen(false)}>Cancel</Button>
                     <Button
                       onClick={handleAddUser}
@@ -508,10 +528,10 @@ export default function AdminsPage() {
                       }
                     >
                       {createUser.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                      Add Admin
+                      Send invite
                     </Button>
-                  </DialogFooter>
-                </DialogContent>
+                  </ArtifactDialogFooter>
+                </ArtifactDialogContent>
               </Dialog>
             </div>
           ) : null}
@@ -519,21 +539,16 @@ export default function AdminsPage() {
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList>
-            <TabsTrigger value="team_members">Team Members</TabsTrigger>
-            <TabsTrigger value="roles">Roles</TabsTrigger>
+            <TabsTrigger value="team_members">Team members</TabsTrigger>
+            <TabsTrigger value="roles">Roles & permissions</TabsTrigger>
+            <TabsTrigger value="compliance">Sales agent compliance</TabsTrigger>
           </TabsList>
 
           <TabsContent value="team_members" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" /> Team Members
-                </CardTitle>
-                <CardDescription>{users.length} backoffice members</CardDescription>
-              </CardHeader>
-              <CardContent>
+            <Card className="backoffice-panel overflow-hidden">
+              <CardContent className="p-0">
                 {templatesError ? (
-                  <Alert className="mb-4">
+                  <Alert className="m-4">
                     <AlertDescription>
                       Failed to load roles: {(templatesError as Error).message}
                     </AlertDescription>
@@ -547,32 +562,51 @@ export default function AdminsPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email Address</TableHead>
+                        <TableHead>Admin</TableHead>
                         <TableHead>Role</TableHead>
-                        <TableHead>Status</TableHead>
                         <TableHead>2FA</TableHead>
-                        <TableHead>Is Logged In</TableHead>
-                        <TableHead>Last Login</TableHead>
-                        <TableHead>Last Activity</TableHead>
-                        <TableHead>Date Added</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Last active</TableHead>
                         <TableHead className="w-[50px]" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {users.map((user) => (
                         <TableRow key={user.id}>
-                          <TableCell className="font-medium">{buildMemberName(user)}</TableCell>
-                          <TableCell>{user.email || "-"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2.5">
+                              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                                {buildMemberName(user)
+                                  .split(" ")
+                                  .map((part) => part[0])
+                                  .filter(Boolean)
+                                  .slice(0, 2)
+                                  .join("")
+                                  .toUpperCase()}
+                              </div>
+                              <div>
+                                <div className="font-medium">
+                                  {buildMemberName(user)}
+                                  {user.is_sales_agent && (
+                                    <Badge variant="warning" className="ml-1.5 align-middle">Sales agent</Badge>
+                                  )}
+                                </div>
+                                <div className="text-xs text-muted-foreground">{user.email || "-"}</div>
+                              </div>
+                            </div>
+                          </TableCell>
                           <TableCell>
                             <Badge variant={user.base_role === "super_admin" ? "default" : "outline"}>
                               {user.base_role === "super_admin" ? "Super Admin" : user.role_name || "Unassigned"}
                             </Badge>
                           </TableCell>
                           <TableCell>
+                            {user.totp_enabled ? <Badge variant="success">Enabled</Badge> : <Badge variant="warning">Not set up</Badge>}
+                          </TableCell>
+                          <TableCell>
                             <Tooltip>
                               <TooltipTrigger asChild>
-                                <Badge variant={user.status === "active" ? "default" : user.status === "invited" ? "secondary" : "destructive"} className="cursor-default">
+                                <Badge variant={user.status === "active" ? "success" : user.status === "invited" ? "secondary" : "neutral"} className="cursor-default">
                                   {user.status}
                                 </Badge>
                               </TooltipTrigger>
@@ -585,24 +619,7 @@ export default function AdminsPage() {
                               </TooltipContent>
                             </Tooltip>
                           </TableCell>
-                          <TableCell>
-                            {user.totp_enabled ? <Badge>Enabled</Badge> : <Badge variant="secondary">Not set</Badge>}
-                          </TableCell>
-                          <TableCell>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Badge variant={user.is_logged_in ? "default" : "secondary"} className="cursor-default">
-                                  {user.is_logged_in ? "Yes" : "No"}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-56 text-xs">
-                                This means they have an active, unexpired session right now. It doesn't reflect whether they've ever logged in before.
-                              </TooltipContent>
-                            </Tooltip>
-                          </TableCell>
-                          <TableCell>{formatTimestamp(user.last_login_at)}</TableCell>
-                          <TableCell>{formatTimestamp(user.last_activity_at)}</TableCell>
-                          <TableCell>{formatTimestamp(user.created_at)}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{formatTimestamp(user.last_activity_at || user.last_login_at)}</TableCell>
                           <TableCell>
                             {user.base_role !== "super_admin" ? (
                               <DropdownMenu>
@@ -613,8 +630,9 @@ export default function AdminsPage() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem onClick={() => openPermissionsDialog(user)}>Permissions</DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => openKycDialog(user)}>KYC</DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => openConversionsDialog(user)}>Conversions/Commissions</DropdownMenuItem>
+                                  <DropdownMenuItem asChild>
+                                    <Link to={`/admins/sales-agents/${user.id}`}>Compliance</Link>
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem asChild>
                                     <a href={`/audit-logs?member=${user.user_id}`}>Audit Log</a>
                                   </DropdownMenuItem>
@@ -633,7 +651,7 @@ export default function AdminsPage() {
                       ))}
                       {!users.length ? (
                         <TableRow>
-                          <TableCell colSpan={10}>
+                          <TableCell colSpan={6}>
                             <EmptyState icon={Users} title="No team members found" />
                           </TableCell>
                         </TableRow>
@@ -739,6 +757,69 @@ export default function AdminsPage() {
                     ) : null}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="compliance" className="mt-4">
+            <Card className="backoffice-panel overflow-hidden">
+              <CardContent className="p-0">
+                {isLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Agent</TableHead>
+                        <TableHead>KYC status</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {users.filter((u) => u.is_sales_agent).map((user) => {
+                        const agent = agentProfiles.find((a: any) => a.backoffice_user_id === user.id);
+                        return (
+                          <TableRow key={user.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-2.5">
+                                <Avatar className="h-7 w-7">
+                                  <AvatarFallback className="bg-primary/10 text-[11px] font-bold text-primary">
+                                    {buildMemberName(user).slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium">{buildMemberName(user)}</p>
+                                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {agent ? (
+                                <Badge variant="secondary">Has profile</Badge>
+                              ) : (
+                                <Badge variant="outline" className="text-muted-foreground">No sales-agent profile</Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link to={`/admins/sales-agents/${user.id}`}>View compliance →</Link>
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {users.filter((u) => u.is_sales_agent).length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={3}>
+                            <EmptyState icon={Shield} title="No sales agents yet" />
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                    </TableBody>
+                  </Table>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
