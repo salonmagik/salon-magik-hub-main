@@ -124,9 +124,9 @@ export default function WaitlistPage() {
   const getPlanBadge = (plan: string | null) => {
     if (!plan) return null;
     const colors: Record<string, string> = {
-      solo: "bg-gray-100 text-gray-700",
-      studio: "bg-purple-100 text-purple-700",
-      chain: "bg-indigo-100 text-indigo-700",
+      solo: "bg-muted text-muted-foreground",
+      studio: "bg-primary/10 text-primary",
+      chain: "bg-info-bg text-info",
     };
     return (
       <Badge variant="secondary" className={colors[plan] || ""}>
@@ -165,10 +165,12 @@ export default function WaitlistPage() {
 
   return (
     <BackofficeLayout>
-      <div className="p-6 space-y-6">
+      <div className="backoffice-page">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Customer Waitlists</h1>
-          <p className="text-muted-foreground">Review applications and other-country interest submissions</p>
+          <h1 className="text-[20px] font-bold tracking-tight">Waitlists</h1>
+          <p className="mt-[3px] text-[12.5px] text-muted-foreground">
+            Two separate funnels: people waiting to onboard in live markets, and interest from countries we haven't launched in yet.
+          </p>
         </div>
 
         <Tabs value={activeMainTab} onValueChange={(v) => setActiveMainTab(v as "applications" | "interest")}> 
@@ -210,7 +212,7 @@ export default function WaitlistPage() {
                         description="People who created an account from their invite but haven't finished onboarding will appear here."
                       />
                     ) : (
-                      <div className="rounded-md border">
+                      <div className="overflow-hidden rounded-2xl border">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -238,8 +240,8 @@ export default function WaitlistPage() {
                               <TableRow key={signup.lead_id}>
                                 <TableCell className="font-medium">{signup.name}</TableCell>
                                 <TableCell>{signup.email}</TableCell>
-                                <TableCell className="capitalize">{signup.plan_interest || "N/A"}</TableCell>
-                                <TableCell>{signup.invited_at ? format(new Date(signup.invited_at), "MMM d, yyyy") : "N/A"}</TableCell>
+                                <TableCell className="capitalize">{signup.plan_interest || "—"}</TableCell>
+                                <TableCell>{signup.invited_at ? format(new Date(signup.invited_at), "MMM d, yyyy") : "—"}</TableCell>
                                 <TableCell>{format(new Date(signup.signed_up_at), "MMM d, yyyy")}</TableCell>
                               </TableRow>
                             ))}
@@ -261,7 +263,7 @@ export default function WaitlistPage() {
                         description="Waitlist signups will appear here as people request access."
                       />
                     ) : (
-                      <div className="rounded-md border">
+                      <div className="overflow-hidden rounded-2xl border">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -370,7 +372,7 @@ export default function WaitlistPage() {
                         description="Market interest signals will show up here as they come in."
                       />
                     ) : (
-                      <div className="rounded-md border">
+                      <div className="overflow-hidden rounded-2xl border">
                         <Table>
                           <TableHeader>
                             <TableRow>

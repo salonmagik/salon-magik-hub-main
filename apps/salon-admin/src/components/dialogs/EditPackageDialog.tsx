@@ -288,7 +288,7 @@ export function EditPackageDialog({ open, onOpenChange, pkg, onSuccess }: EditPa
             <div className="space-y-2 sm:col-span-1">
               <Label>Original Value</Label>
               <Input
-                value={pkg.original_price ? formatCurrency(pkg.original_price, currentTenant?.currency || "USD") : "N/A"}
+                value={pkg.original_price != null ? formatCurrency(pkg.original_price, currentTenant?.currency || "USD") : "—"}
                 disabled
                 className="bg-muted"
               />

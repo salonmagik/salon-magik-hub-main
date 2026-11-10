@@ -1,100 +1,99 @@
- import { useState } from "react";
- import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useBackofficeAuth } from "@/hooks";
- import { Button } from "@ui/button";
- import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
- import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
- import { useToast } from "@ui/ui/use-toast";
- import { Loader2, Shield, KeyRound } from "lucide-react";
+import { Button } from "@ui/button";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
+import { useToast } from "@ui/ui/use-toast";
+import { Loader2, Shield } from "lucide-react";
+import { cn } from "@shared/utils";
 
- export default function BackofficeVerify2FAPage() {
-   const navigate = useNavigate();
-   const { toast } = useToast();
-   const { verifyTotp, signOut, profile } = useBackofficeAuth();
-   const [code, setCode] = useState("");
-   const [isLoading, setIsLoading] = useState(false);
+export default function BackofficeVerify2FAPage() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { verifyTotp, signOut, profile } = useBackofficeAuth();
+  const [code, setCode] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-   const handleVerify = async () => {
-     if (code.length !== 6) return;
+  const handleVerify = async () => {
+    if (code.length !== 6) return;
 
-     setIsLoading(true);
-     try {
-       const success = await verifyTotp(code);
+    setIsLoading(true);
+    try {
+      const success = await verifyTotp(code);
 
       if (success) {
-				navigate("/", { replace: true });
-			} else {
-				toast({
-					title: "Invalid code",
-					description: "Please check your authenticator app and try again.",
-					variant: "destructive",
-				});
-				setCode("");
-			}
-     } finally {
-       setIsLoading(false);
-     }
-   };
+        navigate("/", { replace: true });
+      } else {
+        toast({
+          title: "Invalid code",
+          description: "Please check your authenticator app and try again.",
+          variant: "destructive",
+        });
+        setCode("");
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-   const handleSignOut = async () => {
-     await signOut();
-     navigate("/login", { replace: true });
-   };
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/login", { replace: true });
+  };
 
-   return (
-     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-       <Card className="w-full max-w-md">
-         <CardHeader className="text-center">
-           <div className="mx-auto mb-4 rounded-full bg-primary/10 p-3 w-fit">
-             <KeyRound className="h-8 w-8 text-primary" />
-           </div>
-           <CardTitle className="text-2xl">Two-Factor Authentication</CardTitle>
-           <CardDescription>
-             {profile?.full_name ? `Welcome back, ${profile.full_name.split(" ")[0]}. ` : ""}
-             Enter the code from your authenticator app.
-           </CardDescription>
-         </CardHeader>
-         <CardContent className="space-y-6">
-           <div className="flex justify-center">
-             <InputOTP
-               maxLength={6}
-               value={code}
-               onChange={setCode}
-               onComplete={handleVerify}
-               disabled={isLoading}
-             >
-               <InputOTPGroup>
-                 <InputOTPSlot index={0} />
-                 <InputOTPSlot index={1} />
-                 <InputOTPSlot index={2} />
-                 <InputOTPSlot index={3} />
-                 <InputOTPSlot index={4} />
-                 <InputOTPSlot index={5} />
-               </InputOTPGroup>
-             </InputOTP>
-           </div>
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="w-full max-w-[400px]">
+        <div className="mb-7 flex flex-col items-center">
+          <div className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-[13px] bg-primary">
+            <Shield className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div className="text-lg font-bold text-foreground">Two-factor verification</div>
+          <div className="mt-0.5 text-center text-[12.5px] text-muted-foreground">
+            {profile?.full_name ? `Welcome back, ${profile.full_name.split(" ")[0]}. ` : ""}
+            Enter the 6-digit code from your authenticator app
+          </div>
+        </div>
 
-           <Button
-             onClick={handleVerify}
-             className="w-full"
-             disabled={isLoading || code.length !== 6}
-           >
-             {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-             Verify
-           </Button>
+        <div className="rounded-2xl border border-border bg-card p-7">
+          <div className="mb-[22px] flex justify-center">
+            <InputOTP maxLength={6} value={code} onChange={setCode} onComplete={handleVerify} disabled={isLoading}>
+              <InputOTPGroup className="gap-2">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <InputOTPSlot
+                    key={i}
+                    index={i}
+                    className={cn(
+                      "h-14 w-12 rounded-[8px] border-l text-xl font-bold",
+                      code.length > i && "border-primary bg-primary/10",
+                    )}
+                  />
+                ))}
+              </InputOTPGroup>
+            </InputOTP>
+          </div>
 
-           <div className="flex items-center justify-center">
-             <Button variant="link" onClick={handleSignOut} className="text-muted-foreground">
-               Use a different account
-             </Button>
-           </div>
+          <Button
+            onClick={handleVerify}
+            disabled={isLoading || code.length !== 6}
+            className="w-full rounded-full py-[11px] text-[13.5px] font-semibold"
+          >
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Verify &amp; continue
+          </Button>
 
-           <div className="flex items-center gap-2 text-xs text-muted-foreground justify-center">
-             <Shield className="h-3 w-3" />
-             <span>Protected by 2FA</span>
-           </div>
-         </CardContent>
-       </Card>
-     </div>
-   );
- }
+          <div className="mt-4 flex flex-col items-center gap-1.5">
+            <Button
+              variant="link"
+              onClick={handleSignOut}
+              className="h-auto p-0 text-xs font-semibold text-primary"
+            >
+              Use a different account
+            </Button>
+            <span className="text-[11.5px] text-muted-foreground/70">Protected by two-factor authentication</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

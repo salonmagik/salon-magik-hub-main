@@ -2,10 +2,10 @@
  import { useNavigate } from "react-router-dom";
 import { useBackofficeAuth } from "@/hooks";
  import { Button } from "@ui/button";
- import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
  import { InputOTP, InputOTPGroup, InputOTPSlot } from "@ui/input-otp";
  import { useToast } from "@ui/ui/use-toast";
- import { Loader2, Shield, Smartphone, Copy, Check } from "lucide-react";
+ import { Loader2, Shield, Copy, Check } from "lucide-react";
+ import { cn } from "@shared/utils";
 
 // Generate a random base32 secret - exactly 16 characters for Google Authenticator compatibility
 function generateSecret(): string {
@@ -85,108 +85,79 @@ function generateSecret(): string {
    };
 
    return (
-     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-       <Card className="w-full max-w-md">
-         <CardHeader className="text-center">
-           <div className="mx-auto mb-4 rounded-full bg-primary/10 p-3 w-fit">
-             <Smartphone className="h-8 w-8 text-primary" />
+     <div className="flex min-h-screen items-center justify-center bg-background p-6">
+       <div className="w-full max-w-[420px]">
+         <div className="mb-6 flex flex-col items-center">
+           <div className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-[13px] bg-primary">
+             <Shield className="h-5 w-5 text-primary-foreground" />
            </div>
-           <CardTitle className="text-2xl">Set Up Two-Factor Authentication</CardTitle>
-           <CardDescription>
-             2FA is required for BackOffice access. Use an authenticator app like Google Authenticator or Authy.
-           </CardDescription>
-         </CardHeader>
-         <CardContent className="space-y-6">
-           {/* Step 1: Add to authenticator */}
-           <div className="space-y-3">
-             <div className="flex items-center gap-2">
-               <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
-                 1
-               </div>
-               <span className="font-medium">Add to your authenticator app</span>
-             </div>
+           <div className="text-lg font-bold text-foreground">Set up two-factor authentication</div>
+           <div className="mt-0.5 text-center text-[12.5px] text-muted-foreground">
+             Required before you can access anything in the backoffice
+           </div>
+         </div>
 
-              <div className="p-4 bg-muted rounded-lg text-center space-y-4">
-                {/* QR Code Image */}
-                <div className="flex justify-center">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUrl)}`}
-                    alt="Scan with authenticator app"
-                    className="w-48 h-48 rounded-lg bg-white p-2"
-                  />
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Or enter this key manually:
-                </p>
-                <div className="flex items-center justify-center gap-2">
-                 <code className="bg-background px-3 py-2 rounded text-sm font-mono break-all">
+         <div className="rounded-2xl border border-border bg-card p-6">
+           <div className="mb-5 flex items-start gap-4">
+             <img
+               src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(otpauthUrl)}`}
+               alt="Scan with authenticator app"
+               className="h-[110px] w-[110px] shrink-0 rounded-xl bg-white p-2"
+             />
+             <div className="pt-1 text-[12.5px] text-muted-foreground">
+               <p className="mb-2">Scan with Google Authenticator, 1Password, or any TOTP app.</p>
+               <p className="flex flex-wrap items-center gap-1.5">
+                 Can't scan?
+                 <code className="font-mono font-semibold text-foreground">
                    {secret.match(/.{1,4}/g)?.join(" ")}
                  </code>
-                 <Button
-                   variant="ghost"
-                   size="icon"
-                   onClick={handleCopySecret}
-                   className="shrink-0"
-                 >
-                   {copied ? (
-                     <Check className="h-4 w-4 text-success" />
-                   ) : (
-                     <Copy className="h-4 w-4" />
-                   )}
+                 <Button variant="ghost" size="icon" onClick={handleCopySecret} className="h-6 w-6 shrink-0">
+                   {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
                  </Button>
-               </div>
+               </p>
              </div>
            </div>
 
-           {/* Step 2: Enter code */}
-           <div className="space-y-3">
-             <div className="flex items-center gap-2">
-               <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
-                 2
-               </div>
-               <span className="font-medium">Enter the 6-digit code</span>
-             </div>
-
-             <div className="flex justify-center">
-               <InputOTP
-                 maxLength={6}
-                 value={code}
-                 onChange={setCode}
-                 disabled={isLoading}
-               >
-                 <InputOTPGroup>
-                   <InputOTPSlot index={0} />
-                   <InputOTPSlot index={1} />
-                   <InputOTPSlot index={2} />
-                   <InputOTPSlot index={3} />
-                   <InputOTPSlot index={4} />
-                   <InputOTPSlot index={5} />
-                 </InputOTPGroup>
-               </InputOTP>
-             </div>
+           <div className="mb-4">
+             <label className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+               Enter the 6-digit code to confirm
+             </label>
+             <InputOTP maxLength={6} value={code} onChange={setCode} disabled={isLoading}>
+               <InputOTPGroup className="w-full justify-between gap-2">
+                 {[0, 1, 2, 3, 4, 5].map((i) => (
+                   <InputOTPSlot
+                     key={i}
+                     index={i}
+                     className={cn(
+                       "h-12 w-full rounded-[8px] border-l text-lg font-bold",
+                       code.length > i && "border-primary bg-primary/10",
+                     )}
+                   />
+                 ))}
+               </InputOTPGroup>
+             </InputOTP>
            </div>
 
            <Button
              onClick={handleVerifyAndSetup}
-             className="w-full"
              disabled={isLoading || code.length !== 6}
+             className="w-full rounded-full py-[11px] text-[13.5px] font-semibold"
            >
              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-             Enable 2FA
+             Confirm &amp; enable 2FA
            </Button>
 
-           <div className="flex items-center justify-center">
-             <Button variant="link" onClick={handleSignOut} className="text-muted-foreground">
+           <div className="mt-4 flex items-center justify-center">
+             <Button variant="link" onClick={handleSignOut} className="h-auto p-0 text-xs text-muted-foreground">
                Cancel and sign out
              </Button>
            </div>
+         </div>
 
-           <div className="flex items-center gap-2 text-xs text-muted-foreground justify-center">
-             <Shield className="h-3 w-3" />
-             <span>Save your secret key securely - you'll need it if you lose access</span>
-           </div>
-         </CardContent>
-       </Card>
+         <p className="mt-4 text-center text-[11.5px] text-muted-foreground/70">
+           Save your secret key securely — you'll need it if you lose access to your authenticator.
+         </p>
+       </div>
      </div>
    );
  }

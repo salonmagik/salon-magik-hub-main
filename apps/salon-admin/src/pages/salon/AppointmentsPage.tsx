@@ -521,15 +521,25 @@ export default function AppointmentsPage() {
     if (!approvalAction || !["approve", "decline", "reschedule", "review"].includes(approvalAction)) return;
 
     if (appointmentId) {
+      if (!currentTenant?.id) return;
+
       const dedupeKey = `approvalAction:${appointmentId}:${approvalAction}`;
       if (processedDeepLinkRef.current === dedupeKey) return;
-      processedDeepLinkRef.current = dedupeKey;
       let isCancelled = false;
 
       const run = async () => {
         try {
           const target = await fetchAppointmentById(appointmentId);
-          if (!target || isCancelled) return;
+          if (isCancelled) return;
+          if (!target) {
+            toast({
+              title: "Unable to open approval action",
+              description: "This booking couldn't be found. It may have already been handled.",
+              variant: "destructive",
+            });
+            return;
+          }
+          processedDeepLinkRef.current = dedupeKey;
 
           setActiveTab("unconfirmed");
           const reviewDate = target.is_unscheduled ? target.created_at : target.scheduled_start;
@@ -572,7 +582,7 @@ export default function AppointmentsPage() {
     const next = new URLSearchParams(searchParams);
     next.delete("approvalAction");
     setSearchParams(next);
-  }, [appointments, fetchAppointmentById, openApprovalDialog, searchParams, setSearchParams]);
+  }, [appointments, currentTenant?.id, fetchAppointmentById, openApprovalDialog, searchParams, setSearchParams]);
 
   // Read initial tab and payment filter from URL params (e.g. from Business Overview quick actions)
   useEffect(() => {
@@ -936,7 +946,7 @@ export default function AppointmentsPage() {
   };
 
   const formatTime = (dateString: string | null) => {
-    if (!dateString) return "N/A";
+    if (!dateString) return "—";
     return new Date(dateString).toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
@@ -1656,7 +1666,7 @@ export default function AppointmentsPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-muted-foreground">N/A</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
                         <TableCell>

@@ -21,6 +21,7 @@ import { SalonSidebar } from "@/components/layout/SalonSidebar";
 import { useWalkthroughAutoTrigger } from "@/hooks/useWalkthroughAutoTrigger";
 import { useLocations } from "@/hooks/useLocations";
 import { useTenantEntitlements } from "@/hooks/useTenantEntitlements";
+import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 import { useToast } from "@ui/ui/use-toast";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
@@ -54,6 +55,7 @@ export default function ThemesSettingsPage() {
   const { startTour, hasSeenWalkthrough } = useProductTour();
   const { locations } = useLocations();
   const { data: entitlements, refetch: refetchEntitlements } = useTenantEntitlements(currentTenant?.id);
+  const { data: activeTrialOverride } = useActiveTrialOverride(currentTenant?.id);
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -147,6 +149,10 @@ export default function ThemesSettingsPage() {
   const hasPurchasedEcommerce = Boolean(entitlements?.has_ecommerce_theme);
   const activeThemeKey = (currentTenant as any)?.active_theme_key as ThemeKey || "default";
   const canPurchase = currentTenant?.subscription_status === "active";
+  const trialEndsAt = activeTrialOverride?.ends_at ?? currentTenant?.trial_ends_at;
+  const isLiveTrial = Boolean(trialEndsAt && new Date(trialEndsAt).getTime() > Date.now()) &&
+    (Boolean(activeTrialOverride) || currentTenant?.subscription_status === "trialing");
+  const hasThemeAccess = hasPurchasedEcommerce || isLiveTrial;
 
   const bookingUrl = useMemo(() => {
     if (!currentTenant?.slug) return "";
@@ -220,6 +226,10 @@ export default function ThemesSettingsPage() {
 
   const handleApplyTheme = async (key: ThemeKey) => {
     if (!currentTenant?.id) return;
+    if (key === "ecommerce" && !hasThemeAccess) {
+      toast({ title: "Theme access required", description: "Start your subscription to use this paid theme.", variant: "destructive" });
+      return;
+    }
     setIsApplying(true);
     try {
       const { error } = await supabase
@@ -456,6 +466,8 @@ export default function ThemesSettingsPage() {
                   <p className="font-semibold text-sm truncate">E-commerce</p>
                   {hasPurchasedEcommerce ? (
                     <Badge variant="secondary" className="text-[10px] shrink-0">Owned</Badge>
+                  ) : isLiveTrial ? (
+                    <Badge variant="secondary" className="text-[10px] shrink-0">Trial access</Badge>
                   ) : (
                     <Badge variant="outline" className="text-[10px] shrink-0 border-amber-300 text-amber-700 bg-amber-50">Paid</Badge>
                   )}
@@ -497,7 +509,7 @@ export default function ThemesSettingsPage() {
                   <Eye className="mr-1 h-3 w-3" />
                   Preview
                 </Button>
-                {!hasPurchasedEcommerce && (
+                {!hasPurchasedEcommerce && !isLiveTrial && (
                   <Button
                     size="sm"
                     className="h-7 text-xs px-2"
@@ -509,7 +521,7 @@ export default function ThemesSettingsPage() {
                     {ecommercePricing ? formatCurrency(ecommercePricing, currentTenant?.currency || "USD") + "/yr" : "Buy"}
                   </Button>
                 )}
-                {hasPurchasedEcommerce && activeThemeKey !== "ecommerce" && (
+                {hasThemeAccess && activeThemeKey !== "ecommerce" && (
                   <Button
                     size="sm"
                     className="h-7 text-xs px-2"
@@ -520,7 +532,7 @@ export default function ThemesSettingsPage() {
                     Apply
                   </Button>
                 )}
-                {hasPurchasedEcommerce && (
+                {hasThemeAccess && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -533,7 +545,10 @@ export default function ThemesSettingsPage() {
                 )}
               </div>
 
-              {!canPurchase && !hasPurchasedEcommerce && (
+              {isLiveTrial && !hasPurchasedEcommerce && (
+                <p className="mt-1.5 text-[11px] text-muted-foreground">Available to try during your trial; purchase after activation.</p>
+              )}
+              {!canPurchase && !hasThemeAccess && (
                 <p className="mt-1.5 text-[11px] text-muted-foreground">
                   Upgrade from trial first to buy.
                 </p>
@@ -803,7 +818,7 @@ export default function ThemesSettingsPage() {
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-primary" />
                       <p className="text-sm font-medium">E-commerce content</p>
-                      {!hasPurchasedEcommerce && (
+                      {!hasThemeAccess && (
                         <Badge variant="outline" className="text-[10px]">Paid theme</Badge>
                       )}
                     </div>
@@ -811,7 +826,7 @@ export default function ThemesSettingsPage() {
                       Hero copy and about section, shown when the e-commerce theme is active.
                     </p>
 
-                    {hasPurchasedEcommerce && (
+                    {hasThemeAccess && (
                       <div className="space-y-1.5">
                         <Label className="text-xs">Hero Panel Background</Label>
                         <div className="flex items-center gap-3">
@@ -998,7 +1013,7 @@ export default function ThemesSettingsPage() {
           />
           {themePreviewKey === "ecommerce" && activeThemeKey !== "ecommerce" && (
             <DialogFooter>
-              {!hasPurchasedEcommerce ? (
+              {!hasThemeAccess ? (
                 <Button onClick={() => { setThemePreviewOpen(false); handlePurchase(); }} disabled={isPurchasing || !canPurchase}>
                   {isPurchasing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
                   Buy theme

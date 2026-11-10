@@ -8,28 +8,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@ui/table";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@ui/tabs";
-import { Loader2, ArrowUpDown, Building2, TrendingUp, TriangleAlert, Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Loader2, ArrowUpDown } from "lucide-react";
 import { format } from "date-fns";
 import { EmptyState } from "@ui/empty-state";
 
 function formatMoney(amount: number | null | undefined, currency: string | null | undefined) {
-  if (amount === null || amount === undefined) return "N/A";
+  if (amount === null || amount === undefined) return "—";
   const symbols: Record<string, string> = { GHS: "₵", NGN: "₦", USD: "$" };
   const symbol = currency ? symbols[currency] || `${currency} ` : "";
   return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 const PLAN_BADGE: Record<string, string> = {
-  solo: "bg-sky-50 text-sky-700",
-  studio: "bg-violet-50 text-violet-700",
-  chain: "bg-amber-50 text-amber-700",
+  solo: "bg-info-bg text-info",
+  studio: "bg-primary/10 text-primary",
+  chain: "bg-warning-bg text-warning",
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  active: "bg-emerald-50 text-emerald-700",
-  trialing: "bg-sky-50 text-sky-700",
-  past_due: "bg-red-50 text-red-700",
-  suspended: "bg-red-100 text-red-800",
+  active: "bg-success-bg text-success",
+  trialing: "bg-info-bg text-info",
+  past_due: "bg-destructive-bg text-destructive",
+  suspended: "bg-destructive-bg text-destructive",
   canceled: "bg-muted text-muted-foreground",
   inactive: "bg-muted text-muted-foreground",
 };
@@ -104,44 +105,41 @@ export default function SubscriptionLedgerPage() {
       <div className="backoffice-page">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-medium tracking-tight">Subscriptions &amp; Add-ons</h1>
-            <p className="mt-1 text-muted-foreground">
-              {rows.length.toLocaleString()} salons · {summary.active.toLocaleString()} active ·{" "}
-              {summary.trialing.toLocaleString()} trial · {summary.pastDue.toLocaleString()} past due
+            <h1 className="text-[20px] font-bold tracking-tight">Tenant billing</h1>
+            <p className="mt-[3px] text-[12.5px] text-muted-foreground">
+              What each salon is actually paying today. To change what's for sale platform-wide, go to{" "}
+              <Link to="/plans" className="font-semibold text-primary">
+                Pricing catalog →
+              </Link>
             </p>
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {[
-            { label: "Active subscriptions", value: summary.active, icon: Building2, tone: "text-emerald-700 bg-emerald-50" },
-            { label: "Trialing", value: summary.trialing, icon: Sparkles, tone: "text-sky-700 bg-sky-50" },
-            { label: "Past due", value: summary.pastDue, icon: TriangleAlert, tone: "text-red-700 bg-red-50" },
-            { label: "Salons with add-ons", value: summary.withAddons, icon: TrendingUp, tone: "text-amber-700 bg-amber-50" },
+            { label: "Active", value: summary.active },
+            { label: "Trialing", value: summary.trialing },
+            { label: "Past due", value: summary.pastDue, tone: "text-destructive", border: true },
+            { label: "With add-ons", value: summary.withAddons },
           ].map((metric) => (
-            <Card key={metric.label} className="backoffice-panel">
-              <CardContent className="flex items-start justify-between p-5">
-                <div>
-                  <p className="text-sm uppercase tracking-wide text-muted-foreground">{metric.label}</p>
-                  <p className="mt-2 text-2xl font-medium">{metric.value.toLocaleString()}</p>
-                </div>
-                <div className={`rounded-xl p-3 ${metric.tone}`}>
-                  <metric.icon className="h-5 w-5" />
-                </div>
+            <Card key={metric.label} className={`backoffice-panel ${metric.border ? "border-destructive" : ""}`}>
+              <CardContent className="p-4">
+                <p className="text-[11.5px] font-semibold text-muted-foreground">{metric.label}</p>
+                <p className={`mt-1 text-[22px] font-bold tabular-nums ${metric.tone || ""}`}>{metric.value.toLocaleString()}</p>
               </CardContent>
             </Card>
           ))}
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_160px_160px]">
+        <div className="flex gap-2.5">
           <Input
-            placeholder="Search salon name"
+            placeholder="Search salons…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-11 rounded-xl bg-white"
+            className="h-9 max-w-[280px] rounded-lg bg-background text-[12.5px]"
           />
           <Select value={planFilter} onValueChange={setPlanFilter}>
-            <SelectTrigger className="h-11 rounded-xl bg-white"><SelectValue placeholder="All plans" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-[160px] rounded-lg bg-background text-[12.5px]"><SelectValue placeholder="All plans" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All plans</SelectItem>
               {availablePlans.map((p) => (
@@ -150,7 +148,7 @@ export default function SubscriptionLedgerPage() {
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="h-11 rounded-xl bg-white"><SelectValue placeholder="All statuses" /></SelectTrigger>
+            <SelectTrigger className="h-9 w-[160px] rounded-lg bg-background text-[12.5px]"><SelectValue placeholder="All statuses" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="active">Active</SelectItem>
@@ -175,19 +173,19 @@ export default function SubscriptionLedgerPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("tenant_name")}>
+                      <TableHead className="cursor-pointer select-none text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground" onClick={() => toggleSort("tenant_name")}>
                         <span className="inline-flex items-center gap-1">Salon <ArrowUpDown className="h-3 w-3" /></span>
                       </TableHead>
-                      <TableHead>Plan</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("addon_mrr")}>
+                      <TableHead className="text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">Plan</TableHead>
+                      <TableHead className="text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">Status</TableHead>
+                      <TableHead className="cursor-pointer select-none text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground" onClick={() => toggleSort("addon_mrr")}>
                         <span className="inline-flex items-center gap-1">Add-ons <ArrowUpDown className="h-3 w-3" /></span>
                       </TableHead>
-                      <TableHead>MRR</TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("comms_balance")}>
+                      <TableHead className="text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground">MRR</TableHead>
+                      <TableHead className="cursor-pointer select-none text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground" onClick={() => toggleSort("comms_balance")}>
                         <span className="inline-flex items-center gap-1">Comms credits <ArrowUpDown className="h-3 w-3" /></span>
                       </TableHead>
-                      <TableHead className="cursor-pointer select-none" onClick={() => toggleSort("next_billing_at")}>
+                      <TableHead className="cursor-pointer select-none text-[11px] font-bold uppercase tracking-[0.04em] text-muted-foreground" onClick={() => toggleSort("next_billing_at")}>
                         <span className="inline-flex items-center gap-1">Next billing <ArrowUpDown className="h-3 w-3" /></span>
                       </TableHead>
                     </TableRow>
@@ -201,7 +199,7 @@ export default function SubscriptionLedgerPage() {
                       >
                         <TableCell>
                           <div className="font-medium">{row.tenant_name}</div>
-                          <div className="text-xs text-muted-foreground">{row.country || "N/A"}</div>
+                          <div className="text-xs text-muted-foreground">{row.country || "—"}</div>
                         </TableCell>
                         <TableCell>
                           {row.plan && (
@@ -216,7 +214,7 @@ export default function SubscriptionLedgerPage() {
                               variant="secondary"
                               className={`capitalize ${
                                 row.subscription_cancel_at && row.subscription_status === "active"
-                                  ? "bg-amber-50 text-amber-700"
+                                  ? "bg-warning-bg text-warning"
                                   : STATUS_BADGE[row.subscription_status] || ""
                               }`}
                             >
@@ -248,7 +246,7 @@ export default function SubscriptionLedgerPage() {
                               )}
                             </div>
                           ) : (
-                            <span className="text-muted-foreground">N/A</span>
+                            <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -260,12 +258,12 @@ export default function SubscriptionLedgerPage() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <span className={row.comms_balance !== null && row.comms_balance < 10 ? "text-red-600 font-medium" : ""}>
-                            {row.comms_balance ?? "N/A"}
+                          <span className={row.comms_balance !== null && row.comms_balance < 10 ? "text-destructive font-medium" : ""}>
+                            {row.comms_balance ?? 0}
                           </span>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {row.next_billing_at ? format(new Date(row.next_billing_at), "MMM d, yyyy") : "N/A"}
+                          {row.next_billing_at ? format(new Date(row.next_billing_at), "MMM d, yyyy") : "—"}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -298,20 +296,20 @@ function TenantBillingDrawer({ tenant, onClose }: { tenant: SubscriptionLedgerRo
         </SheetHeader>
 
         {(tenant?.subscription_cancel_at || tenant?.billing_grace_ends_at || tenant?.suspended_at) && (
-          <div className="mt-4 space-y-1 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+          <div className="mt-4 space-y-1 rounded-lg border border-warning/30 bg-warning-bg p-3 text-sm">
             {tenant.subscription_cancel_at && (
               <>
-                <p className="font-medium text-amber-900">
+                <p className="font-medium text-warning">
                   Cancellation pending: access until {format(new Date(tenant.subscription_cancel_at), "MMM d, yyyy")}
                 </p>
                 {tenant.cancellation_reason && (
-                  <p className="text-xs text-amber-800">
+                  <p className="text-xs text-warning/80">
                     Reason: {tenant.cancellation_reason.replace(/_/g, " ")}
                     {tenant.cancellation_reason_note ? `: "${tenant.cancellation_reason_note}"` : ""}
                   </p>
                 )}
                 {tenant.cancellation_requested_by_email && (
-                  <p className="text-xs text-amber-800">
+                  <p className="text-xs text-warning/80">
                     Requested by {tenant.cancellation_requested_by_email}
                     {tenant.cancellation_requested_at
                       ? ` on ${format(new Date(tenant.cancellation_requested_at), "MMM d, yyyy")}`
@@ -321,13 +319,13 @@ function TenantBillingDrawer({ tenant, onClose }: { tenant: SubscriptionLedgerRo
               </>
             )}
             {tenant.subscription_status === "past_due" && tenant.billing_grace_ends_at && (
-              <p className="font-medium text-amber-900">
+              <p className="font-medium text-warning">
                 Grace period ends {format(new Date(tenant.billing_grace_ends_at), "MMM d, yyyy")}
                 {tenant.billing_retry_count ? ` · ${tenant.billing_retry_count} failed attempt(s)` : ""}
               </p>
             )}
             {tenant.subscription_status === "suspended" && tenant.suspended_at && (
-              <p className="font-medium text-amber-900">
+              <p className="font-medium text-warning">
                 Suspended since {format(new Date(tenant.suspended_at), "MMM d, yyyy")}
               </p>
             )}
@@ -351,7 +349,7 @@ function TenantBillingDrawer({ tenant, onClose }: { tenant: SubscriptionLedgerRo
                     <div className="flex items-center justify-between gap-2 text-sm font-medium">
                       <span>{event.description}</span>
                       {event.amount !== null && (
-                        <span className="font-serif text-emerald-700">{formatMoney(event.amount, event.currency)}</span>
+                        <span className="font-serif text-success">{formatMoney(event.amount, event.currency)}</span>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -392,7 +390,7 @@ function TenantBillingDrawer({ tenant, onClose }: { tenant: SubscriptionLedgerRo
             )}
             <div className="flex justify-between items-center pt-3 border-t">
               <p className="text-sm font-medium">Comms credits</p>
-              <p className="font-serif text-sm">{tenant?.comms_balance ?? "N/A"} remaining</p>
+              <p className="font-serif text-sm">{tenant?.comms_balance ?? 0} remaining</p>
             </div>
           </TabsContent>
         </Tabs>

@@ -26,6 +26,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/useAuth";
 import { useManageableLocations } from "@/hooks/useManageableLocations";
 import { useMyCheckIn } from "@/hooks/useStaffCheckIns";
+import { useActiveTrialOverride } from "@/hooks/useActiveTrialOverride";
 
 type LeaveType = "annual" | "sick" | "compassionate";
 type TimeOffStatus = "pending" | "approved" | "rejected" | "cancelled";
@@ -56,6 +57,7 @@ const statusTone: Record<TimeOffStatus, string> = {
 export default function MyShiftPage() {
   useWalkthroughAutoTrigger("my-shift");
   const { currentTenant, user } = useAuth();
+  const { data: activeTrialOverride } = useActiveTrialOverride(currentTenant?.id);
   const { locations, defaultLocationId } = useManageableLocations();
   const { checkIn, isLoading: checkInLoading, checkInAt, checkOut } = useMyCheckIn();
   const queryClient = useQueryClient();
@@ -97,7 +99,10 @@ export default function MyShiftPage() {
         .eq("status", "active")
         .maybeSingle();
       if (error) throw error;
-      return Boolean(data?.id);
+      const trialEndsAt = activeTrialOverride?.ends_at ?? currentTenant.trial_ends_at;
+      const isLiveTrial = Boolean(trialEndsAt && new Date(trialEndsAt).getTime() > Date.now()) &&
+        (Boolean(activeTrialOverride) || currentTenant.subscription_status === "trialing");
+      return isLiveTrial || Boolean(data?.id);
     },
     enabled: Boolean(currentTenant?.id),
   });

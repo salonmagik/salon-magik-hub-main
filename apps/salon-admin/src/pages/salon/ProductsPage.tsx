@@ -357,11 +357,10 @@ export default function ProductsPage() {
   };
 
   const resourceLimit = useMemo(() => {
-    const max = currentPlan?.limits?.max_products ?? null;
     const count = products.filter((p) => p.status === "active").length;
-    return { count, max, label: "product", pluralLabel: "products" };
-  }, [currentPlan?.limits, products]);
-  const isResourceFull = resourceLimit.max != null && resourceLimit.count >= resourceLimit.max;
+    return { count, max: null, label: "product", pluralLabel: "products" };
+  }, [products]);
+  const isResourceFull = false;
 
   const mobileQuickAction = useMemo<MobileQuickAction | null>(() => {
     if (selectedItems.size > 0) return null;

@@ -32,7 +32,7 @@ type ReviewAppointment = {
   scheduled_start: string | null;
   is_unscheduled: boolean;
   location_id: string;
-  customer: { first_name: string | null; last_name: string | null } | null;
+  customer: { full_name: string | null } | null;
 };
 
 export default function SalonsOverviewPage() {
@@ -93,7 +93,7 @@ export default function SalonsOverviewPage() {
     try {
       let query = supabase
         .from("appointments")
-        .select("id, booking_reference, scheduled_start, is_unscheduled, location_id, customer:customers!appointments_customer_id_fkey(first_name,last_name)")
+        .select("id, booking_reference, scheduled_start, is_unscheduled, location_id, customer:customers!appointments_customer_id_fkey(full_name)")
         .eq("tenant_id", currentTenant.id)
         .neq("status", "cancelled")
         .order("scheduled_start", { ascending: true });
@@ -138,9 +138,9 @@ export default function SalonsOverviewPage() {
   if (!currentTenant) return <SalonSidebar><LoadingState variant="section" /></SalonSidebar>;
 
   const marketingCards = [
-    { title: "Targeted marketing", icon: MessageSquare, tone: "purple", email: 140, sms: 60 },
-    { title: "Birthday messages", icon: Gift, tone: "pink", email: 24, sms: 14 },
-    { title: "Bulk messages", icon: Send, tone: "gray", email: 122, sms: 60 },
+    { title: "Targeted marketing", icon: MessageSquare, tone: "purple", email: 0, sms: 0 },
+    { title: "Birthday messages", icon: Gift, tone: "pink", email: 0, sms: 0 },
+    { title: "Bulk messages", icon: Send, tone: "gray", email: 0, sms: 0 },
   ];
 
   return (
@@ -152,34 +152,36 @@ export default function SalonsOverviewPage() {
           <div className="business-overview__actions">
             {availableCountries.length > 1 && <Select value={effectiveCountry} onValueChange={setSelectedCountry}><SelectTrigger className="business-overview__country"><SelectValue /></SelectTrigger><SelectContent>{availableCountries.map((country) => <SelectItem key={country} value={country}>{countryName(country)}</SelectItem>)}</SelectContent></Select>}
             <Select value={dateRange} onValueChange={(value) => setDateRange(value as DateRange)}><SelectTrigger className="business-overview__period"><Calendar /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="today">Today</SelectItem><SelectItem value="week">This Week</SelectItem><SelectItem value="month">This Month</SelectItem></SelectContent></Select>
-            <Button className="rounded-full" onClick={() => setAddSalonOpen(true)}><Plus className="w-4 h-4 mr-2" /> Add Branch</Button>
+            <Button className="rounded-full" onClick={() => setAddSalonOpen(true)} data-tour-id="tour-manage-branches"><Plus className="w-4 h-4 mr-2" /> Add Branch</Button>
           </div>
         </header>
         {isLoading ? <div className="business-overview__loading">Loading your overview…</div> : error ? <div className="business-overview__error"><AlertCircle /><span>Failed to load branch data.</span><Button variant="outline" onClick={() => refetch()}>Try again</Button></div> : <>
-          {attentionCount === 0 ? (
-            <div className="flex items-center gap-2 rounded-[14px] border border-border/60 shadow-sm bg-white px-4 py-4 mb-5 text-sm text-foreground">
-              <Check className="h-4 w-4 text-green-600" /> All caught up, nothing needs your attention right now.
-            </div>
-          ) : (
-            <section className="rounded-[14px] border border-border/60 shadow-sm bg-white px-4 py-3 mb-5">
-              <h2 className="flex items-center gap-2 text-sm font-semibold mb-1">
-                Needs attention
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive/10 px-1.5 text-xs font-semibold text-destructive">{attentionCount}</span>
-              </h2>
-              {aggregate && aggregate.pending > 0 && <AttentionRow tone="amber" title={`${aggregate.pending} pending approvals`} description="Awaiting your response: VI Branch, Main Location" action="Review" loading={reviewLoading && reviewBucket === "pending"} onClick={() => void loadReviewAppointments("pending")} />}
-              {aggregate && aggregate.unpaid > 0 && <AttentionRow tone="red" title={`${aggregate.unpaid} unpaid balance${aggregate.unpaid === 1 ? "" : "s"}`} description="Not fully paid or refunded: Main Location" action="Review" loading={reviewLoading && reviewBucket === "unpaid"} onClick={() => void loadReviewAppointments("unpaid")} />}
-              {pausedBranches.length > 0 && <AttentionRow tone="gray" title={`${pausedBranches.length} paused branch${pausedBranches.length === 1 ? "" : "es"}`} description={`${pausedBranches[0]?.label || "Branch"}: not taking new bookings`} action="Revive" onClick={() => pausedBranches[0]?.locationId && handleRevive(pausedBranches[0].locationId)} />}
-              {pausedBranches.length > 0 && currentRole === "owner" && (
-                <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-3 mt-1 text-sm">
-                  <span>Revive {pausedBranches[0]?.label || "this branch"} so it can take bookings again?</span>
-                  <div className="flex gap-2 flex-shrink-0">
-                    <Button variant="outline" size="sm" className="rounded-full">Not yet</Button>
-                    <Button size="sm" className="rounded-full" disabled={Boolean(revivingLocationId)} onClick={() => pausedBranches[0]?.locationId && handleRevive(pausedBranches[0].locationId)}>{revivingLocationId ? "Reviving…" : "Revive branch"}</Button>
+          <div data-tour-id="tour-hub-quick-actions">
+            {attentionCount === 0 ? (
+              <div className="flex items-center gap-2 rounded-[14px] border border-border/60 shadow-sm bg-white px-4 py-4 mb-5 text-sm text-foreground">
+                <Check className="h-4 w-4 text-green-600" /> All caught up, nothing needs your attention right now.
+              </div>
+            ) : (
+              <section className="rounded-[14px] border border-border/60 shadow-sm bg-white px-4 py-3 mb-5">
+                <h2 className="flex items-center gap-2 text-sm font-semibold mb-1">
+                  Needs attention
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive/10 px-1.5 text-xs font-semibold text-destructive">{attentionCount}</span>
+                </h2>
+                {aggregate && aggregate.pending > 0 && <AttentionRow tone="amber" title={`${aggregate.pending} pending approvals`} description="Awaiting your response: VI Branch, Main Location" action="Review" loading={reviewLoading && reviewBucket === "pending"} onClick={() => void loadReviewAppointments("pending")} />}
+                {aggregate && aggregate.unpaid > 0 && <AttentionRow tone="red" title={`${aggregate.unpaid} unpaid balance${aggregate.unpaid === 1 ? "" : "s"}`} description="Not fully paid or refunded: Main Location" action="Review" loading={reviewLoading && reviewBucket === "unpaid"} onClick={() => void loadReviewAppointments("unpaid")} />}
+                {pausedBranches.length > 0 && <AttentionRow tone="gray" title={`${pausedBranches.length} paused branch${pausedBranches.length === 1 ? "" : "es"}`} description={`${pausedBranches[0]?.label || "Branch"}: not taking new bookings`} action="Revive" onClick={() => pausedBranches[0]?.locationId && handleRevive(pausedBranches[0].locationId)} />}
+                {pausedBranches.length > 0 && currentRole === "owner" && (
+                  <div className="flex items-center justify-between gap-4 border-t border-border/60 pt-3 mt-1 text-sm">
+                    <span>Revive {pausedBranches[0]?.label || "this branch"} so it can take bookings again?</span>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <Button variant="outline" size="sm" className="rounded-full">Not yet</Button>
+                      <Button size="sm" className="rounded-full" disabled={Boolean(revivingLocationId)} onClick={() => pausedBranches[0]?.locationId && handleRevive(pausedBranches[0].locationId)}>{revivingLocationId ? "Reviving…" : "Revive branch"}</Button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </section>
-          )}
+                )}
+              </section>
+            )}
+          </div>
           {aggregate && <><OverviewSectionLabel>At a glance · {dateRange === "week" ? "this week" : dateRange}</OverviewSectionLabel><div className="business-overview__metrics" data-tour-id="tour-hub-overview"><MetricCard icon={Building2} label="Branches" value={filteredLocations.length} />{canViewRevenue && <MetricCard icon={Coins} label="Inflow" value={formatCurrency(aggregate.revenue, aggregate.currency)} tone="purple" />}<MetricCard icon={Calendar} label="Bookings" value={aggregate.bookings} /><MetricCard icon={Users} label="Staff Online" value={aggregate.staff} tone="green" /></div></>}
           <div className="business-overview__section-heading"><OverviewSectionLabel>Branches</OverviewSectionLabel><span>Click a branch for its full report</span></div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5" data-tour-id="tour-branch-performance">
@@ -217,7 +219,7 @@ export default function SalonsOverviewPage() {
               <div className={cn(DIALOG_BODY_PADDING, "grid grid-cols-3 gap-4")}>
                 <div>
                   <p className="text-xs text-muted-foreground">Inflow</p>
-                  <p className="mt-1 text-sm font-semibold">{canViewRevenue ? formatCurrency(selectedLocation.revenue, selectedLocation.currency) : "N/A"}</p>
+				  <p className="mt-1 text-sm font-semibold">{canViewRevenue ? formatCurrency(selectedLocation.revenue, selectedLocation.currency) : "—"}</p>
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Bookings</p>
@@ -246,7 +248,7 @@ export default function SalonsOverviewPage() {
           <div className={cn(DIALOG_BODY_PADDING, "space-y-2 max-h-[360px] overflow-y-auto")}>
             {reviewAppointments.map((appointment) => {
               const location = locationById.get(appointment.location_id);
-              const name = [appointment.customer?.first_name, appointment.customer?.last_name].filter(Boolean).join(" ") || "Unnamed customer";
+              const name = appointment.customer?.full_name || "Unnamed customer";
               return (
                 <button
                   type="button"
@@ -332,7 +334,7 @@ function BranchCard({ location, canViewRevenue, top, needsAttention, onClick }: 
 			<div className="flex gap-5 mt-3">
 				<div className="flex flex-col gap-0.5">
 					<span className="text-xs text-muted-foreground">Inflow</span>
-					<span className="text-sm font-semibold">{canViewRevenue ? formatCurrency(location.revenue, location.currency) : "N/A"}</span>
+					<span className="text-sm font-semibold">{canViewRevenue ? formatCurrency(location.revenue, location.currency) : "—"}</span>
 				</div>
 				<div className="flex flex-col gap-0.5">
 					<span className="text-xs text-muted-foreground">Bookings</span>

@@ -59,7 +59,7 @@ export function PlanStep({ selectedPlan, onPlanSelect, currency }: PlanStepProps
     return { price: planPricing.monthly_price, period: "/month", note: null, savings: 0 };
   };
 
-  const trialDays = plans?.[0]?.trial_days || 14;
+  const trialDays = plans?.find((plan) => plan.slug === selectedPlan)?.trial_days || plans?.[0]?.trial_days || 14;
 
   return (
     <div className="p-7">

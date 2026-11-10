@@ -316,11 +316,10 @@ export default function PackagesPage() {
   };
 
   const resourceLimit = useMemo(() => {
-    const max = currentPlan?.limits?.max_packages ?? null;
     const count = packages.filter((p) => p.status === "active").length;
-    return { count, max, label: "package", pluralLabel: "packages" };
-  }, [currentPlan?.limits, packages]);
-  const isResourceFull = resourceLimit.max != null && resourceLimit.count >= resourceLimit.max;
+    return { count, max: null, label: "package", pluralLabel: "packages" };
+  }, [packages]);
+  const isResourceFull = false;
 
   const mobileQuickAction = useMemo<MobileQuickAction | null>(() => {
     if (selectedItems.size > 0) return null;

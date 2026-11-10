@@ -203,7 +203,7 @@ export function ActiveSessionsTab() {
                             </div>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
-                            {session.browser_name ?? "N/A"}
+                            {session.browser_name ?? "—"}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
@@ -284,7 +284,7 @@ export function ActiveSessionsTab() {
                           </div>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {session.browser_name ?? "N/A"}
+                          {session.browser_name ?? "—"}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
                           <div className="flex items-center gap-1.5">

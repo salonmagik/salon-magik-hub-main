@@ -8,12 +8,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@ui/sheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
-import { Loader2, MessageSquareText, TriangleAlert, CircleDollarSign } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { EmptyState } from "@ui/empty-state";
 
 function formatMoney(amount: number | null | undefined, currency: string | null | undefined) {
-  if (amount === null || amount === undefined) return "N/A";
+  if (amount === null || amount === undefined) return "—";
   const symbols: Record<string, string> = { GHS: "₵", NGN: "₦", USD: "$" };
   const symbol = currency ? symbols[currency] || `${currency} ` : "";
   return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -29,10 +29,10 @@ function maskRecipient(recipient: string, channel: string) {
 }
 
 const STATUS_BADGE: Record<string, string> = {
-  delivered: "bg-emerald-50 text-emerald-700",
-  sent: "bg-emerald-50 text-emerald-700",
-  failed: "bg-red-50 text-red-700",
-  pending: "bg-sky-50 text-sky-700",
+  delivered: "bg-success-bg text-success",
+  sent: "bg-success-bg text-success",
+  failed: "bg-destructive-bg text-destructive",
+  pending: "bg-info-bg text-info",
 };
 
 export default function CommsCreditsPage() {
@@ -49,7 +49,7 @@ export default function CommsCreditsPage() {
     const totalDelivered = rows.reduce((sum, r) => sum + r.delivered_30d, 0);
     const totalFailed = rows.reduce((sum, r) => sum + r.failed_30d, 0);
     const deliveryRate = totalDelivered + totalFailed > 0 ? (totalDelivered / (totalDelivered + totalFailed)) * 100 : null;
-    const lowBalance = rows.filter((r) => (r.balance ?? 0) < 10).length;
+    const lowBalance = rows.filter((r) => (Number(r.complimentary_marketing_sms_balance || 0) + Number(r.purchased_sms_balance || 0)) < 10).length;
     return { totalSent, totalSms, totalEmail, deliveryRate, lowBalance };
   }, [rows]);
 
@@ -64,39 +64,33 @@ export default function CommsCreditsPage() {
       <div className="backoffice-page">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-[22px] font-medium tracking-tight">Comms Credits &amp; Messages</h1>
-            <p className="mt-1 text-muted-foreground">
-              Credit balances, purchases, and sent-message history across every salon.
+            <h1 className="text-[20px] font-bold tracking-tight">Comms credits &amp; messages</h1>
+            <p className="mt-[3px] text-[12.5px] text-muted-foreground">
+              Observability for every salon's SMS/email usage.
             </p>
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-3">
           {[
-            { label: "Messages sent (30d)", value: summary.totalSent.toLocaleString(), sub: `${summary.totalSms.toLocaleString()} SMS · ${summary.totalEmail.toLocaleString()} email`, icon: MessageSquareText, tone: "text-violet-700 bg-violet-50" },
-            { label: "Delivery rate", value: summary.deliveryRate !== null ? `${summary.deliveryRate.toFixed(1)}%` : "N/A", sub: "last 30 days, salon-sent", icon: CircleDollarSign, tone: "text-emerald-700 bg-emerald-50" },
-            { label: "Low balance (<10)", value: summary.lowBalance.toLocaleString(), sub: "salons at risk of running out", icon: TriangleAlert, tone: "text-red-700 bg-red-50" },
+            { label: "Sent, 30d", value: summary.totalSent.toLocaleString() },
+            { label: "Delivery rate", value: summary.deliveryRate !== null ? `${summary.deliveryRate.toFixed(1)}%` : "—", tone: "text-success" },
+            { label: "Low balance (<10)", value: `${summary.lowBalance.toLocaleString()} salons`, tone: "text-warning", border: true },
           ].map((metric) => (
-            <Card key={metric.label} className="backoffice-panel">
-              <CardContent className="flex items-start justify-between p-5">
-                <div>
-                  <p className="text-sm uppercase tracking-wide text-muted-foreground">{metric.label}</p>
-                  <p className="mt-2 text-2xl font-medium">{metric.value}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{metric.sub}</p>
-                </div>
-                <div className={`rounded-xl p-3 ${metric.tone}`}>
-                  <metric.icon className="h-5 w-5" />
-                </div>
+            <Card key={metric.label} className={`backoffice-panel ${metric.border ? "border-warning" : ""}`}>
+              <CardContent className="p-4">
+                <p className="text-[11.5px] font-semibold text-muted-foreground">{metric.label}</p>
+                <p className={`mt-1 text-[22px] font-bold tabular-nums ${metric.tone || ""}`}>{metric.value}</p>
               </CardContent>
             </Card>
           ))}
         </div>
 
         <Input
-          placeholder="Search salon name"
+          placeholder="Search salons…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="h-11 max-w-sm rounded-xl bg-white"
+          className="h-9 max-w-[260px] rounded-lg bg-background text-[12.5px]"
         />
 
         <Card className="backoffice-panel overflow-hidden">
@@ -113,12 +107,14 @@ export default function CommsCreditsPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Salon</TableHead>
-                      <TableHead>Balance</TableHead>
-                      <TableHead>Free allotment used</TableHead>
+                      <TableHead>Marketing SMS</TableHead>
+                      <TableHead>Reminder SMS</TableHead>
+                      <TableHead>Purchased SMS</TableHead>
                       <TableHead>Last purchase</TableHead>
                       <TableHead>Sent (30d)</TableHead>
                       <TableHead>Reminders</TableHead>
                       <TableHead>Birthday</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -126,17 +122,19 @@ export default function CommsCreditsPage() {
                       <TableRow key={row.tenant_id} className="cursor-pointer" onClick={() => setSelectedTenant(row)}>
                         <TableCell>
                           <div className="font-medium">{row.tenant_name}</div>
-                          <div className="text-xs text-muted-foreground">{row.country || "N/A"}</div>
+                          <div className="text-xs text-muted-foreground">{row.country || "—"}</div>
                         </TableCell>
                         <TableCell>
-                          <span className={(row.balance ?? 0) < 10 ? "text-red-600 font-medium" : "font-medium"}>
-                            {row.balance ?? "N/A"}
+                          <span className={(Number(row.complimentary_marketing_sms_balance || 0) + Number(row.purchased_sms_balance || 0)) < 10 ? "text-destructive font-medium" : "font-medium"}>
+                            {Number(row.complimentary_marketing_sms_balance || 0) + Number(row.purchased_sms_balance || 0)}
                           </span>
+                          <div className="text-xs text-muted-foreground">{Number(row.complimentary_marketing_sms_balance || 0)} complimentary</div>
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {row.free_monthly_allocation
-                            ? `${Math.max(0, row.free_monthly_allocation - (row.balance ?? 0))} / ${row.free_monthly_allocation}`
-                            : "N/A"}
+                          {Number(row.complimentary_reminder_sms_balance || 0)}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {Number(row.purchased_sms_balance || 0)}
                         </TableCell>
                         <TableCell className="text-sm">
                           {row.last_purchase_at
@@ -146,6 +144,13 @@ export default function CommsCreditsPage() {
                         <TableCell className="text-sm">{row.sms_sent_30d} SMS · {row.email_sent_30d} email</TableCell>
                         <TableCell>{row.reminders_sent_30d}</TableCell>
                         <TableCell>{row.birthday_sent_30d}</TableCell>
+                        <TableCell>
+                          {(Number(row.complimentary_marketing_sms_balance || 0) + Number(row.purchased_sms_balance || 0)) < 10 ? (
+                            <Badge variant="destructive" className="bg-destructive-bg text-destructive border-transparent">Low balance</Badge>
+                          ) : (
+                            <Badge variant="success">Healthy</Badge>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -205,7 +210,7 @@ function TenantMessageLogDrawer({ tenant, onClose }: { tenant: CommsUsageRow | n
                         {maskRecipient(msg.recipient, msg.channel)}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground max-w-[220px] truncate">
-                        {msg.content || msg.subject || "N/A"}
+                        {msg.content || msg.subject || "—"}
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className={`text-xs capitalize ${STATUS_BADGE[msg.status] || ""}`}>
@@ -248,7 +253,7 @@ function TenantMessageLogDrawer({ tenant, onClose }: { tenant: CommsUsageRow | n
             <span>{openMessage?.credits_used ?? 0} credits used</span>
           </div>
           {openMessage?.error_message && (
-            <p className="text-xs text-red-600">{openMessage.error_message}</p>
+            <p className="text-xs text-destructive">{openMessage.error_message}</p>
           )}
           </div>
         </DialogContent>

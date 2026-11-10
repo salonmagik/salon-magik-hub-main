@@ -12,9 +12,9 @@ import { runLifecyclePass } from "./lifecycle.ts";
 // not just at the guarded-SQL level (already covered by
 // supabase/tests/subscription_lifecycle.sql).
 //
-// One pass always makes its four `.from("tenants").select(...)` calls in a
-// fixed order — cancellations due, dunning reminders, grace expiry,
-// zero-total restore (see runLifecyclePass) — so selectQueue below is
+// One pass always makes its five `.from("tenants").select(...)` calls in a
+// fixed order — trial expiry, cancellations due, dunning reminders, grace
+// expiry, zero-total restore (see runLifecyclePass) — so selectQueue below is
 // consumed by position, not by table name, to keep each stage's mock data
 // isolated from the others.
 
@@ -49,7 +49,7 @@ function createMockSupabase(opts: MockSupabaseOptions) {
     from(table: string) {
       return {
         select: (_cols: string) =>
-          thenable(selectQueue.shift() ?? { data: [], error: null }, ["select", "not", "lte", "gt", "eq", "in"]),
+          thenable(selectQueue.shift() ?? { data: [], error: null }, ["select", "not", "lte", "gt", "eq", "in", "maybeSingle", "limit"]),
         update: (_patch: Record<string, unknown>) =>
           thenable(updateQueue.shift() ?? { data: [], error: null }, ["eq", "not", "lte", "select"]),
         insert: (row: Record<string, unknown>) => {
@@ -72,6 +72,7 @@ const noOne: QueryResult = { data: [], error: null };
 Deno.test("cancellations due: a due tenant is transitioned and gets exactly one audit log", async () => {
   const { supabase, inserts } = createMockSupabase({
     selectQueue: [
+      noOne, // trial expiry
       { data: [{ id: "tenant-1" }], error: null }, // cancellations due
       noOne, // dunning reminders
       noOne, // grace expiry
@@ -94,6 +95,7 @@ Deno.test("cancellations due: a due tenant is transitioned and gets exactly one 
 Deno.test("cancellations due: a re-run where the guarded update already applied writes no audit log and no result entry (AC 14)", async () => {
   const { supabase, inserts } = createMockSupabase({
     selectQueue: [
+      noOne, // trial expiry
       // The tenant still surfaces here (this mock's select doesn't
       // re-evaluate the real predicate), but the guarded UPDATE below
       // returns zero rows — exactly what happens for real once the first
@@ -119,6 +121,7 @@ Deno.test("grace expiry: a tenant past its deadline is suspended with exactly on
   const { supabase, inserts } = createMockSupabase({
     selectQueue: [
       noOne, // cancellations due
+      noOne, // trial expiry
       noOne, // dunning reminders
       {
         data: [{ id: "tenant-2", name: "Salon", logo_url: null, currency: "GHS", paystack_authorization_email: null }],
@@ -143,6 +146,7 @@ Deno.test("grace expiry: a re-run where the guarded update already applied write
   const { supabase, inserts } = createMockSupabase({
     selectQueue: [
       noOne,
+      noOne, // trial expiry
       noOne,
       {
         data: [{ id: "tenant-2", name: "Salon", logo_url: null, currency: "GHS", paystack_authorization_email: null }],
@@ -164,7 +168,7 @@ Deno.test("grace expiry: a re-run where the guarded update already applied write
 
 Deno.test("no due cancellations or grace-expired tenants: lifecycle pass is a clean no-op", async () => {
   const { supabase, inserts } = createMockSupabase({
-    selectQueue: [noOne, noOne, noOne, noOne],
+    selectQueue: [noOne, noOne, noOne, noOne, noOne],
     updateQueue: [],
   });
 

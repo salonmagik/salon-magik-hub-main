@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useBackofficeAuth, useBlockedRefundsCount } from "@/hooks";
 import { InactivityGuard } from "@/components/session/InactivityGuard";
@@ -10,15 +10,11 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarMenuSub,
-  SidebarMenuSubItem,
-  SidebarMenuSubButton,
   SidebarProvider,
   SidebarInset,
   SidebarFooter,
   SidebarTrigger,
 } from "@ui/sidebar";
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@ui/collapsible";
 import { Button } from "@ui/button";
 import { Avatar, AvatarFallback } from "@ui/avatar";
 import {
@@ -46,7 +42,9 @@ import {
   Percent,
   BadgeCheck,
   Banknote,
-  Sparkles,
+  Building2,
+  UserRound,
+  RadioTower,
   type LucideIcon,
 } from "lucide-react";
 import { ProductAnnouncementCard } from "@shared/ProductAnnouncementCard";
@@ -59,95 +57,120 @@ interface BackofficeLayoutProps {
 interface NavItem {
   href: string;
   label: string;
-  icon?: LucideIcon;
+  icon: LucideIcon;
   pageKey?: string;
+  /** Visible if the user has ANY of these page keys — for a nav entry that now points at one merged page backed by several gated routes. */
+  anyPageKey?: string[];
   permissionKey?: string;
-  children?: NavItem[];
+  badge?: "blockedRefunds";
 }
 
-const navItems: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, pageKey: "dashboard" },
+interface NavSection {
+  label: string | null;
+  items: NavItem[];
+}
+
+// Grouped by job, not alphabetically — mirrors how the team actually thinks
+// about the app (pricing config vs. what a tenant owes vs. payments risk),
+// rather than one flat 16-item list. Renamed labels below are cosmetic only
+// (disambiguating "Pricing catalog" from "Tenant billing", which used to be
+// confusingly similar — "Plans" vs. "Subscriptions & Add-ons" — for two
+// unrelated pages); routes and pageKeys are unchanged, so this carries no
+// permission-model risk on its own.
+const navSections: NavSection[] = [
   {
-    href: "/customers/waitlists",
-    label: "Customers",
-    icon: Users2,
-    pageKey: "customers_waitlists",
-    children: [
-      { href: "/customers/waitlists", label: "Waitlists", pageKey: "customers_waitlists" },
-      { href: "/customers/tenants", label: "Tenants", pageKey: "customers_tenants" },
-      { href: "/customers/users", label: "Users", pageKey: "customers_users" },
-      { href: "/customers/ops-monitor", label: "Ops Monitor", pageKey: "customers_ops_monitor" },
-      { href: "/customers/support", label: "Support", pageKey: "settings" },
+    label: null,
+    items: [
+      { href: "/", label: "Overview", icon: LayoutDashboard, pageKey: "dashboard" },
     ],
   },
-  { href: "/feature-flags", label: "Feature Flags", icon: Flag, pageKey: "feature_flags" },
-  { href: "/subscriptions", label: "Subscriptions & Add-ons", icon: Receipt, pageKey: "subscriptions" },
-  { href: "/comms-credits", label: "Comms Credits & Messages", icon: Wallet, pageKey: "comms_credits" },
-  { href: "/flagged-signups", label: "Flagged Signups", icon: ShieldAlert, pageKey: "flagged_signups" },
-  { href: "/transactions", label: "Transactions", icon: ArrowLeftRight, pageKey: "transactions" },
-  { href: "/fees-margins", label: "Fees & Margins", icon: Percent, pageKey: "payment_fee_settings" },
-  { href: "/verification-queue", label: "Verification Queue", icon: BadgeCheck, pageKey: "verification_queue" },
-  { href: "/withdrawals", label: "Withdrawals", icon: Banknote, pageKey: "withdrawals" },
-  { href: "/plans", label: "Plans", icon: Coins, pageKey: "plans" },
-  { href: "/comms", label: "Comms", icon: MessageSquareText, pageKey: "comms", permissionKey: "comms.view" },
-  { href: "/product-announcements", label: "Product announcements", icon: Sparkles, pageKey: "settings" },
   {
-    href: "/sales/campaigns",
-    label: "Sales Ops",
-    icon: BriefcaseBusiness,
-    pageKey: "sales_campaigns",
-    children: [
-      { href: "/sales/campaigns", label: "Campaigns", pageKey: "sales_campaigns", permissionKey: "sales.manage_campaigns" },
-      { href: "/sales/capture-client", label: "Capture Client", pageKey: "sales_capture_client", permissionKey: "sales.capture_client" },
-      { href: "/sales/conversions", label: "Conversions", pageKey: "sales_conversions", permissionKey: "sales.view_conversions" },
+    label: "Pricing & billing",
+    items: [
+      { href: "/plans", label: "Pricing catalog", icon: Coins, pageKey: "plans" },
+      { href: "/subscriptions", label: "Tenant billing", icon: Receipt, pageKey: "subscriptions" },
     ],
   },
-  { href: "/audit-logs", label: "Audit Logs", icon: FileText, pageKey: "audit_logs" },
-  { href: "/admins", label: "Admins", icon: Shield, pageKey: "admins" },
-  { href: "/settings", label: "Settings", icon: Settings, pageKey: "settings" },
+  {
+    label: "Tenants",
+    items: [
+      { href: "/customers/tenants", label: "Salons", icon: Building2, pageKey: "customers_tenants" },
+      { href: "/customers/waitlists", label: "Waitlists", icon: Users2, pageKey: "customers_waitlists" },
+      { href: "/customers/users", label: "Users", icon: UserRound, pageKey: "customers_users" },
+      { href: "/customers/ops-monitor", label: "Ops monitor & support", icon: RadioTower, anyPageKey: ["customers_ops_monitor", "settings"] },
+    ],
+  },
+  {
+    label: "Payments",
+    items: [
+      { href: "/transactions", label: "Transactions", icon: ArrowLeftRight, pageKey: "transactions", badge: "blockedRefunds" },
+      // Withdrawals, the payout-setup queue, and fee settings are now tabs of one
+      // page (MoneyOps.dc.html artifact board: "previously three separate nav
+      // items, now one place with one filter bar") — visible if the admin has
+      // access to any of the three underlying routes; the page itself only
+      // shows the tabs they actually have access to.
+      { href: "/withdrawals", label: "Withdrawals & fees", icon: Banknote, anyPageKey: ["withdrawals", "verification_queue", "payment_fee_settings"] },
+    ],
+  },
+  {
+    label: "Trust & risk",
+    items: [
+      { href: "/flagged-signups", label: "Flagged signups", icon: ShieldAlert, pageKey: "flagged_signups" },
+    ],
+  },
+  {
+    label: "Comms",
+    items: [
+      { href: "/comms-credits", label: "Credits & messages", icon: Wallet, pageKey: "comms_credits" },
+      // Templates and Announcements are now tabs of one page (CommsTemplates.dc.html
+      // artifact board shows a single "Templates & announcements" page), so this is
+      // one nav item with no single pageKey/permissionKey gate — the page itself
+      // shows only the tabs the signed-in admin actually has access to.
+      { href: "/comms", label: "Templates & announcements", icon: MessageSquareText },
+    ],
+  },
+  {
+    label: "Sales ops",
+    items: [
+      // Campaigns, Capture client, and Conversions are now tabs of one page
+      // (SalesOps.dc.html artifact board shows a single "Sales ops" page), so this
+      // is one nav item — the page gates each tab internally per the signed-in
+      // admin's actual permissions.
+      { href: "/sales/campaigns", label: "Campaigns & conversions", icon: BriefcaseBusiness },
+    ],
+  },
+  {
+    label: "Platform",
+    items: [
+      { href: "/settings", label: "Settings", icon: Settings, pageKey: "settings" },
+      { href: "/feature-flags", label: "Feature flags", icon: Flag, pageKey: "feature_flags" },
+    ],
+  },
+  {
+    label: "Team",
+    items: [
+      { href: "/admins", label: "Admins & roles", icon: Shield, pageKey: "admins" },
+      { href: "/audit-logs", label: "Audit logs", icon: FileText, pageKey: "audit_logs" },
+    ],
+  },
 ];
-
-function isChildActive(child: NavItem, pathname: string) {
-  return pathname === child.href || pathname.startsWith(`${child.href}/`);
-}
 
 export function BackofficeLayout({ children }: BackofficeLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, backofficeUser, signOut, hasBackofficePageAccess, hasBackofficePermission } = useBackofficeAuth();
-  const { data: blockedRefundsCount } = useBlockedRefundsCount();
+  const { data: blockedRefundsCount } = useBlockedRefundsCount(Boolean(backofficeUser?.user_id));
   const canSeeItem = (item: NavItem) => {
     if (backofficeUser?.role === "super_admin") return true;
     if (item.pageKey && !hasBackofficePageAccess(item.pageKey)) return false;
+    if (item.anyPageKey && !item.anyPageKey.some((key) => hasBackofficePageAccess(key))) return false;
     if (item.permissionKey && !hasBackofficePermission(item.permissionKey)) return false;
     return true;
   };
 
-  const visibleNavItems = navItems
-    .map((item) => ({
-      ...item,
-      children: item.children?.filter(canSeeItem),
-    }))
-    .filter((item) => {
-      if (item.children?.length) return true;
-      return canSeeItem(item);
-    });
-
-  // Groups with a currently-active child start expanded; everything else starts
-  // collapsed, since a parent with children isn't itself a navigable page.
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    for (const item of visibleNavItems) {
-      if (item.children?.length) {
-        initial[item.href] = item.children.some((child) => isChildActive(child, location.pathname));
-      }
-    }
-    return initial;
-  });
-
-  const toggleGroup = (href: string) => {
-    setOpenGroups((prev) => ({ ...prev, [href]: !prev[href] }));
-  };
+  const visibleNavSections = navSections
+    .map((section) => ({ ...section, items: section.items.filter(canSeeItem) }))
+    .filter((section) => section.items.length > 0);
 
   const handleSignOut = async () => {
     await signOut();
@@ -169,30 +192,33 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
 
   return (
 		<InactivityGuard warningMinutes={22} logoutMinutes={30}>
-			<SidebarProvider>
-				<div className="flex min-h-screen w-full flex-col bg-[#f6f5f7]">
+			<SidebarProvider style={{ "--sidebar-width": "264px" } as React.CSSProperties}>
+				<div className="flex min-h-screen w-full flex-col bg-background">
 					<div className="flex min-h-0 flex-1">
-						<Sidebar className=" border-r border-white/10">
-							<SidebarHeader className="border-b border-white/10 px-4 py-4">
-								<div className="flex items-center gap-2">
-									<div className="rounded-lg bg-white/10 p-2">
-										<Shield className="h-5 w-5 text-[#a9c9e8]" />
+						<Sidebar className="border-r border-border">
+							<SidebarHeader className="border-b border-border px-[18px] pb-3.5 pt-5">
+								<div className="flex items-center gap-2.5">
+									<div className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-[9px] bg-primary">
+										<Shield className="h-4 w-4 text-primary-foreground" />
 									</div>
 									<div>
-										<h1 className="text-sm font-medium text-white">
+										<h1 className="text-[13.5px] font-bold text-foreground">
 											Salon Magik Admin
 										</h1>
-										<p className="text-[11px] text-[#a9c9e8]">Backoffice</p>
+										<p className="text-[11px] text-muted-foreground">Backoffice</p>
 									</div>
 								</div>
 							</SidebarHeader>
 
-							<SidebarContent className="px-2 py-4 text-white/75">
-								<SidebarMenu>
-									{visibleNavItems.map((item) => {
-										const hasChildren = Boolean(item.children?.length);
-
-										if (!hasChildren) {
+							<SidebarContent className="px-2.5 pb-5 pt-1.5">
+								{visibleNavSections.map((section, sectionIndex) => (
+									<SidebarMenu key={section.label ?? `section-${sectionIndex}`}>
+										{section.label ? (
+											<p className="px-3.5 pb-1.5 pt-3.5 text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+												{section.label}
+											</p>
+										) : null}
+										{section.items.map((item) => {
 											const isActive =
 												location.pathname === item.href ||
 												(item.href !== "/" &&
@@ -204,89 +230,39 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
 															to={item.href}
 															className="flex items-center gap-3"
 														>
-															{item.icon ? (
-																<item.icon className="h-4 w-4" />
-															) : null}
+															<item.icon className="h-4 w-4" />
 															<span>{item.label}</span>
-															{item.pageKey === "transactions" && Boolean(blockedRefundsCount) && (
+															{item.badge === "blockedRefunds" && Boolean(blockedRefundsCount) && (
 																<span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold text-destructive-foreground">
-																	{blockedRefundsCount}
-																</span>
+																{blockedRefundsCount}
+															</span>
 															)}
 														</Link>
 													</SidebarMenuButton>
 												</SidebarMenuItem>
 											);
-										}
-
-										const isOpen = openGroups[item.href] ?? false;
-										const isParentActive = item.children!.some((child) =>
-											isChildActive(child, location.pathname),
-										);
-
-										return (
-											<Collapsible
-												key={item.href}
-												open={isOpen}
-												onOpenChange={() => toggleGroup(item.href)}
-												asChild
-											>
-												<SidebarMenuItem>
-													<CollapsibleTrigger asChild>
-														<SidebarMenuButton isActive={isParentActive}>
-															{item.icon ? (
-																<item.icon className="h-4 w-4" />
-															) : null}
-															<span>{item.label}</span>
-															<ChevronDown
-																className={`ml-auto h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
-															/>
-														</SidebarMenuButton>
-													</CollapsibleTrigger>
-													<CollapsibleContent>
-														<SidebarMenuSub>
-															{item.children!.map((child) => {
-																const childActive = isChildActive(
-																	child,
-																	location.pathname,
-																);
-																return (
-																	<SidebarMenuSubItem key={child.href}>
-																		<SidebarMenuSubButton
-																			asChild
-																			isActive={childActive}
-																		>
-																			<Link to={child.href}>{child.label}</Link>
-																		</SidebarMenuSubButton>
-																	</SidebarMenuSubItem>
-																);
-															})}
-														</SidebarMenuSub>
-													</CollapsibleContent>
-												</SidebarMenuItem>
-											</Collapsible>
-										);
-									})}
-								</SidebarMenu>
+										})}
+									</SidebarMenu>
+								))}
 							</SidebarContent>
 
-							<SidebarFooter className="border-t border-white/10 p-3">
+							<SidebarFooter className="border-t border-border p-3.5">
 								<DropdownMenu>
 									<DropdownMenuTrigger asChild>
 										<Button
 											variant="ghost"
-											className="w-full justify-start gap-3 px-2 text-white hover:bg-white/10 hover:text-white"
+											className="w-full justify-start gap-3 px-2 text-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
 										>
 											<Avatar className="h-8 w-8">
-												<AvatarFallback className="rounded-md bg-[#2f6ba6] text-xs text-white">
+												<AvatarFallback className="rounded-md bg-primary text-xs text-primary-foreground">
 													{initials}
 												</AvatarFallback>
 											</Avatar>
 											<div className="flex flex-1 flex-col items-start text-left">
-												<span className="max-w-[120px] truncate text-sm font-medium text-white">
+												<span className="max-w-[120px] truncate text-sm font-medium text-foreground">
 													{profile?.full_name || "Admin"}
 												</span>
-												<span className="text-xs text-[#a9c9e8]">
+												<span className="text-xs text-muted-foreground">
 													{roleBadge}
 												</span>
 											</div>
@@ -306,7 +282,7 @@ export function BackofficeLayout({ children }: BackofficeLayoutProps) {
 							</SidebarFooter>
 						</Sidebar>
 
-						<SidebarInset className="min-w-0 flex-1 bg-[#f6f5f7]">
+						<SidebarInset className="min-w-0 flex-1 bg-background">
 							<div className="flex items-center justify-between border-b px-4 py-3 md:hidden">
 								<div className="flex items-center gap-2">
 									<Shield className="h-4 w-4 text-primary" />

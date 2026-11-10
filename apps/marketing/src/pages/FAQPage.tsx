@@ -3,6 +3,7 @@ import { cn } from "@shared/utils";
 import { MarketingLayout } from "@/components/MarketingLayout";
 import { usePlans } from "@/hooks/usePlans";
 import { usePlanPricing } from "@/hooks/usePlanPricing";
+import { useMarketingPricingMarkets } from "@/hooks/useMarketConfig";
 
 function FAQItem({ q, a }: { q: string; a: string }) {
   const [open, setOpen] = useState(false);
@@ -27,7 +28,10 @@ function FAQItem({ q, a }: { q: string; a: string }) {
 
 export default function FAQPage() {
   const { data: plans } = usePlans();
-  const { data: pricing } = usePlanPricing("USD");
+	const { data: pricingMarkets } = useMarketingPricingMarkets();
+	const pricingCurrency = pricingMarkets?.find((market) => market.isDefault)?.currencyCode ?? "GHS";
+	const { data: pricing } = usePlanPricing(pricingCurrency);
+  const supportedCurrencyText = Array.from(new Set((pricingMarkets ?? []).map((market) => market.currencyCode))).join(" and ") || "GHS and NGN";
   const trialDays =
     plans?.find((p) => p.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
 
@@ -45,7 +49,7 @@ export default function FAQPage() {
     {
       category: "Getting started",
       items: [
-        { q: "Do I need a card to start?", a: `No. Every plan starts with a ${trialDays}-day free trial and no card is required to begin.` },
+        { q: "Do I need a card to start?", a: `You can explore Salon Magik during the ${trialDays}-day trial without being charged. Before the trial ends, add a payment method to keep your salon online.` },
         { q: "How long does setup take?", a: "Most salons are fully set up in under 10 minutes. Onboarding walks you through adding your services, hours, and first team member." },
         { q: "Can my clients book without downloading an app?", a: "Yes. Clients book through your own link, with no app download and no account required on their end." },
         { q: "Do you support multiple languages?", a: "The platform currently runs in English. More language support is on our roadmap." },
@@ -54,23 +58,23 @@ export default function FAQPage() {
     {
       category: "Plans & billing",
       items: [
-        { q: "Can I move between plans as my team grows?", a: "Yes, you can upgrade or downgrade at any time from your settings. Your data, clients and history move with you." },
-        { q: "What happens when my trial ends?", a: "You'll be asked to choose a plan. If you don't, your account goes into read-only mode, but nothing is deleted. You can reactivate any time." },
-        { q: "Is there a discount for annual billing?", a: `Yes. Annual plans save you up to ${maxSavingsPct ?? 8}% compared to monthly billing, depending on your plan.` },
+        { q: "How does pricing change as my salon grows?", a: "There is one base subscription. Add locations, team seats, paid themes, Staff Operations, and SMS top-ups only when you need them." },
+        { q: "What happens when my trial ends?", a: "Your salon is taken offline until billing is completed. Your data is kept safely, and you can reactivate at any time." },
+        { q: "Is there a discount for annual billing?", a: `Yes. Annual billing saves up to ${maxSavingsPct ?? 8}% compared with monthly billing.` },
       ],
     },
     {
       category: "Payments & money",
       items: [
         { q: "Do you support mobile money and cards?", a: "Yes, both are supported at checkout, and you can track the split between them from your payments dashboard." },
-        { q: "What currencies do you support?", a: "We support GHS (Ghana cedis), NGN (Nigerian naira) and USD. Pricing is shown in your local currency." },
+        { q: "What currencies do you support?", a: `We currently support ${supportedCurrencyText}. Pricing is shown in the enabled currency for your market.` },
       ],
     },
     {
       category: "Features",
       items: [
         { q: "Is WhatsApp messaging supported?", a: "Not yet. It's on our roadmap. Today you can send personalised promotional messages and automated reminders to your clients via SMS and email, and birthday messages are sent automatically on your clients' birthdays. WhatsApp is coming soon." },
-        { q: "Can I manage multiple locations?", a: "Yes. The Chain plan supports multiple branches with a unified dashboard, shared client records, and per-location reporting." },
+        { q: "Can I manage multiple locations?", a: "Yes. Locations are added to the same subscription with a unified dashboard, shared client records, and per-location reporting." },
         { q: "Does Salon Magik have a mobile app?", a: "The web app is fully responsive and works great on mobile. A dedicated native app is on our roadmap." },
         { q: "Can I customise my booking page?", a: "Yes, you can set your brand colour, upload a banner image, add a short bio, and toggle availability. More customisation options are coming." },
         { q: "Can clients pay online when booking?", a: "Yes. You can enable online payments so clients pay in full or leave a deposit at the time of booking." },
@@ -80,7 +84,7 @@ export default function FAQPage() {
       category: "Team & staff",
       items: [
         { q: "How do staff members log in?", a: "Staff receive an invitation email. They create their own password and can only access what their role allows." },
-        { q: "Can I control what each staff member sees?", a: "Yes. Studio and Chain plans include role-based permissions, so you control access to reports, transactions, and settings." },
+        { q: "Can I control what each staff member sees?", a: "Yes. Role-based permissions are included, so you control access to reports, transactions, and settings." },
         { q: "What happens if a staff member leaves?", a: "You can deactivate their account instantly. Their appointment history is preserved, so nothing is lost." },
       ],
     },

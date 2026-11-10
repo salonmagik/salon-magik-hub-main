@@ -90,7 +90,7 @@ export function LandingHero({ isWaitlistMode, isLoading, onWaitlistClick }: Land
                   href={`${salonAppUrl}/signup`}
                   className="inline-block rounded-full bg-brand-yellow px-7 py-[15px] text-[15.5px] font-medium text-brand-purple-deep transition-transform hover:-translate-y-0.5"
                 >
-                  Start free, no card needed
+                  Start free, no charge during your trial
                 </a>
                 <a href="#" className="border-b border-white/35 pb-0.5 text-[15px] text-white">
                   Watch a 90 sec tour →

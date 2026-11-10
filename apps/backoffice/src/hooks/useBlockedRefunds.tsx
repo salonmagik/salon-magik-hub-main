@@ -25,9 +25,10 @@ export interface BlockedRefundFilters {
   pageSize: number;
 }
 
-export function useBlockedRefunds(filters: BlockedRefundFilters) {
+export function useBlockedRefunds(filters: BlockedRefundFilters, enabled = true) {
   return useQuery({
     queryKey: ["backoffice-blocked-refunds", filters],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_backoffice_blocked_refunds" as never, {
         p_limit: filters.pageSize,
@@ -41,9 +42,10 @@ export function useBlockedRefunds(filters: BlockedRefundFilters) {
 
 // Lightweight: a single-row fetch used to drive the unresolved-count badge
 // on the Transactions nav entry without duplicating the panel's own query.
-export function useBlockedRefundsCount() {
+export function useBlockedRefundsCount(enabled = true) {
   return useQuery({
     queryKey: ["backoffice-blocked-refunds-count"],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase.rpc("get_backoffice_blocked_refunds" as never, {
         p_limit: 1,

@@ -285,7 +285,7 @@ export default function CashflowPage() {
   const handleExport = (fileFormat: "csv" | "xlsx") => {
     const data = filteredTransactions.map((txn) => ({
       Date: fileFormat === "csv" ? format(new Date(txn.created_at), "yyyy-MM-dd HH:mm") : new Date(txn.created_at),
-      Branch: txn.appointment?.location?.name || "N/A",
+      Branch: txn.appointment?.location?.name || "—",
       Customer: txn.customer?.full_name || "Guest",
       Type: txn.type,
       Method: txn.method,
@@ -297,7 +297,7 @@ export default function CashflowPage() {
         ["Date", "Branch", "Customer", "Type", "Method", "Amount", "Status"],
         ...filteredTransactions.map((txn) => [
           format(new Date(txn.created_at), "yyyy-MM-dd HH:mm"),
-          txn.appointment?.location?.name || "N/A",
+          txn.appointment?.location?.name || "—",
           txn.customer?.full_name || "Guest",
           txn.type, txn.method,
           Number(txn.amount).toFixed(2),

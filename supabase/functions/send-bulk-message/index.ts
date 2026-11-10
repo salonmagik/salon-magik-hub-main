@@ -5,6 +5,7 @@ import { sendArkeselSMS, extractArkeselMessageId, resolveArkeselSenderId } from 
 import { checkAndAlertLowSmsBalance } from "../_shared/check-low-balance.ts";
 import { buildPublicBookingUrl } from "../_shared/public-booking-url.ts";
 import { DERIVED_SEGMENT_FLAGS, validateDerivedAudience } from "../_shared/broadcast-audience.ts";
+import { hasOperationalAccess, OPERATIONAL_ACCESS_ERROR } from "../_shared/tenant-access.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -364,6 +365,13 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    if (!hasOperationalAccess(tenant)) {
+      return new Response(
+        JSON.stringify({ error: OPERATIONAL_ACCESS_ERROR, code: "TENANT_OFFLINE" }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     // Nigerian telecom operators enforce an 08:00–20:00 Nigeria-time SMS
     // window. Enforce the same rule server-side so a caller cannot bypass the
     // salon-admin button or send directly to this function.
@@ -432,14 +440,14 @@ const handler = async (req: Request): Promise<Response> => {
     const smsSegments = channel === "sms" ? getSmsSegments(message) : 1;
     const totalCreditsRequired = typedCustomers.length * creditsPerMessage * smsSegments;
 
-    // Check credit balance
-    const { data: creditBalance, error: creditError } = await supabase
-      .from("communication_credits")
-      .select("balance")
-      .eq("tenant_id", tenantId)
-      .single();
+    // Resolve the purpose-specific SMS allowance. Email through Resend is
+    // intentionally unlimited at the product level and never consumes SMS.
+    const { data: creditSummary, error: creditError } = channel === "sms"
+      ? await supabase.rpc("get_sms_credit_summary", { p_tenant_id: tenantId })
+      : { data: [{ total: 0 }], error: null };
 
-    if (creditError || !creditBalance) {
+    const availableSmsCredits = Number(creditSummary?.[0]?.total ?? 0);
+    if (creditError || (channel === "sms" && !creditSummary?.[0])) {
       console.error("Failed to fetch credit balance:", creditError);
       return new Response(
         JSON.stringify({ error: "Credit balance not found. Please contact support." }),
@@ -447,10 +455,10 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    if (creditBalance.balance < totalCreditsRequired) {
+    if (channel === "sms" && availableSmsCredits < totalCreditsRequired) {
       return new Response(
         JSON.stringify({
-          error: `Insufficient credits. Required: ${totalCreditsRequired} (${creditsPerMessage * smsSegments} per message × ${typedCustomers.length} customers), Available: ${creditBalance.balance}. Please purchase more credits.`
+          error: `Insufficient SMS credits. Required: ${totalCreditsRequired} (${creditsPerMessage * smsSegments} per message × ${typedCustomers.length} customers), Available: ${availableSmsCredits}. Please purchase more credits.`
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -531,13 +539,11 @@ const handler = async (req: Request): Promise<Response> => {
         result
       );
 
-      const { data: creditsAfterBulk } = await supabase
-        .from("communication_credits")
-        .select("balance")
-        .eq("tenant_id", tenant.id)
-        .maybeSingle();
-      if (creditsAfterBulk) {
-        await checkAndAlertLowSmsBalance(supabase, tenant.id, creditsAfterBulk.balance, {
+      const { data: creditsAfterBulk } = await supabase.rpc("get_sms_credit_summary", {
+        p_tenant_id: tenant.id,
+      });
+      if (creditsAfterBulk?.[0]) {
+        await checkAndAlertLowSmsBalance(supabase, tenant.id, Number(creditsAfterBulk[0].total), {
           resendApiKey: Deno.env.get("RESEND_API_KEY"),
         });
       }
@@ -616,6 +622,7 @@ async function processBulkSMS(
     const promises = batch.map(async (customer, index) => {
       const messageRecord = batchMessages[index];
       let resolvedMessage: string | null = null;
+      let reservation: Record<string, unknown> | null = null;
       try {
         if (!customer.phone) {
           throw new Error("Customer has no phone number");
@@ -627,16 +634,22 @@ async function processBulkSMS(
           bookingLink,
         });
 
-        const smsResponse = await sendArkeselSMS({
+        const { data: reservationData, error: reservationError } = await supabase.rpc("reserve_sms_credits", {
+          p_tenant_id: tenant.id,
+          p_amount: creditsPerMessage,
+          p_purpose: "marketing",
+        });
+
+        reservation = reservationData as Record<string, unknown> | null;
+        if (reservationError || !reservation?.reserved) {
+          throw new Error("Insufficient SMS credits. Please purchase more credits.");
+        }
+
+        await sendArkeselSMS({
           to: customer.phone,
           from: resolveArkeselSenderId(customer.phone, tenantSenderId, "promotional"),
           message: resolvedMessage,
           useCase: "promotional",
-        });
-
-        await supabase.rpc("deduct_communication_credits", {
-          p_tenant_id: tenant.id,
-          p_amount: creditsPerMessage,
         });
 
         await supabase
@@ -667,6 +680,12 @@ async function processBulkSMS(
         result.creditsUsed += creditsPerMessage;
       } catch (error: any) {
         const errMsg = error.message || "Failed to send SMS";
+        if (reservation?.reserved) {
+          await supabase.rpc("restore_sms_credits", {
+            p_tenant_id: tenant.id,
+            p_reservation: reservation,
+          });
+        }
         result.failed++;
         result.failedMessages.push({
           customerId: customer.id,
@@ -776,12 +795,6 @@ async function processBulkEmail(
           console.error("Resend API error:", emailData);
           throw new Error(emailData.message || "Failed to send email");
         }
-
-        // Deduct credits from tenant (atomic RPC)
-        await supabase.rpc("deduct_communication_credits", {
-          p_tenant_id: tenant.id,
-          p_amount: creditsPerMessage,
-        });
 
         // Update manual_messages
         await supabase

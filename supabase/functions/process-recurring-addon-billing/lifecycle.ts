@@ -38,12 +38,97 @@ interface LifecycleTenant {
 export async function runLifecyclePass(req: Request, supabase: SupabaseClient) {
   const results: Array<Record<string, unknown>> = [];
 
+  await runTrialExpiry(supabase, results);
   await runCancellationsDue(supabase, results);
   await runDunningReminders(req, supabase, results);
   await runGraceExpiry(req, supabase, results);
   await runZeroTotalRestore(supabase, results);
 
   return results;
+}
+
+/**
+ * Convert an ended trial into a deterministic billing state before the charge
+ * pass runs. A tenant that already supplied a reusable authorization is moved
+ * to active with an immediate billing anchor, so the same invocation charges
+ * the first paid cycle. A tenant without one is suspended immediately; the
+ * owner can still reach billing/help and add a card to recover access.
+ */
+async function runTrialExpiry(supabase: SupabaseClient, results: Array<Record<string, unknown>>) {
+  const { data: dueTrials, error } = await supabase
+    .from("tenants")
+    .select("id, subscription_status, trial_ends_at, billing_cycle, paystack_authorization_code")
+    .eq("subscription_status", "trialing")
+    .not("trial_ends_at", "is", null)
+    .lte("trial_ends_at", new Date().toISOString());
+
+  if (error) {
+    console.error("Failed to load trial-expired tenants:", error);
+    results.push({ stage: "trial_expiry", status: "error", error: error.message });
+    return;
+  }
+
+  for (const tenant of dueTrials || []) {
+    const { data: override } = await supabase
+      .from("tenant_trial_overrides")
+      .select("id")
+      .eq("tenant_id", tenant.id)
+      .eq("status", "active")
+      .lte("starts_at", new Date().toISOString())
+      .gt("ends_at", new Date().toISOString())
+      .limit(1)
+      .maybeSingle();
+
+    // A gifted/managed trial remains operational until its override ends.
+    if (override) continue;
+
+    const hasPaymentMethod = Boolean(tenant.paystack_authorization_code);
+    const patch = hasPaymentMethod
+      ? {
+          subscription_status: "active",
+          next_billing_at: new Date().toISOString(),
+          billing_retry_count: 0,
+          billing_grace_ends_at: null,
+          billing_grace_started_at: null,
+          suspended_at: null,
+        }
+      : {
+          subscription_status: "suspended",
+          next_billing_at: null,
+          billing_grace_ends_at: null,
+          billing_grace_started_at: null,
+          suspended_at: new Date().toISOString(),
+        };
+
+    const { data: updated, error: updateError } = await supabase
+      .from("tenants")
+      .update(patch)
+      .eq("id", tenant.id)
+      .eq("subscription_status", "trialing")
+      .select("id");
+
+    if (updateError) {
+      console.error(`Failed to transition trial tenant ${tenant.id}:`, updateError);
+      results.push({ tenantId: tenant.id, stage: "trial_expiry", status: "error", error: updateError.message });
+      continue;
+    }
+
+    if (!updated || updated.length === 0) continue;
+
+    await supabase.from("audit_logs").insert({
+      tenant_id: tenant.id,
+      action: hasPaymentMethod ? "trial_ended_billing_started" : "trial_ended_subscription_suspended",
+      entity_type: "tenant",
+      entity_id: tenant.id,
+      metadata: { trigger: "cron", payment_method_on_file: hasPaymentMethod },
+    });
+
+    results.push({
+      tenantId: tenant.id,
+      stage: "trial_expiry",
+      status: hasPaymentMethod ? "billing_started" : "suspended",
+    });
+  }
 }
 
 async function runCancellationsDue(supabase: SupabaseClient, results: Array<Record<string, unknown>>) {

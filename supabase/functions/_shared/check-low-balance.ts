@@ -2,7 +2,7 @@ import { createTenantNotification, getSalonRecipients, sendResendEmail } from ".
 import { getSmsCreditPricing } from "./sms-credit-pricing.ts";
 
 /**
- * Called after a message-credit debit. Fires an in-app notification (and
+ * Called after an SMS reservation. Fires an in-app notification (and
  * email, if a Resend key is available) the first time a tenant's balance
  * drops below the configured threshold — low_balance_alerted_at gates it
  * to once per drop, cleared again on the tenant's next credit purchase.

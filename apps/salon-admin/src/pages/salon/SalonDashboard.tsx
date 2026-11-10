@@ -49,7 +49,7 @@ const STATUS_STYLES: Record<
 function TrendText({
   value,
   suffix,
-  nullLabel = "N/A",
+  nullLabel = "—",
 }: {
   value: number | null;
   suffix: string;
@@ -304,12 +304,12 @@ export default function SalonDashboard() {
 						<div className="flex items-center gap-2.5">
 							<MessageSquare className="w-4 h-4 text-warning-foreground flex-shrink-0" />
 							<p className="text-sm text-warning-foreground">
-								{stats.communicationCredits === 0 ? (
+										{stats.marketingCommunicationCredits === 0 ? (
 									<span className="font-medium">You're out of SMS marketing credits.</span>
 								) : (
 									<>
 										<span className="font-medium">SMS marketing credits are running low:</span>{" "}
-										{stats.communicationCredits} remaining.
+												{stats.marketingCommunicationCredits} remaining.
 									</>
 								)}
 							</p>
@@ -376,7 +376,7 @@ export default function SalonDashboard() {
 									<p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">
 										{canViewPayments
 											? `${currency} ${stats.revenueToday.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-											: "N/A"}
+											: "—"}
 									</p>
 									<div className="mt-2">
 										{canViewPayments && stats.revenueTrendPct !== null ? (
@@ -423,9 +423,7 @@ export default function SalonDashboard() {
 										</Tooltip>
 									</div>
 									<p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">
-										{canViewReports && stats.showUpRate !== null
-											? `${stats.showUpRate}%`
-											: "N/A"}
+										{canViewReports ? `${stats.showUpRate ?? 0}%` : "—"}
 									</p>
 									<div className="mt-2">
 										{canViewReports && stats.showUpRateTrend !== null ? (
@@ -463,7 +461,7 @@ export default function SalonDashboard() {
 										New Clients
 									</p>
 									<p className="mt-1 font-serif text-xl font-semibold sm:text-2xl">
-										{canViewCustomers ? stats.newClientsThisWeek : "N/A"}
+										{canViewCustomers ? stats.newClientsThisWeek : "—"}
 									</p>
 									<div className="mt-2">
 										{canViewCustomers && stats.newClientsTrend !== null ? (

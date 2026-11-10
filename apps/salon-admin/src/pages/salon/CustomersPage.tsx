@@ -1045,13 +1045,13 @@ export default function CustomersPage() {
 										<p className="font-medium">{row.customer_name}</p>
 										<p className="text-xs text-muted-foreground">
 											{row.days_since_last_transaction} days inactive • Last
-											item: {row.last_purchased_item || "N/A"}
+										item: {row.last_purchased_item || "—"}
 										</p>
 										<p className="text-xs text-muted-foreground">
 											Last transaction:{" "}
 											{row.last_transaction_at
 												? new Date(row.last_transaction_at).toLocaleDateString()
-												: "N/A"}
+												: "—"}
 										</p>
 									</div>
 									<div className="flex items-center gap-2">
@@ -1118,7 +1118,7 @@ export default function CustomersPage() {
 									</SelectTrigger>
 									<SelectContent>
 										<SelectItem value="email">Email (free)</SelectItem>
-										<SelectItem value="sms">SMS (2 credits)</SelectItem>
+										<SelectItem value="sms">SMS (uses marketing credits)</SelectItem>
 									</SelectContent>
 								</Select>
 							</div>

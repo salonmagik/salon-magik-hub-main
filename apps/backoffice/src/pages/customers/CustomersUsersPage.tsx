@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { supabase } from "@/lib/supabase";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
+import { Card, CardContent } from "@ui/card";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Input } from "@ui/input";
@@ -100,28 +100,24 @@ export default function CustomersUsersPage() {
     <BackofficeLayout>
       <div className="backoffice-page">
         <div>
-          <h1 className="text-[22px] font-medium tracking-tight">Users</h1>
-          <p className="mt-1 text-muted-foreground">
-            {(users || []).length.toLocaleString()} total across salon-admin and client-portal. View only, no
-            actions can be taken here.
+          <h1 className="text-[20px] font-bold tracking-tight">Users</h1>
+          <p className="mt-[3px] max-w-3xl text-[12.5px] text-muted-foreground">
+            Every person with a Salon Magik login, across every app and every salon — for support lookups, not CRM.
+            Owners and staff live here too; Salons is the business entity, this is the person.
           </p>
         </div>
 
-        <div className="relative max-w-md">
+        <div className="relative max-w-[320px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by name, email, phone, or salon"
+            placeholder="Search by name, email, or phone…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-11 rounded-xl bg-white pl-9"
+            className="h-11 rounded-xl bg-background pl-9"
           />
         </div>
 
         <Card className="backoffice-panel overflow-hidden">
-          <CardHeader className="border-b">
-            <CardTitle className="text-lg">All users</CardTitle>
-            <CardDescription>{filteredUsers.length.toLocaleString()} matching users</CardDescription>
-          </CardHeader>
           <CardContent className="p-0">
             {isLoading ? (
               <div className="flex justify-center py-12">
@@ -144,21 +140,21 @@ export default function CustomersUsersPage() {
                 <Table className="min-w-[900px]">
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Phone</TableHead>
-                      <TableHead>Salons</TableHead>
-                      <TableHead>Joined</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
+                      <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Name</TableHead>
+                      <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Email</TableHead>
+                      <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Phone</TableHead>
+                      <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Salons</TableHead>
+                      <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Joined</TableHead>
+                      <TableHead className="h-auto w-[50px] px-4 py-2.5"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredUsers.map((user) => (
-                      <TableRow key={user.user_id} className="h-16">
-                        <TableCell className="font-medium">{user.full_name || "N/A"}</TableCell>
-                        <TableCell className="text-sm">{user.email || "N/A"}</TableCell>
-                        <TableCell className="text-sm">{user.phone || "N/A"}</TableCell>
-                        <TableCell>
+                      <TableRow key={user.user_id}>
+                        <TableCell className="px-4 py-3 text-[13px] font-semibold">{user.full_name || "—"}</TableCell>
+                        <TableCell className="px-4 py-3 text-[13px]">{user.email || "—"}</TableCell>
+                        <TableCell className="px-4 py-3 text-[13px]">{user.phone || "—"}</TableCell>
+                        <TableCell className="px-4 py-3 text-[13px]">
                           {user.tenant_roles.length === 0 ? (
                             <span className="text-sm text-muted-foreground">No salon</span>
                           ) : (
@@ -174,10 +170,10 @@ export default function CustomersUsersPage() {
                             </div>
                           )}
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
+                        <TableCell className="px-4 py-3 text-[13px] text-muted-foreground">
                           {format(new Date(user.created_at), "MMM d, yyyy")}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="px-4 py-3">
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedUser(user)}>
                             <Eye className="h-4 w-4" />
                           </Button>

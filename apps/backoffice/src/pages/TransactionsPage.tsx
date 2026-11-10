@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
+import { useBackofficeAuth } from "@/hooks/useBackofficeAuth";
 import {
   useBackofficeTransactions,
   useBackofficeTransactionSummary,
@@ -43,11 +44,18 @@ function formatMoney(amount: number, currency: string) {
   return `${symbol}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function formatCompactMoney(amount: number, currency: string) {
+  const symbol = CURRENCY_SYMBOLS[currency] || `${currency} `;
+  if (amount >= 1_000_000) return `${symbol}${(amount / 1_000_000).toFixed(1)}M`;
+  if (amount >= 1_000) return `${symbol}${(amount / 1_000).toFixed(1)}K`;
+  return `${symbol}${amount.toFixed(0)}`;
+}
+
 const TYPE_META: Record<string, { label: string; className: string }> = {
-  payment: { label: "Payment", className: "bg-sky-50 text-sky-700" },
-  deposit: { label: "Deposit", className: "bg-amber-50 text-amber-700" },
-  refund: { label: "Refund", className: "bg-red-50 text-red-700" },
-  purse_topup: { label: "Store-credit top-up", className: "bg-emerald-50 text-emerald-700" },
+  payment: { label: "Payment", className: "bg-info-bg text-info" },
+  deposit: { label: "Deposit", className: "bg-warning-bg text-warning" },
+  refund: { label: "Refund", className: "bg-destructive-bg text-destructive" },
+  purse_topup: { label: "Store-credit top-up", className: "bg-success-bg text-success" },
   purse_redemption: { label: "Store-credit used", className: "bg-muted text-muted-foreground" },
 };
 
@@ -86,6 +94,7 @@ function presetRange(days: number) {
 }
 
 export default function TransactionsPage() {
+  const { backofficeUser } = useBackofficeAuth();
   const [searchParams] = useSearchParams();
   const [datePreset, setDatePreset] = useState<string>("30d");
   const [range, setRange] = useState(() => presetRange(30));
@@ -99,6 +108,7 @@ export default function TransactionsPage() {
   const [selected, setSelected] = useState<BackofficeTransactionRow | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [blockedRefundsPage, setBlockedRefundsPage] = useState(0);
+  const blockedRefundsSectionRef = useRef<HTMLDivElement>(null);
 
   const { data: tenants } = useTenants();
   const { data: summary, isLoading: summaryLoading } = useBackofficeTransactionSummary(range.from, range.to);
@@ -121,7 +131,7 @@ export default function TransactionsPage() {
   const { data: blockedRefunds, isLoading: blockedRefundsLoading } = useBlockedRefunds({
     page: blockedRefundsPage,
     pageSize: PAGE_SIZE,
-  });
+  }, Boolean(backofficeUser?.user_id));
   const blockedRefundsTotal = blockedRefunds?.[0]?.total_count ?? 0;
   const blockedRefundsTotalPages = Math.max(1, Math.ceil(blockedRefundsTotal / PAGE_SIZE));
 
@@ -197,15 +207,12 @@ export default function TransactionsPage() {
 
   return (
     <BackofficeLayout>
-      <div className="space-y-5 p-6">
+      <div className="backoffice-page">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-semibold flex items-center gap-2">
-              <Receipt className="h-6 w-6 text-primary" />
-              All Transactions
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1 max-w-xl">
-              Every customer payment across every tenant: bookings, deposits, refunds, and store-credit activity, in one place. Read-only; refunds and disputes are actioned from each tenant's own Cashflow tab.
+            <h1 className="text-[20px] font-bold">Transactions</h1>
+            <p className="text-[12.5px] text-muted-foreground mt-[3px] max-w-xl">
+              Every customer payment across every salon. Disputes and refunds are actioned from each salon's own Cashflow tab, not here.
             </p>
           </div>
           <Button variant="outline" onClick={handleExport} disabled={isExporting}>
@@ -215,50 +222,42 @@ export default function TransactionsPage() {
         </div>
 
         {/* Stat cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {summaryLoading ? (
             <div className="col-span-full flex justify-center py-6">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <>
-              {(summary?.byCurrency.length ? summary.byCurrency : [{ currency: "NGN", volume: 0, tx_count: 0 }]).map((c) => (
-                <Card key={c.currency}>
-                  <CardContent className="p-4">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">
-                      Volume · {c.currency}
-                    </p>
-                    <p className="text-xl font-semibold tabular-nums">{formatMoney(c.volume, c.currency)}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{c.tx_count} transactions</p>
-                  </CardContent>
-                </Card>
-              ))}
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2">Refunded</p>
-                  <p className="text-xl font-semibold tabular-nums text-destructive">{summary?.totals.refund_count ?? 0}</p>
-                  <p className="text-xs text-muted-foreground mt-1">across all currencies</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-2 flex items-center gap-1">
-                    <Gauge className="h-3 w-3" /> Success rate
-                  </p>
-                  <p className="text-xl font-semibold tabular-nums">
-                    {successRate === null ? "N/A" : `${successRate.toFixed(1)}%`}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {summary?.totals.failed_count ?? 0} failed of {summary?.totals.total_count ?? 0}
-                  </p>
-                </CardContent>
-              </Card>
+              <div className="backoffice-panel p-4">
+                <p className="text-[11.5px] text-muted-foreground font-semibold">Volume, {datePreset === "today" ? "today" : datePreset}</p>
+                <p className="text-[22px] font-bold tabular-nums mt-1">
+                  {(summary?.byCurrency.length ? summary.byCurrency : []).map((c, i) => (
+                    <span key={c.currency} className={i > 0 ? "text-sm text-muted-foreground font-medium ml-1.5" : ""}>
+                      {i > 0 ? "+ " : ""}{formatCompactMoney(c.volume, c.currency)}
+                    </span>
+                  ))}
+                  {!summary?.byCurrency.length && formatCompactMoney(0, "NGN")}
+                </p>
+              </div>
+              <div className="backoffice-panel p-4">
+                <p className="text-[11.5px] text-muted-foreground font-semibold flex items-center gap-1">
+                  <Gauge className="h-3 w-3" /> Success rate
+                </p>
+                <p className="text-[22px] font-bold tabular-nums mt-1 text-success">
+                  {successRate === null ? "0.0%" : `${successRate.toFixed(1)}%`}
+                </p>
+              </div>
+              <div className="backoffice-panel p-4 border-destructive/60">
+                <p className="text-[11.5px] text-muted-foreground font-semibold">Blocked refunds</p>
+                <p className="text-[22px] font-bold tabular-nums mt-1 text-destructive">{blockedRefundsTotal}</p>
+              </div>
             </>
           )}
         </div>
 
         {/* Filters */}
-        <Card>
+        <Card className="backoffice-panel">
           <CardContent className="p-3 flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 flex-1 min-w-[220px] bg-muted/50 border rounded-md px-3 py-1.5">
               <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -350,10 +349,21 @@ export default function TransactionsPage() {
               {meta.label} <span className="opacity-70 tabular-nums">{typeCountFor(key)}</span>
             </button>
           ))}
+          <button
+            onClick={() => blockedRefundsSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border bg-card text-muted-foreground"
+          >
+            Blocked
+            {blockedRefundsTotal > 0 && (
+              <span className="rounded-full bg-destructive-bg px-1.5 text-[10px] font-semibold text-destructive">
+                {blockedRefundsTotal}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Table */}
-        <Card className="overflow-hidden">
+        <Card className="backoffice-panel overflow-hidden">
           <CardContent className="p-0">
             {rowsLoading ? (
               <div className="flex items-center justify-center py-16">
@@ -394,13 +404,13 @@ export default function TransactionsPage() {
                         </TableCell>
                         <TableCell className="text-sm">{row.tenant_name}</TableCell>
                         <TableCell>
-                          <div className="text-sm font-medium">{row.customer_name || "N/A"}</div>
+                          <div className="text-sm font-medium">{row.customer_name || "—"}</div>
                           <div className="text-xs text-muted-foreground">
                             {row.type === "purse_topup" || row.type === "purse_redemption"
                               ? "Store credit"
                               : row.service_name
                                 ? `${row.service_name}${row.service_count > 1 ? ` +${row.service_count - 1}` : ""}`
-                                : "N/A"}
+                                : "—"}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -411,12 +421,12 @@ export default function TransactionsPage() {
                             <MethodIcon className="h-3.5 w-3.5" /> {methodMeta.label}
                           </div>
                         </TableCell>
-                        <TableCell className="text-sm text-muted-foreground capitalize">{row.provider || "N/A"}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground capitalize">{row.provider || "—"}</TableCell>
                         <TableCell className={`text-right tabular-nums font-semibold ${row.type === "refund" ? "text-destructive" : ""}`}>
                           {row.type === "refund" ? "-" : ""}{formatMoney(row.amount, row.currency)}
                         </TableCell>
                         <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
-                          {row.charges ? formatMoney(row.charges, row.currency) : "N/A"}
+                          {formatMoney(row.charges ?? 0, row.currency)}
                         </TableCell>
                         <TableCell>
                           <span className={`text-xs font-medium capitalize ${STATUS_META[row.status] || ""}`}>
@@ -449,17 +459,13 @@ export default function TransactionsPage() {
         </Card>
 
         {/* Blocked refunds: refunds rejected because the salon had already
-            withdrawn the money. See refund-clawback-safeguard design. */}
-        <div>
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <ShieldAlert className="h-5 w-5 text-destructive" />
-            Blocked refunds
-          </h2>
-          <p className="text-sm text-muted-foreground mt-1 max-w-xl">
-            Refund attempts rejected because the salon's wallet could no longer cover the amount: the salon had already withdrawn the money. Follow up with these salons directly.
-          </p>
-        </div>
-        <Card className="overflow-hidden">
+            withdrawn the money. Read-only — the salon is followed up with directly. */}
+        <Card ref={blockedRefundsSectionRef} className="backoffice-panel overflow-hidden border-destructive/60">
+          <div className="flex items-center gap-2 border-b px-[18px] py-3.5">
+            <ShieldAlert className="h-4 w-4 text-destructive" />
+            <span className="text-sm font-bold">Blocked refunds</span>
+            <span className="text-xs text-muted-foreground">— the salon had already withdrawn the funds. Read-only.</span>
+          </div>
           <CardContent className="p-0">
             {blockedRefundsLoading ? (
               <div className="flex items-center justify-center py-16">
@@ -489,7 +495,7 @@ export default function TransactionsPage() {
                       </TableCell>
                       <TableCell className="text-sm">{row.tenant_name}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className="bg-red-50 text-red-700 capitalize">{row.refund_type}</Badge>
+                        <Badge variant="secondary" className="bg-destructive-bg text-destructive capitalize">{row.refund_type}</Badge>
                       </TableCell>
                       <TableCell className="text-right tabular-nums font-semibold text-destructive">
                         {formatMoney(row.attempted_amount, row.currency)}
@@ -500,7 +506,7 @@ export default function TransactionsPage() {
                       <TableCell className="text-right tabular-nums text-sm text-muted-foreground">
                         {formatMoney(row.shortfall, row.currency)}
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{row.attempted_by_email || "N/A"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{row.attempted_by_email || "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -553,14 +559,14 @@ export default function TransactionsPage() {
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Customer</span>
-                  <span className="font-medium">{selected.customer_name || "N/A"}</span>
+                  <span className="font-medium">{selected.customer_name || "—"}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">For</span>
                   <span className="font-medium">
                     {selected.type === "purse_topup" || selected.type === "purse_redemption"
                       ? "Store credit balance"
-                      : selected.service_name || "N/A"}
+                      : selected.service_name || "—"}
                   </span>
                 </div>
                 <div className="flex justify-between py-2 text-sm">
@@ -577,15 +583,15 @@ export default function TransactionsPage() {
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Charges (platform + customer fee)</span>
-                  <span className="font-medium">{selected.charges ? formatMoney(selected.charges, selected.currency) : "N/A"}</span>
+                  <span className="font-medium">{formatMoney(selected.charges ?? 0, selected.currency)}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b text-sm">
                   <span className="text-muted-foreground">Provider</span>
-                  <span className="font-medium capitalize">{selected.provider || "N/A"}</span>
+                  <span className="font-medium capitalize">{selected.provider || "—"}</span>
                 </div>
                 <div className="flex justify-between py-2 text-sm">
                   <span className="text-muted-foreground">Provider reference</span>
-                  <span className="font-mono text-xs">{selected.provider_reference || "N/A"}</span>
+                  <span className="font-mono text-xs">{selected.provider_reference || "—"}</span>
                 </div>
               </div>
 
@@ -597,7 +603,7 @@ export default function TransactionsPage() {
                 </div>
                 <div className="flex justify-between py-2 text-sm">
                   <span className="text-muted-foreground">Appointment</span>
-                  <span className="font-mono text-xs">{selected.appointment_id || "N/A"}</span>
+                  <span className="font-mono text-xs">{selected.appointment_id || "—"}</span>
                 </div>
               </div>
             </>

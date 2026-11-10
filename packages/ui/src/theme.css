@@ -31,6 +31,9 @@
     --warning: 45 93% 47%;
     --warning-foreground: 45 93% 20%;
     --warning-bg: 48 96% 89%;
+    --info: 212 65% 38%;
+    --info-foreground: 0 0% 100%;
+    --info-bg: 212 68% 94%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
     --destructive-bg: 0 93% 94%;
@@ -49,33 +52,43 @@
   }
 
   .dark {
-    --background: 262 30% 8%;
-    --foreground: 262 10% 95%;
-    --card: 262 30% 10%;
-    --card-foreground: 262 10% 95%;
-    --popover: 262 30% 10%;
-    --popover-foreground: 262 10% 95%;
-    --primary: 262 36% 65%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 262 20% 15%;
-    --secondary-foreground: 262 10% 95%;
-    --muted: 262 20% 15%;
-    --muted-foreground: 262 10% 60%;
-    --accent: 42 89% 63%;
-    --accent-foreground: 262 46% 15%;
-    --destructive: 0 62% 50%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 262 20% 18%;
-    --input: 262 20% 18%;
-    --ring: 262 36% 65%;
-    --sidebar-background: 262 30% 8%;
-    --sidebar-foreground: 262 10% 95%;
-    --sidebar-primary: 42 89% 63%;
-    --sidebar-primary-foreground: 262 46% 15%;
-    --sidebar-accent: 262 20% 15%;
-    --sidebar-accent-foreground: 42 89% 63%;
-    --sidebar-border: 262 20% 18%;
-    --sidebar-ring: 42 89% 63%;
+    --background: 249 28% 10%;        /* #141220 */
+    --foreground: 257 28% 95%;        /* #F1EFF6 */
+    --card: 251 24% 13%;              /* #1C1929 */
+    --card-foreground: 257 28% 95%;
+    --popover: 251 24% 13%;
+    --popover-foreground: 257 28% 95%;
+    --primary: 256 49% 68%;           /* #9C87D6 */
+    --primary-foreground: 256 25% 12%; /* #1B1726 */
+    --secondary: 251 31% 21%;         /* #2B2546 */
+    --secondary-foreground: 257 28% 95%;
+    --muted: 250 26% 17%;             /* #242037 */
+    --muted-foreground: 254 15% 73%;  /* #B4AFC4 */
+    --accent: 42 77% 60%;             /* #E8B94B */
+    --accent-foreground: 40 45% 16%;  /* #3A2E16 */
+    --success: 155 59% 56%;
+    --success-foreground: 157 44% 14%;
+    --success-bg: 157 44% 14%;
+    --warning: 42 76% 60%;
+    --warning-foreground: 43 57% 15%;
+    --warning-bg: 43 57% 15%;
+    --destructive: 4 82% 72%;         /* #F2847C */
+    --destructive-foreground: 4 38% 16%;
+    --destructive-bg: 4 38% 16%;      /* #3A1C1A */
+    --info: 212 75% 71%;              /* #7CB1EC */
+    --info-foreground: 212 46% 17%;
+    --info-bg: 212 46% 17%;           /* #182B41 */
+    --border: 252 21% 23%;            /* #332E47 */
+    --input: 252 21% 23%;
+    --ring: 256 49% 68%;
+    --sidebar-background: 251 24% 13%; /* matches --card, per the artifact */
+    --sidebar-foreground: 254 15% 73%; /* text-muted, for inactive items */
+    --sidebar-primary: 256 49% 68%;
+    --sidebar-primary-foreground: 256 25% 12%;
+    --sidebar-accent: 251 31% 21%;     /* primary-soft, active pill */
+    --sidebar-accent-foreground: 256 49% 68%; /* primary, active item text */
+    --sidebar-border: 252 21% 23%;
+    --sidebar-ring: 256 49% 68%;
   }
 }
 

@@ -192,15 +192,19 @@ serve(async (req) => {
               `on ${apptDate}. See you soon!`;
 
             const creditsRequired = getReminderSmsCredits(message);
-            const { data: creditsReserved, error: reservationError } = await supabase.rpc(
-              "reserve_communication_credits",
-              { p_tenant_id: first.tenant_id, p_amount: creditsRequired },
+            const { data: reservation, error: reservationError } = await supabase.rpc(
+              "reserve_sms_credits",
+              {
+                p_tenant_id: first.tenant_id,
+                p_amount: creditsRequired,
+                p_purpose: "appointment_reminder",
+              },
             );
 
             if (reservationError) {
               throw new Error(`Unable to reserve SMS credits: ${reservationError.message}`);
             }
-            if (!creditsReserved) {
+            if (!reservation?.reserved) {
               throw new Error(`Insufficient SMS credits (need ${creditsRequired})`);
             }
 
@@ -213,9 +217,9 @@ serve(async (req) => {
               });
             } catch (providerError) {
               // Do not charge a salon when Arkesel rejected the message.
-              await supabase.rpc("restore_communication_credits", {
+              await supabase.rpc("restore_sms_credits", {
                 p_tenant_id: first.tenant_id,
-                p_amount: creditsRequired,
+                p_reservation: reservation,
               });
               throw providerError;
             }

@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { useBackofficeAuth } from "@/hooks";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
 import { Label } from "@ui/label";
 import { Switch } from "@ui/switch";
@@ -19,17 +18,8 @@ import {
 } from "@ui/dialog";
 import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 import { cn } from "@shared/utils";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@ui/table";
 import { toast } from "sonner";
-import { Clock, ShieldCheck } from "lucide-react";
-import { format } from "date-fns";
+import { ShieldCheck } from "lucide-react";
 
 type MarketingToggle = {
   id: string;
@@ -175,14 +165,16 @@ export default function FeatureFlagsPage() {
     setSecurityError("");
   };
 
+  const rows = [waitlistToggle, geoToggle].filter(Boolean) as MarketingToggle[];
+
   return (
     <BackofficeLayout>
-      <div className="p-6 space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="backoffice-page">
+        <div className="flex items-center justify-between max-w-[900px]">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Feature Flags</h1>
-            <p className="text-muted-foreground">
-              Marketing now uses deterministic master toggles only. Rollout rules and simulator are retired.
+            <h1 className="text-[20px] font-bold tracking-tight">Feature flags</h1>
+            <p className="mt-[3px] text-[12.5px] text-muted-foreground">
+              Platform-wide toggles that ship or hide a feature across every tenant — not tenant-specific entitlements, which live on the tenant's own plan.
             </p>
           </div>
           <Badge variant="outline" className="gap-1">
@@ -191,56 +183,37 @@ export default function FeatureFlagsPage() {
           </Badge>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Marketing Master Toggles</CardTitle>
-            <CardDescription>
-              These two toggles directly control signup/waitlist and other-countries interest behavior in marketing.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <p className="py-6 text-center text-muted-foreground">Loading toggles...</p>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Feature</TableHead>
-                    <TableHead>Key</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Last Updated</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {[waitlistToggle, geoToggle]
-                    .filter(Boolean)
-                    .map((toggle) => (
-                      <TableRow key={toggle!.id}>
-                        <TableCell>
-                          <p className="font-medium">{toggle!.display_name}</p>
-                          <p className="text-xs text-muted-foreground">{toggle!.description || "No description"}</p>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{toggle!.feature_key}</TableCell>
-                        <TableCell>
-                          <Switch
-                            checked={toggle!.master_enabled}
-                            disabled={!isSuperAdmin}
-                            onCheckedChange={(checked) => openToggleDialog(toggle!, checked)}
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            {format(new Date(toggle!.updated_at), "MMM d, yyyy HH:mm")}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+        <div className="backoffice-panel max-w-[900px] overflow-hidden">
+          {isLoading ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Loading toggles...</p>
+          ) : rows.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">No feature flags configured yet.</p>
+          ) : (
+            rows.map((toggle, index) => (
+              <div
+                key={toggle.id}
+                className={`flex items-center gap-3.5 px-5 py-4 ${index < rows.length - 1 ? "border-b border-border" : ""}`}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-semibold">{toggle.display_name}</div>
+                  <div className="text-[11.5px] text-muted-foreground">{toggle.description || "No description"}</div>
+                </div>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    toggle.master_enabled ? "bg-success-bg text-success" : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  {toggle.master_enabled ? "Live" : "Off"}
+                </span>
+                <Switch
+                  checked={toggle.master_enabled}
+                  disabled={!isSuperAdmin}
+                  onCheckedChange={(checked) => openToggleDialog(toggle, checked)}
+                />
+              </div>
+            ))
+          )}
+        </div>
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent>

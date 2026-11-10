@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, createButton, wrapEmailTemplate, EMAIL_STYLES } from "../_shared/email-template.ts";
 import { requireTenantMembership, resolveRequestActor } from "../_shared/request-auth.ts";
+import { hasOperationalAccess, OPERATIONAL_ACCESS_ERROR } from "../_shared/tenant-access.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
@@ -184,7 +185,7 @@ const handler = async (req: Request): Promise<Response> => {
         customer:customers!appointments_customer_id_fkey(id, full_name, email),
         services:appointment_services(id, service_name, price),
         location:locations(name, address, city),
-        tenant:tenants!tenant_id(name, currency, logo_url, banner_urls, plan)
+        tenant:tenants!tenant_id(name, currency, logo_url, banner_urls, plan, subscription_status, trial_ends_at)
       `)
       .eq("id", appointmentId)
       .single();
@@ -201,6 +202,13 @@ const handler = async (req: Request): Promise<Response> => {
       corsHeaders,
     );
     if (membershipError) return membershipError;
+
+    if (action === "reminder" && !hasOperationalAccess(appointment.tenant as { subscription_status?: string; trial_ends_at?: string | null })) {
+      return new Response(JSON.stringify({ error: OPERATIONAL_ACCESS_ERROR }), {
+        status: 402,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
 
     const customerEmail = appointment.customer?.email;
     if (!customerEmail) {
@@ -298,7 +306,7 @@ const handler = async (req: Request): Promise<Response> => {
       (s: { id: string }) => packageNameByAppointmentServiceId.has(s.id),
     );
     const servicesList = !hasAnyCoveredService
-      ? appointment.services?.map((s: { service_name: string }) => s.service_name).join(", ") || "N/A"
+      ? appointment.services?.map((s: { service_name: string }) => s.service_name).join(", ") || "—"
       : (appointment.services || [])
           .map((s: { id: string; service_name: string; price: number }) => {
             const packageName = packageNameByAppointmentServiceId.get(s.id);
@@ -306,7 +314,7 @@ const handler = async (req: Request): Promise<Response> => {
               ? `${s.service_name} (covered by package: ${packageName})`
               : `${s.service_name} (${tenant?.currency || "GHS"} ${Number(s.price).toFixed(2)})`;
           })
-          .join("; ") || "N/A";
+          .join("; ") || "—";
     const totalAmount = `${tenant?.currency || "GHS"} ${Number(appointment.total_amount).toFixed(2)}`;
     const outstandingAmount = Math.max(
       Number(appointment.total_amount || 0) - Number(appointment.amount_paid || 0),
@@ -332,7 +340,7 @@ const handler = async (req: Request): Promise<Response> => {
       : "";
     const locationText = appointment.location
       ? `${appointment.location.name}${appointment.location.address ? `, ${appointment.location.address}` : ""}${appointment.location.city ? `, ${appointment.location.city}` : ""}`
-      : "N/A";
+      : "—";
 
     let appointmentDate = "TBD";
     let appointmentTime = "TBD";

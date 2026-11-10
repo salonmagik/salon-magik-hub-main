@@ -104,14 +104,14 @@ export default function JournalPage() {
                         <TableCell>{format(new Date(entry.occurred_at), "d MMM yyyy, h:mm a")}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <span>{entry.appointment?.scheduled_start ? format(new Date(entry.appointment.scheduled_start), "d MMM, h:mm a") : "N/A"}</span>
+                            <span>{entry.appointment?.scheduled_start ? format(new Date(entry.appointment.scheduled_start), "d MMM, h:mm a") : "—"}</span>
                             <Badge variant="outline">Paid offline</Badge>
                           </div>
                           {entry.appointment?.booking_reference && <p className="text-xs text-muted-foreground">{entry.appointment.booking_reference}</p>}
                         </TableCell>
-                        <TableCell>{entry.customer?.full_name || "N/A"}</TableCell>
-                        <TableCell>{entry.appointment?.location?.name || "N/A"}</TableCell>
-                        <TableCell className="max-w-[180px] truncate">{entry.description || "N/A"}</TableCell>
+                        <TableCell>{entry.customer?.full_name || "—"}</TableCell>
+                        <TableCell>{entry.appointment?.location?.name || "—"}</TableCell>
+                        <TableCell className="max-w-[180px] truncate">{entry.description || "—"}</TableCell>
                         <TableCell className="text-right font-medium">{formatCurrency(Number(entry.amount), entry.currency)}</TableCell>
                       </TableRow>
                     ))}

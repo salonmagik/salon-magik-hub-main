@@ -623,7 +623,8 @@ export default function MarketingPage() {
   const messageCharacterCount = message.length;
   const smsSegments = Math.max(1, Math.ceil(Math.max(messageCharacterCount, 1) / 160));
   const estimatedCost = selectedRecipientCount * CREDIT_COST[effectiveChannel] * (effectiveChannel === "sms" ? smsSegments : 1);
-  const balanceAfterSend = (credits?.balance || 0) - estimatedCost;
+  const marketingSmsBalance = Number(stats.marketingCreditsRemaining ?? stats.creditsRemaining ?? 0) + Number(stats.purchasedCreditsRemaining ?? 0);
+  const balanceAfterSend = marketingSmsBalance - estimatedCost;
   const tenantCountry = normalizeCountry(currentTenant?.country);
   const messagingCountry = normalizeCountry(activeLocation?.country || tenantCountry);
   const isGhanaTenant = messagingCountry === "GH";
@@ -704,8 +705,8 @@ export default function MarketingPage() {
             : !hasCreditWallet
               ? "A communication credit wallet is missing for this salon."
               : hasEnoughSmsCredits
-                ? `${estimatedCost} credit${estimatedCost === 1 ? "" : "s"} will be used for this SMS send.`
-                : `You need ${Math.abs(balanceAfterSend)} more credits before sending SMS.`,
+                ? `${estimatedCost} SMS credit${estimatedCost === 1 ? "" : "s"} will be used for this marketing send.`
+                : `You need ${Math.abs(balanceAfterSend)} more marketing SMS credit${Math.abs(balanceAfterSend) === 1 ? "" : "s"} before sending.`,
       },
       {
         id: "provider",
@@ -1168,7 +1169,7 @@ export default function MarketingPage() {
   const renderSendSummary = () => (
               <aside className="marketing-send-summary" aria-label="Send summary" aria-live="polite">
                 <div className="marketing-summary-heading"><h2>Send summary</h2><span className={`marketing-badge ${sendResult ? "success" : canSendBroadcast ? "success" : "warning"}`}>{sendResult ? (sendResult.failed ? "Check history" : "Sent") : canSendBroadcast ? "Ready" : "Not ready"}</span></div>
-                <dl><div><dt>Audience</dt><dd>{audienceLabel}</dd></div><div><dt>Recipients</dt><dd>{summaryCount}</dd></div><div><dt>Channel</dt><dd>{selectedChannel ? selectedChannel === "email" ? "Email" : "SMS" : "Not chosen yet"}</dd></div><div><dt>Cost</dt><dd>{!selectedChannel ? "N/A" : selectedChannel === "email" ? "Included" : `${estimatedCost} credits`}</dd></div>{selectedChannel === "sms" && <div><dt>Balance after</dt><dd className={balanceAfterSend < 0 ? "marketing-negative" : undefined}>{balanceAfterSend} credits</dd></div>}</dl>
+                <dl><div><dt>Audience</dt><dd>{audienceLabel}</dd></div><div><dt>Recipients</dt><dd>{summaryCount}</dd></div><div><dt>Channel</dt><dd>{selectedChannel ? selectedChannel === "email" ? "Email" : "SMS" : "Not chosen yet"}</dd></div><div><dt>Cost</dt><dd>{!selectedChannel ? "—" : selectedChannel === "email" ? "Included" : `${estimatedCost} credits`}</dd></div>{selectedChannel === "sms" && <div><dt>Balance after</dt><dd className={balanceAfterSend < 0 ? "marketing-negative" : undefined}>{balanceAfterSend} credits</dd></div>}</dl>
                 {selectedChannel && <div className="marketing-preview"><span>Preview</span>{!message.trim() && !emailSubject.trim() ? <p>{selectedChannel === "email" ? "Subject line preview and email body will render here as you type." : "Your message will appear here as you type."}</p> : <>{selectedChannel === "email" && <strong>{previewSubject || "Add a subject line…"}</strong>}<p>{selectedChannel === "email" ? renderEmailPreview(previewBody) : previewBody}</p><small>Personalisation shown with sample customer details.</small></>}</div>}
                 {selectedChannel && !sendResult && <div className="marketing-send-notices">{[...blockedPreflightItems, ...warningPreflightItems].filter(item => !["message", "test"].includes(item.id)).map(item => <p key={item.id} className={item.status === "blocked" ? "marketing-negative" : ""}>{item.detail}</p>)}{smsCountryMismatchRecipients.length > 0 && audienceMode === "group" && <button type="button" className="marketing-text-button" onClick={removeSmsCountryMismatches}>Remove mismatched numbers</button>}</div>}
                 <button type="button" className="marketing-button primary marketing-send" onClick={handleSendBroadcast} disabled={!canSendBroadcast}>{isSubmitting && <Loader2 size={14} className="animate-spin" />}{isSubmitting ? "Sending…" : sendResult ? "Broadcast sent" : (mobilePreviewOpen ? "Send message" : `Send to ${summaryCount} customer${summaryCount === 1 ? "" : "s"}`)}</button>
@@ -1193,8 +1194,8 @@ export default function MarketingPage() {
         </div>
 
         <div className="marketing-metrics" aria-busy={creditsLoading}>
-          <div className="marketing-metric"><span className="marketing-metric-icon"><Phone size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "N/A" : stats.creditsRemaining.toLocaleString()}</strong><p>SMS credits left</p></div></div>
-          <div className="marketing-metric"><span className="marketing-metric-icon email"><Mail size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "N/A" : stats.emailsSentThisMonth.toLocaleString()}</strong><p>Emails sent this month · unlimited</p></div></div>
+          <div className="marketing-metric"><span className="marketing-metric-icon"><Phone size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "—" : marketingSmsBalance.toLocaleString()}</strong><p>Marketing SMS credits left</p><small>{creditsLoading || creditsError ? "" : `${Number(stats.marketingCreditsRemaining ?? 0).toLocaleString()} complimentary · ${Number(stats.purchasedCreditsRemaining ?? 0).toLocaleString()} purchased`}</small></div></div>
+          <div className="marketing-metric"><span className="marketing-metric-icon email"><Mail size={18} /></span><div><strong>{creditsLoading ? "…" : creditsError ? "—" : stats.emailsSentThisMonth.toLocaleString()}</strong><p>Emails sent this month · unlimited</p></div></div>
           <div className="marketing-metric unavailable"><span className="marketing-metric-icon"><MessageCircle size={18} /></span><div><p>WhatsApp</p><span className="marketing-badge">Coming soon</span></div></div>
         </div>
         {(customersError || segmentsError || creditsError) && <div role="alert" className="marketing-notice">Some marketing data couldn’t be loaded. Refresh the page before sending a broadcast.</div>}

@@ -7,7 +7,7 @@ export function BenefitsSection() {
     plans?.find((p) => p.is_recommended)?.trial_days ?? plans?.[0]?.trial_days ?? 14;
 
   const benefits = [
-    `${trialDays}-day free trial, no card required`,
+    `${trialDays}-day free trial, no charge until you continue`,
     "Works on any device: phone, tablet, or desktop",
     "Multiple payment methods supported",
     "WhatsApp notifications coming soon",

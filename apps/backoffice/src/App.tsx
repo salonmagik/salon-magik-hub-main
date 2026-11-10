@@ -11,6 +11,7 @@ import ChangePasswordPage from "@/pages/ChangePasswordPage";
 import BackofficeDashboardPage from "@/pages/BackofficeDashboardPage";
 import CustomersWaitlistsPage from "@/pages/customers/CustomersWaitlistsPage";
 import CustomersTenantsPage from "@/pages/customers/CustomersTenantsPage";
+import TenantWorkspacePage from "@/pages/customers/TenantWorkspacePage";
 import CustomersUsersPage from "@/pages/customers/CustomersUsersPage";
 import CustomersOpsMonitorPage from "@/pages/customers/CustomersOpsMonitorPage";
 import CustomersSupportPage from "@/pages/customers/CustomersSupportPage";
@@ -18,20 +19,15 @@ import FeatureFlagsPage from "@/pages/FeatureFlagsPage";
 import PlansPage from "@/pages/PlansPage";
 import BackofficeSettingsPage from "@/pages/SettingsPage";
 import AdminsPage from "@/pages/AdminsPage";
+import SalesAgentCompliancePage from "@/pages/SalesAgentCompliancePage";
 import AuditLogsPage from "@/pages/AuditLogsPage";
 import SalesOpsPage from "@/pages/SalesOpsPage";
-import CampaignsPage from "@/pages/sales/CampaignsPage";
-import CaptureClientPage from "@/pages/sales/CaptureClientPage";
-import ConversionsPage from "@/pages/sales/ConversionsPage";
 import CommsPage from "@/pages/CommsPage";
 import SubscriptionLedgerPage from "@/pages/SubscriptionLedgerPage";
 import CommsCreditsPage from "@/pages/CommsCreditsPage";
 import FlaggedSignupsPage from "@/pages/FlaggedSignupsPage";
 import TransactionsPage from "@/pages/TransactionsPage";
-import FeesMarginsPage from "@/pages/FeesMarginsPage";
-import VerificationQueuePage from "@/pages/VerificationQueuePage";
-import WithdrawalsPage from "@/pages/WithdrawalsPage";
-import ProductAnnouncementsPage from "@/pages/ProductAnnouncementsPage";
+import MoneyOpsPage from "@/pages/MoneyOpsPage";
 import { BackofficeAuthProvider } from "@/hooks/useBackofficeAuth";
 import { BackofficeProtectedRoute, BackofficePublicRoute } from "@/components/BackofficeProtectedRoute";
 
@@ -141,6 +137,15 @@ function App() {
               }
           />
           <Route
+            path="/customers/tenants/:tenantId"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="customers_tenants">
+                  <TenantWorkspacePage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
             path="/customers/users"
             element=
               {
@@ -190,7 +195,7 @@ function App() {
             element=
               {
                 <BackofficeProtectedRoute requiredPageKey="payment_fee_settings">
-                  <FeesMarginsPage />
+                  <MoneyOpsPage />
                 </BackofficeProtectedRoute>
               }
           />
@@ -199,7 +204,7 @@ function App() {
             element=
               {
                 <BackofficeProtectedRoute requiredPageKey="verification_queue">
-                  <VerificationQueuePage />
+                  <MoneyOpsPage />
                 </BackofficeProtectedRoute>
               }
           />
@@ -208,7 +213,7 @@ function App() {
             element=
               {
                 <BackofficeProtectedRoute requiredPageKey="withdrawals">
-                  <WithdrawalsPage />
+                  <MoneyOpsPage />
                 </BackofficeProtectedRoute>
               }
           />
@@ -258,6 +263,15 @@ function App() {
               }
           />
           <Route
+            path="/admins/sales-agents/:backofficeUserId"
+            element=
+              {
+                <BackofficeProtectedRoute requiredPageKey="admins">
+                  <SalesAgentCompliancePage />
+                </BackofficeProtectedRoute>
+              }
+          />
+          <Route
             path="/sales"
             element=
               {
@@ -266,12 +280,17 @@ function App() {
                 </BackofficeProtectedRoute>
               }
           />
+          {/* Campaigns, Capture client, and Conversions & commissions are now tabs of
+              one SalesOpsPage (matches the SalesOps.dc.html artifact board, which shows
+              a single "Sales ops" page). The page gates each tab internally via
+              hasBackofficePageAccess/hasBackofficePermission, so these three routes
+              stay as deep links into the same component rather than separate pages. */}
           <Route
             path="/sales/campaigns"
             element=
               {
-                <BackofficeProtectedRoute requiredPageKey="sales_campaigns" requiredPermissionKey="sales.manage_campaigns">
-                  <CampaignsPage />
+                <BackofficeProtectedRoute>
+                  <SalesOpsPage />
                 </BackofficeProtectedRoute>
               }
           />
@@ -279,8 +298,8 @@ function App() {
             path="/sales/capture-client"
             element=
               {
-                <BackofficeProtectedRoute requiredPageKey="sales_capture_client" requiredPermissionKey="sales.capture_client">
-                  <CaptureClientPage />
+                <BackofficeProtectedRoute>
+                  <SalesOpsPage />
                 </BackofficeProtectedRoute>
               }
           />
@@ -288,8 +307,8 @@ function App() {
             path="/sales/conversions"
             element=
               {
-                <BackofficeProtectedRoute requiredPageKey="sales_conversions" requiredPermissionKey="sales.view_conversions">
-                  <ConversionsPage />
+                <BackofficeProtectedRoute>
+                  <SalesOpsPage />
                 </BackofficeProtectedRoute>
               }
           />
@@ -311,15 +330,10 @@ function App() {
                 </BackofficeProtectedRoute>
               }
           />
-          <Route
-            path="/product-announcements"
-            element=
-              {
-                <BackofficeProtectedRoute requiredPageKey="settings">
-                  <ProductAnnouncementsPage />
-                </BackofficeProtectedRoute>
-              }
-          />
+          {/* Announcements is now a tab of CommsPage (CommsTemplates.dc.html artifact
+              board shows one "Templates & announcements" page) — redirect so any
+              bookmarked/old links still land somewhere real. */}
+          <Route path="/product-announcements" element={<Navigate to="/comms" replace />} />
           <Route
             path="/audit-logs"
             element=

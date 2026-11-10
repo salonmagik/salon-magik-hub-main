@@ -22,9 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from "@ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@ui/dialog";
-import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
-import { cn } from "@shared/utils";
 import { EmptyState } from "@ui/empty-state";
 import { FileText } from "lucide-react";
 
@@ -66,6 +63,30 @@ function formatAuditJson(value: Record<string, unknown> | null) {
   return value && Object.keys(value).length > 0
     ? JSON.stringify(value, null, 2)
     : "No changes recorded for this event.";
+}
+
+function stringifyFieldValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+interface FieldDiff {
+  key: string;
+  before: string;
+  after: string;
+  changed: boolean;
+}
+
+function computeFieldDiff(before: Record<string, unknown> | null, after: Record<string, unknown> | null): FieldDiff[] {
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  return Array.from(keys)
+    .sort()
+    .map((key) => {
+      const beforeValue = stringifyFieldValue(before?.[key]);
+      const afterValue = stringifyFieldValue(after?.[key]);
+      return { key, before: beforeValue, after: afterValue, changed: beforeValue !== afterValue };
+    });
 }
 
 export default function AuditLogsPage() {
@@ -155,13 +176,18 @@ export default function AuditLogsPage() {
   const rangeStart = totalCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(page * PAGE_SIZE, totalCount);
 
+  const diffFields = selectedLog ? computeFieldDiff(selectedLog.before_json, selectedLog.after_json).filter((f) => f.changed) : [];
+  const unchangedFields = selectedLog ? computeFieldDiff(selectedLog.before_json, selectedLog.after_json).filter((f) => !f.changed) : [];
+  const reasonGiven = (selectedLog?.metadata as Record<string, unknown> | null)?.reason;
+
   return (
     <BackofficeLayout>
-      <div className="space-y-6 p-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Audit Logs</h1>
-          <p className="text-sm text-muted-foreground">
-            Backoffice actions and platform changes.
+      <div className="flex min-h-[calc(100vh-4rem)] gap-0">
+      <div className="min-w-0 flex-1 space-y-6 py-7 pl-8 pr-0">
+        <div className="pr-8">
+          <h1 className="text-[20px] font-bold tracking-tight">Audit logs</h1>
+          <p className="mt-[3px] text-[12.5px] text-muted-foreground">
+            Every admin action, platform-wide.
           </p>
         </div>
 
@@ -310,14 +336,18 @@ export default function AuditLogsPage() {
                   </TableRow>
                 ) : (
                   filteredLogs.map((row) => (
-                    <TableRow key={row.id}>
+                    <TableRow
+                      key={row.id}
+                      className={`cursor-pointer ${selectedLog?.id === row.id ? "bg-muted/50" : ""}`}
+                      onClick={() => setSelectedLog(row)}
+                    >
                       <TableCell>{new Date(row.created_at).toLocaleString()}</TableCell>
                       <TableCell>{formatAuditValue(row.action)}</TableCell>
                       <TableCell>{formatAuditValue(row.entity_type)}</TableCell>
                       <TableCell className="font-mono text-xs">{row.entity_id || "-"}</TableCell>
                       <TableCell className="font-mono text-xs">{row.actor_user_id || "-"}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="outline" size="sm" onClick={() => setSelectedLog(row)}>
+                        <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setSelectedLog(row); }}>
                           View
                         </Button>
                       </TableCell>
@@ -352,42 +382,68 @@ export default function AuditLogsPage() {
         </div>
       </div>
 
-      <Dialog open={Boolean(selectedLog)} onOpenChange={(open) => !open && setSelectedLog(null)}>
-        <DialogContent className="sm:max-w-[760px]">
-          <DialogHeader>
-            <DialogTitle>Audit Log Details</DialogTitle>
-          </DialogHeader>
-          {selectedLog && (
-            <div className={cn(DIALOG_BODY_PADDING, "space-y-3 text-sm")}>
-              <div><strong>ID:</strong> <span className="font-mono">{selectedLog.id}</span></div>
-              <div><strong>Action:</strong> {formatAuditValue(selectedLog.action)}</div>
-              <div><strong>Entity:</strong> {formatAuditValue(selectedLog.entity_type)}</div>
-              <div><strong>Entity ID:</strong> <span className="font-mono">{selectedLog.entity_id || "-"}</span></div>
-              <div><strong>Actor:</strong> <span className="font-mono">{selectedLog.actor_user_id || "-"}</span></div>
-              <div><strong>Tenant:</strong> <span className="font-mono">{selectedLog.tenant_id || "-"}</span></div>
-              <div><strong>Created:</strong> {new Date(selectedLog.created_at).toLocaleString()}</div>
-              <div className="space-y-2">
-                <strong>Before</strong>
-                <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">
-                  {formatAuditJson(selectedLog.before_json)}
-                </pre>
-              </div>
-              <div className="space-y-2">
-                <strong>After</strong>
-                <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">
-                  {formatAuditJson(selectedLog.after_json)}
-                </pre>
-              </div>
-              <div className="space-y-2">
-                <strong>Metadata</strong>
-                <pre className="max-h-72 overflow-auto rounded-md bg-muted p-3 text-xs">
-                  {formatAuditJson(selectedLog.metadata)}
-                </pre>
-              </div>
+      {selectedLog && (
+        <aside className="w-[380px] shrink-0 overflow-y-auto border-l border-border bg-card p-6">
+          <div className="mb-1 text-[11.5px] font-bold uppercase tracking-[.04em] text-muted-foreground">
+            {selectedLog.action}
+          </div>
+          <div className="mb-0.5 text-sm font-bold">{formatAuditValue(selectedLog.entity_type)}</div>
+          <div className="mb-[18px] text-xs text-muted-foreground">
+            {selectedLog.actor_user_id || "Unknown actor"} · {new Date(selectedLog.created_at).toLocaleString()}
+          </div>
+
+          <div className="mb-2 text-xs font-semibold text-muted-foreground">What changed</div>
+          {diffFields.length > 0 ? (
+            <div className="backoffice-panel flex flex-col gap-2 p-3.5 text-[12.5px]">
+              {diffFields.map((field) => (
+                <div key={field.key} className="flex items-start justify-between gap-3">
+                  <span className="text-muted-foreground">{field.key}</span>
+                  <span className="text-right font-mono">
+                    <span className="text-destructive line-through">{field.before}</span>
+                    {" → "}
+                    <span className="text-success">{field.after}</span>
+                  </span>
+                </div>
+              ))}
             </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {selectedLog.before_json || selectedLog.after_json ? "No fields changed." : "No before/after state recorded for this event."}
+            </p>
           )}
-        </DialogContent>
-      </Dialog>
+
+          {reasonGiven ? (
+            <>
+              <div className="mb-2 mt-[18px] text-xs font-semibold text-muted-foreground">Reason given</div>
+              <p className="text-[12.5px]">"{String(reasonGiven)}"</p>
+            </>
+          ) : null}
+
+          {unchangedFields.length > 0 && (
+            <details className="mt-4">
+              <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">
+                {unchangedFields.length} unchanged field{unchangedFields.length === 1 ? "" : "s"}
+              </summary>
+              <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
+                {unchangedFields.map((field) => (
+                  <div key={field.key} className="flex items-center justify-between gap-3">
+                    <span>{field.key}</span>
+                    <span className="font-mono">{field.before}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          )}
+
+          <details className="mt-4">
+            <summary className="cursor-pointer text-xs font-semibold text-muted-foreground">Raw metadata</summary>
+            <pre className="mt-2 max-h-56 overflow-auto rounded-md bg-muted p-3 text-xs">
+              {formatAuditJson(selectedLog.metadata)}
+            </pre>
+          </details>
+        </aside>
+      )}
+      </div>
     </BackofficeLayout>
   );
 }

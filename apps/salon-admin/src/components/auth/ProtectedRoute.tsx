@@ -69,6 +69,24 @@ export function ProtectedRoute({ children, requireOnboarding = true }: Protected
     return <Navigate to="/onboarding" replace />;
   }
 
+  // Once a trial has actually ended, keep the salon offline until billing is
+  // completed. Billing and help remain available so the owner can recover
+  // access; the backend independently enforces the same rule for sends and
+  // scheduled reminders.
+  const trialHasEnded =
+    currentTenant?.subscription_status === "trialing" &&
+    Boolean(currentTenant.trial_ends_at) &&
+    new Date(currentTenant.trial_ends_at as string).getTime() <= Date.now();
+  const billingIsBlocked =
+    trialHasEnded ||
+    ["past_due", "suspended", "canceled", "paused", "permanently_deactivated"].includes(
+      String(currentTenant?.subscription_status || ""),
+    );
+  const billingRecoveryPaths = new Set(["/salon/subscription", "/salon/help", "/salon/access-denied"]);
+  if (billingIsBlocked && !billingRecoveryPaths.has(location.pathname)) {
+    return <Navigate to="/salon/subscription?billing=required" state={{ from: location }} replace />;
+  }
+
   if (isAssignmentPending) {
     const isAllowedPendingPath =
       location.pathname === "/salon/assignment-pending" || location.pathname === "/salon/help";

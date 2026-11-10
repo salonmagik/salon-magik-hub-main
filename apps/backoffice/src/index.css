@@ -4,17 +4,22 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Dense lapis-blue internal-tool treatment for backoffice. */
+/* Light-mode sidebar: white panel with a purple active pill, matching the
+   rest of the page rather than standing apart as a separate dark panel.
+   Dark mode (the backoffice default — see index.html's `class="dark"`) uses
+   the shared `.dark` sidebar tokens from theme.css instead, so this is
+   scoped to :not(.dark) to avoid cascade-order fights over the shared
+   :root/.dark selectors. */
 @layer base {
-  :root {
-    --sidebar-background: 210 61% 18%;
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 42 89% 63%;
+  :root:not(.dark) {
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 262 10% 46%;
+    --sidebar-primary: 262 43% 21%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 48% 25%;
-    --sidebar-accent-foreground: 42 89% 63%;
-    --sidebar-border: 210 38% 26%;
-    --sidebar-ring: 42 89% 63%;
+    --sidebar-accent: 262 67% 96%;
+    --sidebar-accent-foreground: 262 43% 21%;
+    --sidebar-border: 262 15% 90%;
+    --sidebar-ring: 262 43% 21%;
   }
 }
 
@@ -23,12 +28,17 @@
     @apply flex h-6 items-center justify-center bg-[#141014] px-4 text-center text-[10px] uppercase tracking-[0.12em] text-white/75;
   }
 
+  /* Matches the design-artifact spec exactly: padding:28px 32px,
+     gap:24px, max-width:1280px (Main.dc.html's content wrapper). The
+     p-4 sm:p-6 step-up is our own addition for phone widths the
+     desktop-only artifact never specified. */
   .backoffice-page {
-    @apply mx-auto w-full max-w-[1320px] space-y-5 p-4 sm:p-6 lg:p-7;
+    @apply mx-auto w-full max-w-[1280px] space-y-6 p-4 sm:p-6 lg:py-7 lg:px-8;
   }
 
+  /* Matches the artifact's .card class exactly: border-radius:var(--radius-lg) = 16px. */
   .backoffice-panel {
-    @apply rounded-[10px] border border-black/[0.07] bg-white shadow-[0_2px_8px_rgba(20,16,20,0.04)];
+    @apply rounded-2xl border border-border bg-card shadow-[0_2px_8px_rgba(20,16,20,0.04)];
   }
 }
 

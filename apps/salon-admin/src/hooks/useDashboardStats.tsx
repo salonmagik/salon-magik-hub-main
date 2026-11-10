@@ -15,6 +15,8 @@ interface DashboardStats {
   purseUsage: number;
   refundsPendingApproval: number;
   communicationCredits: number;
+  marketingCommunicationCredits: number;
+  reminderCommunicationCredits: number;
   lowCommunicationCredits: boolean;
   showUpRate: number | null;
   newClientsThisWeek: number;
@@ -108,6 +110,8 @@ export function useDashboardStats() {
     purseUsage: 0,
     refundsPendingApproval: 0,
     communicationCredits: 0,
+    marketingCommunicationCredits: 0,
+    reminderCommunicationCredits: 0,
     lowCommunicationCredits: false,
     showUpRate: null,
     newClientsThisWeek: 0,
@@ -225,7 +229,21 @@ export function useDashboardStats() {
           ? supabase.from("refund_requests").select("*", { count: "exact", head: true }).eq("tenant_id", currentTenant.id).eq("status", "pending")
           : Promise.resolve({ count: 0, data: null, error: null }),
 
-        supabase.from("communication_credits").select("balance").eq("tenant_id", currentTenant.id).maybeSingle(),
+        (async () => {
+          const summary = await supabase.rpc("get_sms_credit_summary", { p_tenant_id: currentTenant.id });
+          if (!summary.error) return summary;
+          const legacy = await supabase
+            .from("communication_credits")
+            .select("balance")
+            .eq("tenant_id", currentTenant.id)
+            .maybeSingle();
+          return {
+            data: legacy.data
+              ? [{ total: Number(legacy.data.balance || 0), purchased: Number(legacy.data.balance || 0), marketing_complimentary: 0, reminder_complimentary: 0 }]
+              : null,
+            error: legacy.error,
+          };
+        })(),
 
         supabase.from("services").select("*", { count: "exact", head: true }).eq("tenant_id", currentTenant.id),
 
@@ -294,7 +312,15 @@ export function useDashboardStats() {
       const purseUsage = (purseUsageResult.data || []).reduce(
         (sum, p) => sum + Number(p.balance || 0), 0
       );
-      const communicationCredits = creditsResult.data?.balance || 0;
+      const creditSummary = creditsResult.data?.[0] as {
+        marketing_complimentary?: number;
+        purchased?: number;
+        reminder_complimentary?: number;
+        total?: number;
+      } | undefined;
+      const communicationCredits = Number(creditSummary?.total || 0);
+      const marketingCommunicationCredits = Number(creditSummary?.marketing_complimentary || 0) + Number(creditSummary?.purchased || 0);
+      const reminderCommunicationCredits = Number(creditSummary?.reminder_complimentary || 0);
 
       const weekApts = weeklyAptsResult.data || [];
       const weekCompleted = weekApts.filter((a) => a.status === "completed").length;
@@ -341,7 +367,9 @@ export function useDashboardStats() {
         purseUsage: canViewPayments ? purseUsage : 0,
         refundsPendingApproval: canViewPayments ? (refundsPendingResult.count || 0) : 0,
         communicationCredits,
-        lowCommunicationCredits: communicationCredits <= 10,
+        marketingCommunicationCredits,
+        reminderCommunicationCredits,
+        lowCommunicationCredits: marketingCommunicationCredits <= 10,
         showUpRate,
         newClientsThisWeek,
         prepaidCustomers: canViewPayments ? (prepaidCountResult.count || 0) : 0,
@@ -373,7 +401,7 @@ export function useDashboardStats() {
           const servicesData = a.services as { service_name: string }[] | null;
           return {
             id: a.id,
-            time: a.scheduled_start ? formatTime(a.scheduled_start) : "N/A",
+            time: a.scheduled_start ? formatTime(a.scheduled_start) : "—",
             customer: customerData?.full_name || "Unknown",
             service: servicesData?.[0]?.service_name || "Service",
             staffFirstName: a.assigned_staff_id ? (staffMap[a.assigned_staff_id] || null) : null,
@@ -465,7 +493,7 @@ export function useDashboardStats() {
             id: customer?.id || a.customer_id,
             name: customer?.full_name || "Customer",
             daysSinceVisit: daysDiff,
-            usualService: services?.[0]?.service_name || "N/A",
+            usualService: services?.[0]?.service_name || "—",
             clientStatus: daysDiff >= 75 ? "inactive" as const : "going_quiet" as const,
           };
         });

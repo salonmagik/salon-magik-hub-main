@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useBackofficeAuth } from "@/hooks";
-import { EyeIcon, EyeOffIcon } from "lucide-react";
+import { Shield, Eye, EyeOff, Check, Circle } from "lucide-react";
+import { Button } from "@ui/button";
+import { Input } from "@ui/input";
+import { Label } from "@ui/label";
+import { cn } from "@shared/utils";
 
 export default function ChangePasswordPage() {
   const navigate = useNavigate();
@@ -85,90 +89,118 @@ export default function ChangePasswordPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/10 via-white to-background px-4 py-10">
-      <div className="w-full max-w-lg rounded-2xl border border-border/60 bg-white/90 p-10 shadow-lg backdrop-blur">
-        <h1 className="text-2xl font-semibold text-ink mb-2">Set a new password</h1>
-        <p className="text-sm text-ink/70 mb-6">
-          Your account was created with a temporary password. Choose a new one to continue.
-        </p>
-        {error && <p className="mb-4 text-sm text-errorText">Error: {error}</p>}
-        <form className="space-y-4" onSubmit={submit}>
-          <label className="space-y-2 text-sm font-medium text-ink">
-            New password
-            <div className="relative">
-              <input
-                className="w-full rounded-lg border border-border bg-white px-4 py-3 pr-12 text-sm text-ink placeholder:text-ink/40 focus:border-primary focus:outline-none"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => {
-                  setError(null);
-                  setConfirmError(null);
-                  setPassword(e.target.value);
-                }}
-                autoComplete="new-password"
-              />
-              <button
-                type="button"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-                className="absolute inset-y-0 right-3 flex items-center text-ink/60"
-                onClick={() => setShowPassword((v) => !v)}
-              >
-                {showPassword ? (
-                  <EyeOffIcon className="h-5 w-5" />
-                ) : (
-                  <EyeIcon className="h-5 w-5" />
-                )}
-              </button>
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="w-full max-w-[400px]">
+        <div className="mb-7 flex flex-col items-center">
+          <div className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-[13px] bg-primary">
+            <Shield className="h-5 w-5 text-primary-foreground" />
+          </div>
+          <div className="text-lg font-bold text-foreground">Set a new password</div>
+          <div className="mt-0.5 text-center text-[12.5px] text-muted-foreground">
+            Your account was created with a temporary password. Choose a new one to continue.
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-7">
+          {error && (
+            <div className="mb-3.5 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
             </div>
-            <ul className="py-2 space-y-1 text-xs">
-              {requirements.map((req) => {
-                const ok = req.test(password);
-                return (
-                  <li key={req.label} className={ok ? "text-emerald-600" : "text-errorText"}>
-                    {ok ? "•" : "○"} {req.label}
-                  </li>
-                );
-              })}
-            </ul>
-          </label>
-          <label className="space-y-2 text-sm font-medium text-ink">
-            Confirm password
-            <div className="relative">
-              <input
-                className="w-full rounded-lg border border-border bg-white px-4 py-3 pr-12 text-sm text-ink placeholder:text-ink/40 focus:border-primary focus:outline-none"
-                type={showConfirm ? "text" : "password"}
-                value={confirm}
-                onChange={(e) => {
-                  setError(null);
-                  setConfirmError(null);
-                  setConfirm(e.target.value);
-                }}
-                autoComplete="new-password"
-              />
-              <button
-                type="button"
-                aria-label={showConfirm ? "Hide password" : "Show password"}
-                className="absolute inset-y-0 right-3 flex items-center text-ink/60"
-                onClick={() => setShowConfirm((v) => !v)}
-              >
-                {showConfirm ? (
-                  <EyeOffIcon className="h-5 w-5" />
-                ) : (
-                  <EyeIcon className="h-5 w-5" />
-                )}
-              </button>
+          )}
+          <form className="space-y-0" onSubmit={submit}>
+            <div className="mb-3.5">
+              <Label htmlFor="new-password" className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                New password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="new-password"
+                  className="h-auto rounded-[8px] border-input px-[13px] py-[11px] pr-10 text-[13.5px]"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => {
+                    setError(null);
+                    setConfirmError(null);
+                    setPassword(e.target.value);
+                  }}
+                  autoComplete="new-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  onClick={() => setShowPassword((v) => !v)}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+              <div className="mt-2 flex flex-col gap-1.5">
+                {requirements.map((req) => {
+                  const ok = req.test(password);
+                  return (
+                    <div
+                      key={req.label}
+                      className={cn("flex items-center gap-1.5 text-xs", ok ? "text-success" : "text-muted-foreground")}
+                    >
+                      {ok ? <Check className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
+                      {req.label}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            {confirmError && <p className="text-sm text-errorText">{confirmError}</p>}
-          </label>
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="w-full rounded-lg bg-primary px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-primary/90 disabled:opacity-60"
-          >
-            {loading ? "Saving..." : "Save and continue"}
-          </button>
-        </form>
+
+            <div className="mb-5">
+              <Label htmlFor="confirm-password" className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                Confirm password
+              </Label>
+              <div className="relative">
+                <Input
+                  id="confirm-password"
+                  className="h-auto rounded-[8px] border-input px-[13px] py-[11px] pr-10 text-[13.5px]"
+                  type={showConfirm ? "text" : "password"}
+                  value={confirm}
+                  onChange={(e) => {
+                    setError(null);
+                    setConfirmError(null);
+                    setConfirm(e.target.value);
+                  }}
+                  autoComplete="new-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="absolute right-0 top-0 h-full px-3"
+                  aria-label={showConfirm ? "Hide password" : "Show password"}
+                  onClick={() => setShowConfirm((v) => !v)}
+                >
+                  {showConfirm ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </div>
+              {confirmError && <p className="mt-1.5 text-xs text-destructive">{confirmError}</p>}
+            </div>
+
+            <Button
+              type="submit"
+              disabled={!canSubmit}
+              className="w-full rounded-full py-[11px] text-[13.5px] font-semibold"
+            >
+              {loading ? "Saving..." : "Save and continue"}
+            </Button>
+          </form>
+        </div>
       </div>
-    </main>
+    </div>
   );
 }

@@ -250,7 +250,7 @@ export const defaultTemplates: Record<TemplateType, { subject: string; body_html
         <a href="{{cta_link}}" style="background-color: #E11D48; color: white; padding: 14px 28px; text-decoration: none; border-radius: 8px; display: inline-block; font-weight: 500;">Complete Setup</a>
       </div>
       <div style="background: #fef2f2; border-radius: 8px; padding: 16px; margin: 24px 0;">
-        <p style="color: #991b1b; margin: 0; font-size: 14px;"><strong>🎉 Your 14-day free trial has started!</strong><br/>No credit card required.</p>
+        <p style="color: #991b1b; margin: 0; font-size: 14px;"><strong>🎉 Your 14-day free trial has started!</strong><br/>No charge during the trial. Add a payment method before it ends to keep your salon online.</p>
       </div>
     `),
   },

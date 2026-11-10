@@ -219,11 +219,11 @@ const handler = async (req: Request): Promise<Response> => {
     const totalAmount = `${currency} ${Number(product.total_price).toFixed(2)}`;
     const locationText = appointment.location
       ? `${appointment.location.name}${appointment.location.address ? `, ${appointment.location.address}` : ""}${appointment.location.city ? `, ${appointment.location.city}` : ""}`
-      : "N/A";
+      : "—";
     const deliveryAddr = appointment.booking_metadata?.delivery_address;
     const deliveryAddressText = deliveryAddr
       ? [deliveryAddr.line1, deliveryAddr.city, deliveryAddr.country].filter(Boolean).join(", ")
-      : "N/A";
+      : "—";
 
     let emailSubject = template.subject;
     let emailBody = template.body;

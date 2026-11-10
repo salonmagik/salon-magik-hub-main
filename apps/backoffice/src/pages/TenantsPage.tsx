@@ -1,4 +1,5 @@
  import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { useBackofficeAuth, useTenants, TenantWithStats } from "@/hooks";
@@ -18,13 +19,16 @@ import {
 } from "@ui/select";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+  DialogTrigger,
 } from "@ui/dialog";
-import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import {
+  ArtifactDialogContent,
+  ArtifactDialogHeader,
+  ArtifactDialogFooter,
+  ArtifactDialogTitle,
+  ARTIFACT_DIALOG_BODY_PADDING,
+} from "@/components/dialogs/ArtifactDialogChrome";
 import { cn } from "@shared/utils";
  import {
    Table,
@@ -40,7 +44,7 @@ import { cn } from "@shared/utils";
    DropdownMenuItem,
    DropdownMenuTrigger,
  } from "@ui/dropdown-menu";
- import { Loader2, MoreHorizontal, Search, Eye, Building2, Users, CircleDollarSign, TriangleAlert, Crown, Info, RefreshCcw } from "lucide-react";
+ import { Loader2, MoreHorizontal, Search, Eye, Building2, Users, Crown, Info, RefreshCcw, Plus } from "lucide-react";
  import { Tooltip, TooltipContent, TooltipTrigger } from "@ui/tooltip";
  import { format } from "date-fns";
 import { toast } from "sonner";
@@ -71,9 +75,44 @@ export default function TenantsPage() {
    const [amount, setAmount] = useState("0");
    const [currency, setCurrency] = useState("USD");
    const [reason, setReason] = useState("");
-   const [selectedTenant, setSelectedTenant] = useState<TenantWithStats | null>(null);
    const [addOwnerTenant, setAddOwnerTenant] = useState<TenantWithStats | null>(null);
    const [migrateBillingTenant, setMigrateBillingTenant] = useState<TenantWithStats | null>(null);
+   const [addSalonDialogOpen, setAddSalonDialogOpen] = useState(false);
+   const [newSalonName, setNewSalonName] = useState("");
+   const [newSalonCountry, setNewSalonCountry] = useState("");
+   const [newSalonPlan, setNewSalonPlan] = useState("solo");
+   const [newSalonOwnerEmail, setNewSalonOwnerEmail] = useState("");
+
+   // No backend path exists yet for backoffice-initiated salon creation
+   // (verified: no create-tenant RPC/edge function in the codebase — salons
+   // are currently only created via the public self-signup flow). This
+   // mutation is a real, clearly-labeled stub rather than a silently fake
+   // success, per the redesign's "don't fabricate working submits" rule —
+   // flagged in the implementation report for backend follow-up.
+   const createSalonMutation = useMutation({
+     mutationFn: async () => {
+       throw new Error(
+         "Creating salons from the backoffice isn't wired up to a backend yet — this needs a create-tenant RPC/edge function (none currently exists; today salons are only created via public self-signup). Flagged for implementation.",
+       );
+     },
+     onError: (error: Error) => toast.error(error.message),
+   });
+
+   const { data: marketCountries = [] } = useQuery({
+     queryKey: ["backoffice-tenants-market-countries"],
+     queryFn: async () => {
+       const { data, error } = await supabase
+         .from("market_countries")
+         .select("country_code,country_name")
+         .order("country_name", { ascending: true });
+       if (error) throw error;
+       return data || [];
+     },
+   });
+   const COUNTRY_FLAG: Record<string, string> = { NG: "🇳🇬", GH: "🇬🇭" };
+   const countryNameByCode = new Map(marketCountries.map((c) => [c.country_code, c.country_name]));
+   const countryLabel = (code: string | null) =>
+     code ? `${COUNTRY_FLAG[code] || ""} ${countryNameByCode.get(code) || code}`.trim() : "—";
 
    const { data: chainUnlockRequests = [], isLoading: loadingUnlockRequests } = useQuery({
      queryKey: ["chain-unlock-requests"],
@@ -176,52 +215,108 @@ export default function TenantsPage() {
        <div className="backoffice-page">
          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
            <div>
-             <h1 className="text-[22px] font-medium tracking-tight">Salons</h1>
-             <p className="mt-1 text-muted-foreground">
-               {(tenants || []).length.toLocaleString()} total · {activeCount.toLocaleString()} active ·{" "}
-               {trialCount.toLocaleString()} trial · {pastDueCount.toLocaleString()} past due
+             <h1 className="text-[20px] font-bold tracking-tight">Salons</h1>
+             <p className="mt-[3px] text-[12.5px] text-muted-foreground">
+               Every tenant on the platform. Click a row to open its workspace.
              </p>
            </div>
+           <Dialog open={addSalonDialogOpen} onOpenChange={setAddSalonDialogOpen}>
+             <DialogTrigger asChild>
+               <Button size="sm">
+                 <Plus className="mr-1.5 h-4 w-4" />
+                 Add salon
+               </Button>
+             </DialogTrigger>
+             <ArtifactDialogContent>
+               <ArtifactDialogHeader>
+                 <ArtifactDialogTitle>Add salon</ArtifactDialogTitle>
+               </ArtifactDialogHeader>
+               <div className={cn(ARTIFACT_DIALOG_BODY_PADDING)}>
+                 <div className="space-y-1.5">
+                   <Label className="text-[11.5px] font-semibold text-muted-foreground">Salon name</Label>
+                   <Input value={newSalonName} onChange={(e) => setNewSalonName(e.target.value)} placeholder="e.g. Glow Studio" />
+                 </div>
+                 <div className="grid grid-cols-2 gap-3">
+                   <div className="space-y-1.5">
+                     <Label className="text-[11.5px] font-semibold text-muted-foreground">Country</Label>
+                     <Select value={newSalonCountry} onValueChange={setNewSalonCountry}>
+                       <SelectTrigger><SelectValue placeholder="Select country" /></SelectTrigger>
+                       <SelectContent>
+                         {marketCountries.map((c: any) => (
+                           <SelectItem key={c.country_code} value={c.country_code}>{c.country_name}</SelectItem>
+                         ))}
+                       </SelectContent>
+                     </Select>
+                   </div>
+                   <div className="space-y-1.5">
+                     <Label className="text-[11.5px] font-semibold text-muted-foreground">Plan</Label>
+                     <Select value={newSalonPlan} onValueChange={setNewSalonPlan}>
+                       <SelectTrigger><SelectValue /></SelectTrigger>
+                       <SelectContent>
+                         <SelectItem value="solo">Solo</SelectItem>
+                         <SelectItem value="studio">Studio</SelectItem>
+                         <SelectItem value="chain">Chain</SelectItem>
+                       </SelectContent>
+                     </Select>
+                   </div>
+                 </div>
+                 <div className="space-y-1.5">
+                   <Label className="text-[11.5px] font-semibold text-muted-foreground">
+                     Owner email <span className="font-normal text-muted-foreground/70">(optional — can add later)</span>
+                   </Label>
+                   <Input value={newSalonOwnerEmail} onChange={(e) => setNewSalonOwnerEmail(e.target.value)} placeholder="owner@email.com" />
+                 </div>
+               </div>
+               <ArtifactDialogFooter>
+                 <Button variant="outline" onClick={() => setAddSalonDialogOpen(false)}>Cancel</Button>
+                 <Button onClick={() => createSalonMutation.mutate()} disabled={createSalonMutation.isPending || !newSalonName.trim()}>
+                   {createSalonMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                   Create salon
+                 </Button>
+               </ArtifactDialogFooter>
+             </ArtifactDialogContent>
+           </Dialog>
          </div>
 
-         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
            {[
-             { label: "Active salons", value: activeCount, icon: Building2, tone: "text-emerald-700 bg-emerald-50", description: "Subscription status is exactly \"active\": trialing salons aren't counted here." },
-             { label: "Trial accounts", value: trialCount, icon: Users, tone: "text-violet-700 bg-violet-50", description: "Subscription status is \"trialing\"." },
-             { label: "Past due accounts", value: pastDueCount, icon: TriangleAlert, tone: "text-red-700 bg-red-50", description: "A charge failed, still active but at risk of losing access." },
-             { label: "Open unlock requests", value: chainUnlockRequests.length, icon: CircleDollarSign, tone: "text-amber-700 bg-amber-50", description: "Chain-plan salons asking to exceed their default location cap, awaiting your approval." },
+             { label: "Active", value: activeCount, valueTone: undefined, description: "Subscription status is exactly \"active\": trialing salons aren't counted here." },
+             { label: "Trialing", value: trialCount, valueTone: undefined, description: "Subscription status is \"trialing\"." },
+             { label: "Past due", value: pastDueCount, valueTone: "text-destructive", description: "A charge failed, still active but at risk of losing access." },
+             { label: "Open unlock requests", value: chainUnlockRequests.length, valueTone: "text-warning", description: "Chain-plan salons asking to exceed their default location cap, awaiting your approval." },
            ].map((metric) => (
-             <Card key={metric.label} className="backoffice-panel">
-               <CardContent className="flex items-start justify-between p-5">
-                 <div>
-                   <div className="flex items-center gap-1">
-                     <p className="text-sm uppercase tracking-wide text-muted-foreground">{metric.label}</p>
-                     <Tooltip>
-                       <TooltipTrigger asChild>
-                         <Info className="h-3 w-3 text-muted-foreground cursor-default" />
-                       </TooltipTrigger>
-                       <TooltipContent side="top" className="max-w-56 text-xs">
-                         {metric.description}
-                       </TooltipContent>
-                     </Tooltip>
-                   </div>
-                   <p className="mt-2 text-2xl font-medium">{metric.value.toLocaleString()}</p>
-                 </div>
-                 <div className={`rounded-xl p-3 ${metric.tone}`}>
-                   <metric.icon className="h-5 w-5" />
-                 </div>
-               </CardContent>
-             </Card>
+             <div key={metric.label} className="backoffice-panel p-4">
+               <div className="flex items-center gap-1">
+                 <p className="text-[11.5px] font-semibold text-muted-foreground">{metric.label}</p>
+                 <Tooltip>
+                   <TooltipTrigger asChild>
+                     <Info className="h-3 w-3 text-muted-foreground cursor-default" />
+                   </TooltipTrigger>
+                   <TooltipContent side="top" className="max-w-56 text-xs">
+                     {metric.description}
+                   </TooltipContent>
+                 </Tooltip>
+               </div>
+               <p className={`mt-1 text-[22px] font-bold tabular-nums ${metric.valueTone || ""}`}>{metric.value.toLocaleString()}</p>
+             </div>
            ))}
          </div>
 
          <Tabs defaultValue="all-tenants" className="space-y-4">
-           <TabsList className="h-auto max-w-full justify-start overflow-x-auto rounded-full bg-muted/70 p-1">
-             <TabsTrigger value="all-tenants" className="shrink-0 rounded-full px-5">All salons</TabsTrigger>
-             <TabsTrigger value="unlock-requests" className="shrink-0 rounded-full px-5">
+           <TabsList className="h-auto max-w-full justify-start gap-[22px] overflow-x-auto rounded-none border-b border-border bg-transparent p-0">
+             <TabsTrigger
+               value="all-tenants"
+               className="shrink-0 rounded-none border-b-2 border-transparent px-1 py-[9px] text-[13.5px] font-semibold text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+             >
+               All salons
+             </TabsTrigger>
+             <TabsTrigger
+               value="unlock-requests"
+               className="shrink-0 rounded-none border-b-2 border-transparent px-1 py-[9px] text-[13.5px] font-semibold text-muted-foreground shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none"
+             >
                Unlock requests
                {chainUnlockRequests.length > 0 && (
-                 <Badge variant="warning" className="ml-2 rounded-full">{chainUnlockRequests.length}</Badge>
+                 <Badge variant="warning" className="ml-1.5 rounded-full">{chainUnlockRequests.length}</Badge>
                )}
              </TabsTrigger>
            </TabsList>
@@ -234,11 +329,11 @@ export default function TenantsPage() {
                        placeholder="Search by salon name, owner, or ID"
                        value={searchQuery}
                        onChange={(e) => setSearchQuery(e.target.value)}
-                       className="h-11 rounded-xl bg-white pl-9"
+                       className="h-11 rounded-xl bg-background pl-9"
                      />
                    </div>
                    <Select value={planFilter} onValueChange={setPlanFilter}>
-                     <SelectTrigger className="h-11 rounded-xl bg-white">
+                     <SelectTrigger className="h-11 rounded-xl bg-background">
                        <SelectValue placeholder="All plans" />
                      </SelectTrigger>
                      <SelectContent>
@@ -249,7 +344,7 @@ export default function TenantsPage() {
                      </SelectContent>
                    </Select>
                    <Select value={statusFilter} onValueChange={setStatusFilter}>
-                     <SelectTrigger className="h-11 rounded-xl bg-white">
+                     <SelectTrigger className="h-11 rounded-xl bg-background">
                        <SelectValue placeholder="All statuses" />
                      </SelectTrigger>
                      <SelectContent>
@@ -263,10 +358,6 @@ export default function TenantsPage() {
                    </Select>
              </div>
              <Card className="backoffice-panel overflow-hidden">
-               <CardHeader className="border-b">
-                 <CardTitle className="text-lg">Salon accounts</CardTitle>
-                 <CardDescription>{filteredTenants?.length || 0} matching salons</CardDescription>
-               </CardHeader>
                <CardContent className="p-0">
                  {isLoading ? (
                    <div className="flex justify-center py-12">
@@ -283,60 +374,60 @@ export default function TenantsPage() {
                      <Table className="min-w-[1000px]">
                    <TableHeader>
                      <TableRow>
-                       <TableHead>Salon Name</TableHead>
-                       <TableHead>Owner</TableHead>
-                       <TableHead>Country</TableHead>
-                       <TableHead>Plan</TableHead>
-                       <TableHead>Status</TableHead>
-                       <TableHead>Staff</TableHead>
-                       <TableHead>Created</TableHead>
-                       <TableHead className="w-[50px]"></TableHead>
+                       <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Salon</TableHead>
+                       <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Owner</TableHead>
+                       <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Country</TableHead>
+                       <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Plan</TableHead>
+                       <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Status</TableHead>
+                       <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Staff</TableHead>
+                       <TableHead className="h-auto px-4 py-2.5 text-[11px] font-bold uppercase tracking-[.04em] text-muted-foreground">Created</TableHead>
+                       <TableHead className="h-auto w-[50px] px-4 py-2.5"></TableHead>
                      </TableRow>
                    </TableHeader>
                    <TableBody>
                      {filteredTenants?.map((tenant) => (
-                       <TableRow key={tenant.id} className="h-20">
-                         <TableCell className="font-medium">
-                           <div className="flex items-center gap-2">
+                       <TableRow key={tenant.id}>
+                         <TableCell className="px-4 py-3 text-[13px] font-medium">
+                           <Link to={`/customers/tenants/${tenant.id}`} className="flex items-center gap-2.5">
                              {tenant.logo_url ? (
-                               <img 
-                                 src={tenant.logo_url} 
-                                 alt="" 
-                                 className="h-8 w-8 rounded object-cover"
+                               <img
+                                 src={tenant.logo_url}
+                                 alt=""
+                                 className="h-7 w-7 rounded-[9px] object-cover"
                                />
                              ) : (
-                               <div className="h-8 w-8 rounded bg-muted flex items-center justify-center">
-                                 <Building2 className="h-4 w-4 text-muted-foreground" />
+                               <div className="flex h-7 w-7 items-center justify-center rounded-[9px] bg-accent/20 text-accent">
+                                 <Building2 className="h-3.5 w-3.5" />
                                </div>
                              )}
                              <div>
-                               <div>{tenant.name}</div>
+                               <div className="font-semibold text-primary">{tenant.name}</div>
                                {tenant.slug && (
                                  <div className="text-xs text-muted-foreground">
                                    /{tenant.slug}
                                  </div>
                                )}
                              </div>
-                           </div>
+                           </Link>
                          </TableCell>
-                         <TableCell>{tenant.owner_email || "-"}</TableCell>
-                         <TableCell>{tenant.country}</TableCell>
-                         <TableCell>
+                         <TableCell className="px-4 py-3 text-[13px]">{tenant.owner_email || "-"}</TableCell>
+                         <TableCell className="px-4 py-3 text-[13px]">{countryLabel(tenant.country)}</TableCell>
+                         <TableCell className="px-4 py-3 text-[13px]">
                            <Badge variant="outline">
                              {tenant.plan || "No Plan"}
                            </Badge>
                          </TableCell>
-                         <TableCell>{getStatusBadge(tenant.subscription_status)}</TableCell>
-                         <TableCell>
+                         <TableCell className="px-4 py-3 text-[13px]">{getStatusBadge(tenant.subscription_status)}</TableCell>
+                         <TableCell className="px-4 py-3 text-[13px]">
                            <div className="flex items-center gap-1">
                              <Users className="h-3 w-3 text-muted-foreground" />
                              {tenant.staff_count}
                            </div>
                          </TableCell>
-                         <TableCell className="text-muted-foreground text-sm">
+                         <TableCell className="px-4 py-3 text-[13px] text-muted-foreground">
                            {format(new Date(tenant.created_at), "MMM d, yyyy")}
                          </TableCell>
-                         <TableCell>
+                         <TableCell className="px-4 py-3 text-[13px]">
                            <DropdownMenu>
                              <DropdownMenuTrigger asChild>
                                <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -344,9 +435,11 @@ export default function TenantsPage() {
                                </Button>
                              </DropdownMenuTrigger>
                              <DropdownMenuContent align="end">
-                               <DropdownMenuItem onClick={() => setSelectedTenant(tenant)}>
-                                 <Eye className="mr-2 h-4 w-4" />
-                                 View Details
+                               <DropdownMenuItem asChild>
+                                 <Link to={`/customers/tenants/${tenant.id}`}>
+                                   <Eye className="mr-2 h-4 w-4" />
+                                   View Details
+                                 </Link>
                                </DropdownMenuItem>
                                {!tenant.owner_email && backofficeUser?.role === "super_admin" && (
                                  <DropdownMenuItem onClick={() => setAddOwnerTenant(tenant)}>
@@ -376,7 +469,7 @@ export default function TenantsPage() {
            </TabsContent>
 
            <TabsContent value="unlock-requests">
-             <Card className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+             <Card className="overflow-hidden rounded-2xl border bg-card shadow-sm">
                <CardHeader>
                  <CardTitle>Pending Chain Unlock Requests</CardTitle>
                  <CardDescription>
@@ -438,39 +531,47 @@ export default function TenantsPage() {
        </div>
 
        <Dialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
-         <DialogContent>
-           <DialogHeader>
-             <DialogTitle>Approve Chain Unlock</DialogTitle>
-             <DialogDescription>
-               Set allowed locations and custom amount for {selectedRequest?.tenant?.name || "tenant"}.
-             </DialogDescription>
-           </DialogHeader>
-           <div className={cn(DIALOG_BODY_PADDING, "space-y-3")}>
-             <div className="space-y-2">
-               <Label>Allowed locations</Label>
+         <ArtifactDialogContent>
+           <ArtifactDialogHeader>
+             <ArtifactDialogTitle>Approve location unlock</ArtifactDialogTitle>
+           </ArtifactDialogHeader>
+           <div className={cn(ARTIFACT_DIALOG_BODY_PADDING)}>
+             <div className="flex items-center gap-2.5">
+               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] bg-warning-bg text-[12px] font-bold text-warning">
+                 {(selectedRequest?.tenant?.name || "?").charAt(0).toUpperCase()}
+               </div>
+               <div>
+                 <div className="text-[13.5px] font-bold">{selectedRequest?.tenant?.name || "Tenant"}</div>
+                 <div className="text-[11.5px] text-muted-foreground">
+                   Currently capped at {selectedRequest?.allowed_locations ?? "—"} locations
+                 </div>
+               </div>
+             </div>
+             <div className="space-y-1.5">
+               <Label className="text-[11.5px] font-semibold text-muted-foreground">Allowed locations</Label>
                <Input
                  type="number"
                  min={1}
                  value={allowedLocations}
                  onChange={(event) => setAllowedLocations(Number(event.target.value || 1))}
+                 className="tabular-nums"
                />
              </div>
-             <div className="grid grid-cols-2 gap-3">
-               <div className="space-y-2">
-                 <Label>Currency</Label>
-                 <Input value={currency} onChange={(event) => setCurrency(event.target.value.toUpperCase())} />
-               </div>
-               <div className="space-y-2">
-                 <Label>Custom amount</Label>
-                 <Input value={amount} onChange={(event) => setAmount(event.target.value)} />
+             <div className="space-y-1.5">
+               <Label className="text-[11.5px] font-semibold text-muted-foreground">Pricing</Label>
+               <div className="grid grid-cols-2 gap-3">
+                 <Input value={currency} onChange={(event) => setCurrency(event.target.value.toUpperCase())} placeholder="Currency" />
+                 <Input value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="Custom amount" className="tabular-nums" />
                </div>
              </div>
-             <div className="space-y-2">
-               <Label>Reason</Label>
-               <Input value={reason} onChange={(event) => setReason(event.target.value)} />
+             <div className="space-y-1.5">
+               <Label className="text-[11.5px] font-semibold text-muted-foreground">
+                 Note to salon <span className="font-normal text-muted-foreground/70">(optional)</span>
+               </Label>
+               <Input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Shown in their billing history" />
              </div>
            </div>
-           <DialogFooter>
+           <ArtifactDialogFooter>
              <Button variant="outline" onClick={() => setApproveDialogOpen(false)}>
                Cancel
              </Button>
@@ -478,111 +579,10 @@ export default function TenantsPage() {
                onClick={() => approveUnlockMutation.mutate()}
                disabled={approveUnlockMutation.isPending || !selectedRequest}
              >
-               {approveUnlockMutation.isPending ? "Approving..." : "Approve unlock"}
+               {approveUnlockMutation.isPending ? "Approving..." : "Approve"}
              </Button>
-           </DialogFooter>
-         </DialogContent>
-       </Dialog>
-
-       <Dialog
-         open={Boolean(selectedTenant)}
-         onOpenChange={(open) => {
-           if (!open) setSelectedTenant(null);
-         }}
-       >
-         <DialogContent className="rounded-3xl sm:max-w-[640px]">
-           <DialogHeader>
-             <DialogTitle className="flex items-center gap-3 text-2xl">
-               <span className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-muted">
-                 {selectedTenant?.logo_url ? (
-                   <img
-                     src={selectedTenant.logo_url}
-                     alt=""
-                     className="h-full w-full object-cover"
-                   />
-                 ) : (
-                   <Building2 className="h-5 w-5 text-muted-foreground" />
-                 )}
-               </span>
-               <span>{selectedTenant?.name || "Salon details"}</span>
-             </DialogTitle>
-             <DialogDescription>
-               Account, subscription, and operating details for this salon.
-             </DialogDescription>
-           </DialogHeader>
-
-           {selectedTenant && (
-             <div className={cn(DIALOG_BODY_PADDING, "space-y-4")}>
-               <div className="flex flex-wrap items-center gap-2">
-                 {getStatusBadge(selectedTenant.subscription_status)}
-                 <Badge variant="outline">{selectedTenant.plan}</Badge>
-                 <Badge variant="outline">
-                   {selectedTenant.country} · {selectedTenant.currency}
-                 </Badge>
-               </div>
-
-               <div className="grid gap-3 sm:grid-cols-2">
-                 {[
-                   { label: "Owner", value: selectedTenant.owner_email || "Not available" },
-                   { label: "Team members", value: selectedTenant.staff_count.toLocaleString() },
-                   {
-                     label: "Created",
-                     value: format(new Date(selectedTenant.created_at), "MMM d, yyyy 'at' h:mm a"),
-                   },
-                   {
-                     label: "Online booking",
-                     value: selectedTenant.online_booking_enabled ? "Enabled" : "Disabled",
-                   },
-                   {
-                     label: "Payment setup",
-                     value: selectedTenant.payment_setup_status.replace(/_/g, " "),
-                     description: "Whether this salon has connected a payout method. Until it's complete, online deposits collected from their clients can't be settled to them.",
-                   },
-                   {
-                     label: "Next billing",
-                     value: selectedTenant.next_billing_at
-                       ? format(new Date(selectedTenant.next_billing_at), "MMM d, yyyy")
-                       : "Not scheduled",
-                   },
-                 ].map((item) => (
-                   <div key={item.label} className="rounded-2xl border bg-muted/20 p-4">
-                     <div className="flex items-center gap-1">
-                       <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                         {item.label}
-                       </p>
-                       {"description" in item && item.description && (
-                         <Tooltip>
-                           <TooltipTrigger asChild>
-                             <Info className="h-3 w-3 text-muted-foreground cursor-default" />
-                           </TooltipTrigger>
-                           <TooltipContent side="top" className="max-w-56 text-xs">
-                             {item.description}
-                           </TooltipContent>
-                         </Tooltip>
-                       )}
-                     </div>
-                     <p className="mt-1.5 capitalize">{item.value}</p>
-                   </div>
-                 ))}
-               </div>
-
-               <div className="rounded-2xl border p-4">
-                 <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                   Tenant ID
-                 </p>
-                 <p className="mt-1.5 break-all font-mono text-xs">
-                   {selectedTenant.id}
-                 </p>
-               </div>
-             </div>
-           )}
-
-           <DialogFooter>
-             <Button variant="outline" onClick={() => setSelectedTenant(null)}>
-               Close
-             </Button>
-           </DialogFooter>
-         </DialogContent>
+           </ArtifactDialogFooter>
+         </ArtifactDialogContent>
        </Dialog>
 
        <AddTenantOwnerDialog

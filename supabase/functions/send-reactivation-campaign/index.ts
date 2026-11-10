@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { buildFromAddress, wrapEmailTemplate } from "../_shared/email-template.ts";
 import { sendArkeselSMS, resolveArkeselSenderId } from "../_shared/arkesel-client.ts";
 import { checkAndAlertLowSmsBalance } from "../_shared/check-low-balance.ts";
+import { hasOperationalAccess, OPERATIONAL_ACCESS_ERROR } from "../_shared/tenant-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -106,9 +107,16 @@ serve(async (req) => {
     // Fetch tenant messaging configuration
     const { data: tenant } = await adminClient
       .from("tenants")
-      .select("country, sms_sender_name")
+      .select("name, country, sms_sender_name, subscription_status, trial_ends_at")
       .eq("id", campaign.tenant_id)
       .single();
+
+    if (!tenant || !hasOperationalAccess(tenant)) {
+      return new Response(JSON.stringify({ error: OPERATIONAL_ACCESS_ERROR, code: "TENANT_OFFLINE" }), {
+        status: 402,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     const { data: recipients, error: recipientsError } = await adminClient
       .from("customer_reactivation_recipients")
@@ -135,22 +143,23 @@ serve(async (req) => {
     type CustomerRow = { id: string; email: string | null; phone: string | null; full_name: string | null };
     const customerMap = new Map((customers || []).map((c: CustomerRow) => [c.id, c]));
 
-    const { data: creditWallet, error: creditsError } = await adminClient
-      .from("communication_credits")
-      .select("balance")
-      .eq("tenant_id", campaign.tenant_id)
-      .single();
-
-    if (creditsError || !creditWallet) throw creditsError || new Error("Communication credits missing");
-
-    const requiredCredits = recipients.length * CREDIT_COST[channel];
-    if (creditWallet.balance < requiredCredits) {
-      return new Response(JSON.stringify({
-        error: `Insufficient communication credits. Required ${requiredCredits}, available ${creditWallet.balance}.`,
-      }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+    if (channel === "sms") {
+      const { data: creditSummary, error: creditsError } = await adminClient.rpc("get_sms_credit_summary", {
+        p_tenant_id: campaign.tenant_id,
       });
+      const available = Number(creditSummary?.[0]?.total ?? 0);
+      const requiredCredits = recipients.length * CREDIT_COST[channel];
+      if (creditsError || !creditSummary?.[0]) {
+        throw creditsError || new Error("Communication credits missing");
+      }
+      if (available < requiredCredits) {
+        return new Response(JSON.stringify({
+          error: `Insufficient SMS credits. Required ${requiredCredits}, available ${available}.`,
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY") || "";
@@ -175,6 +184,7 @@ serve(async (req) => {
         continue;
       }
 
+      let reservation: Record<string, unknown> | null = null;
       try {
         if (channel === "email") {
           if (!customer.email) throw new Error("Customer has no email");
@@ -188,6 +198,15 @@ serve(async (req) => {
           );
         } else if (channel === "sms") {
           if (!customer.phone) throw new Error("Customer has no phone number");
+          const { data: reservationData, error: reservationError } = await adminClient.rpc("reserve_sms_credits", {
+            p_tenant_id: campaign.tenant_id,
+            p_amount: CREDIT_COST[channel],
+            p_purpose: "marketing",
+          });
+          reservation = reservationData as Record<string, unknown> | null;
+          if (reservationError || !reservation?.reserved) {
+            throw new Error("Insufficient SMS credits. Please purchase more credits.");
+          }
           await sendSms(resolveArkeselSenderId(customer.phone, tenantSenderId, "promotional"), customer.phone, message);
         } else if (channel === "whatsapp") {
           throw new Error("WhatsApp channel is not yet available");
@@ -223,6 +242,12 @@ serve(async (req) => {
           sent_at: new Date().toISOString(),
         });
       } catch (error) {
+        if (reservation?.reserved) {
+          await adminClient.rpc("restore_sms_credits", {
+            p_tenant_id: campaign.tenant_id,
+            p_reservation: reservation,
+          });
+        }
         failedCount += 1;
         await adminClient
           .from("customer_reactivation_recipients")
@@ -235,14 +260,12 @@ serve(async (req) => {
     }
 
     const usedCredits = sentCount * CREDIT_COST[channel];
-    const newBalance = Math.max(0, creditWallet.balance - usedCredits);
-    await adminClient
-      .from("communication_credits")
-      .update({ balance: newBalance })
-      .eq("tenant_id", campaign.tenant_id);
 
     if (channel === "sms") {
-      await checkAndAlertLowSmsBalance(adminClient, campaign.tenant_id, newBalance, {
+      const { data: creditSummary } = await adminClient.rpc("get_sms_credit_summary", {
+        p_tenant_id: campaign.tenant_id,
+      });
+      await checkAndAlertLowSmsBalance(adminClient, campaign.tenant_id, Number(creditSummary?.[0]?.total ?? 0), {
         resendApiKey: Deno.env.get("RESEND_API_KEY"),
       });
     }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTrialEnforcement } from "@/hooks/useTrialEnforcement";
+import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useProductTour } from "@/components/onboarding/ProductTourProvider";
 import { Button } from "@ui/button";
@@ -20,13 +21,15 @@ import { useToast } from "@ui/ui/use-toast";
 export function TrialBanner() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { trialStatus, shouldShowWarning, shouldShowUrgent } = useTrialEnforcement();
-  const { hasPermission } = usePermissions();
+  const { trialStatus, shouldShowWarning, shouldShowUrgent, startPaymentMethodCapture } = useTrialEnforcement();
+  const { hasPermission, isOwner } = usePermissions();
+  const { currentTenant } = useAuth();
   const { toast } = useToast();
   const { isTourActive, cancelTour } = useProductTour();
   const [dismissed, setDismissed] = useState(false);
   const [showContactAdmin, setShowContactAdmin] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [isCapturingPaymentMethod, setIsCapturingPaymentMethod] = useState(false);
 
   const canAccessSettings = hasPermission("settings");
 
@@ -51,6 +54,24 @@ export function TrialBanner() {
       navigate("/salon/subscription");
     } else {
       setShowContactAdmin(true);
+    }
+  };
+
+  const handleSavePaymentMethod = async () => {
+    setIsCapturingPaymentMethod(true);
+    try {
+      const result = await startPaymentMethodCapture();
+      if (!result.success || !result.checkoutUrl) {
+        throw new Error(result.error || "Unable to start payment method setup.");
+      }
+      window.location.href = result.checkoutUrl;
+    } catch (error) {
+      toast({
+        title: "Couldn't save payment method",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
+      setIsCapturingPaymentMethod(false);
     }
   };
 
@@ -160,6 +181,9 @@ export function TrialBanner() {
         )}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">{getMessage()}</p>
+          {!trialStatus.isGracePeriod && (
+            <p className="mt-1 text-xs opacity-80">Add a payment method before your trial ends to keep your salon online.</p>
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             <Button
               size="sm"
@@ -168,6 +192,16 @@ export function TrialBanner() {
             >
               Upgrade Now
             </Button>
+            {isOwner && !currentTenant?.paystack_authorization_code && !trialStatus.isGracePeriod && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleSavePaymentMethod}
+                disabled={isCapturingPaymentMethod}
+              >
+                {isCapturingPaymentMethod ? "Redirecting…" : "Save card for after trial"}
+              </Button>
+            )}
           </div>
         </div>
         {!trialStatus.isGracePeriod && (

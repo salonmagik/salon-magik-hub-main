@@ -1,18 +1,17 @@
 import { useState } from "react";
+import { Dialog, DialogDescription } from "@ui/dialog";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@ui/dialog";
+  ArtifactDialogContent,
+  ArtifactDialogHeader,
+  ArtifactDialogFooter,
+  ArtifactDialogTitle,
+  ARTIFACT_DIALOG_BODY_PADDING,
+} from "@/components/dialogs/ArtifactDialogChrome";
 import { Button } from "@ui/button";
 import { Badge } from "@ui/badge";
 import { Loader2, RefreshCcw, TriangleAlert } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
 
 interface MigrateTenantBillingDialogProps {
   tenant: { id: string; name: string } | null;
@@ -99,19 +98,21 @@ export function MigrateTenantBillingDialog({ tenant, onOpenChange, onSuccess }: 
         else if (step === "loading" && !preview && !errorMessage) loadPreview();
       }}
     >
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <RefreshCcw className="h-5 w-5 text-primary" />
+      <ArtifactDialogContent className="max-w-[440px]">
+        <ArtifactDialogHeader>
+          <ArtifactDialogTitle className="flex items-center gap-2">
+            <RefreshCcw className="h-4 w-4 text-primary" />
             Migrate to self-managed billing
-          </DialogTitle>
-          <DialogDescription>
-            Disables {tenant.name}'s Paystack Subscription and schedules them into the self-managed billing
-            cron, which correctly reflects their current plan tier and add-ons every cycle.
-          </DialogDescription>
-        </DialogHeader>
+          </ArtifactDialogTitle>
+        </ArtifactDialogHeader>
 
-        <div className={DIALOG_BODY_PADDING}>
+        <div className={ARTIFACT_DIALOG_BODY_PADDING}>
+        <div className="flex items-center gap-2.5 rounded-lg bg-destructive-bg px-3.5 py-3">
+          <TriangleAlert className="h-4 w-4 shrink-0 text-destructive" />
+          <DialogDescription className="text-[12.5px] font-medium text-destructive">
+            Disables {tenant.name}'s Paystack Subscription — they'll need to pay manually going forward.
+          </DialogDescription>
+        </div>
         {step === "loading" && (
           <div className="flex items-center justify-center py-10">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -150,7 +151,7 @@ export function MigrateTenantBillingDialog({ tenant, onOpenChange, onSuccess }: 
               )}
             </div>
             {preview.annualBasePriceGapWarning && (
-              <div className="flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <div className="flex gap-2 rounded-lg border border-warning/30 bg-warning-bg p-3 text-sm text-warning">
                 <TriangleAlert className="h-4 w-4 shrink-0" />
                 <p>{preview.annualBasePriceGapWarning}</p>
               </div>
@@ -159,7 +160,7 @@ export function MigrateTenantBillingDialog({ tenant, onOpenChange, onSuccess }: 
         )}
         </div>
 
-        <DialogFooter>
+        <ArtifactDialogFooter>
           <Button variant="outline" onClick={close} disabled={isConfirming}>
             Cancel
           </Button>
@@ -169,8 +170,8 @@ export function MigrateTenantBillingDialog({ tenant, onOpenChange, onSuccess }: 
               Confirm migration
             </Button>
           )}
-        </DialogFooter>
-      </DialogContent>
+        </ArtifactDialogFooter>
+      </ArtifactDialogContent>
     </Dialog>
   );
 }

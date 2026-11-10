@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
 import { Button } from "@ui/button";
 import { Input } from "@ui/input";
 import { Label } from "@ui/label";
@@ -71,58 +70,61 @@ export default function BackofficeForgotPasswordPage() {
 
   if (isSubmitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <div className="mx-auto mb-4 rounded-full bg-success/10 p-3 w-fit">
-              <Mail className="h-8 w-8 text-success" />
+      <div className="flex min-h-screen items-center justify-center bg-background p-6">
+        <div className="w-full max-w-[400px]">
+          <div className="mb-7 flex flex-col items-center">
+            <div className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-[13px] bg-success">
+              <Mail className="h-5 w-5 text-success-foreground" />
             </div>
-            <CardTitle className="text-2xl">Check your email</CardTitle>
-            <CardDescription>
+            <div className="text-lg font-bold text-foreground">Check your email</div>
+            <div className="mt-0.5 text-center text-[12.5px] text-muted-foreground">
               We've sent a password reset link to your email address.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="text-center space-y-4">
-            <p className="text-sm text-muted-foreground">
+            </div>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-7">
+            <p className="mb-5 text-[12.5px] text-muted-foreground">
               Click the link in your email to reset your password. If you don't see it, check your spam folder.
             </p>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2.5">
               <Button
                 variant="outline"
                 onClick={() => setIsSubmitted(false)}
-                className="w-full"
+                className="w-full rounded-full py-[11px] text-[13.5px] font-semibold"
               >
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Try another email
               </Button>
               <Link to="/login">
-                <Button variant="ghost" className="w-full">
+                <Button variant="ghost" className="w-full rounded-full py-[11px] text-[13.5px] font-semibold">
                   Back to sign in
                 </Button>
               </Link>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 rounded-full bg-destructive/10 p-3 w-fit">
-            <Shield className="h-8 w-8 text-destructive" />
+    <div className="flex min-h-screen items-center justify-center bg-background p-6">
+      <div className="w-full max-w-[400px]">
+        <div className="mb-7 flex flex-col items-center">
+          <div className="mb-3.5 flex h-11 w-11 items-center justify-center rounded-[13px] bg-primary">
+            <Shield className="h-5 w-5 text-primary-foreground" />
           </div>
-          <CardTitle className="text-2xl">Reset Password</CardTitle>
-          <CardDescription>
+          <div className="text-lg font-bold text-foreground">Reset password</div>
+          <div className="mt-0.5 text-center text-[12.5px] text-muted-foreground">
             Enter your email and we'll send you a reset link.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-7">
+          <form onSubmit={handleSubmit} className="space-y-0">
+            <div className="mb-5">
+              <Label htmlFor="email" className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+                Work email
+              </Label>
               <Input
                 id="email"
                 type="email"
@@ -131,9 +133,14 @@ export default function BackofficeForgotPasswordPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 autoComplete="email"
+                className="h-auto rounded-[8px] border-input px-[13px] py-[11px] text-[13.5px]"
               />
             </div>
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full rounded-full py-[11px] text-[13.5px] font-semibold"
+            >
               {isLoading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
@@ -142,17 +149,14 @@ export default function BackofficeForgotPasswordPage() {
               Send reset link
             </Button>
           </form>
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            <Link
-              to="/login"
-              className="text-primary hover:underline inline-flex items-center gap-1"
-            >
+          <p className="mt-5 text-center text-xs text-muted-foreground">
+            <Link to="/login" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
               <ArrowLeft size={14} />
               Back to sign in
             </Link>
           </p>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

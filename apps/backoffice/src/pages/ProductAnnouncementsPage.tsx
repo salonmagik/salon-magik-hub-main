@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, ExternalLink, History, Pencil, Plus, Save, Trash2 } from "lucide-react";
-import { BackofficeLayout } from "@/components/BackofficeLayout";
 import { useBackofficeAuth } from "@/hooks/useBackofficeAuth";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@ui/card";
@@ -96,7 +95,7 @@ function RequiredMark() {
   return <span className="text-destructive" aria-hidden="true">*</span>;
 }
 
-export default function ProductAnnouncementsPage() {
+export function AnnouncementsPanel() {
   const queryClient = useQueryClient();
   const { session, backofficeUser } = useBackofficeAuth();
   const isSuperAdmin = backofficeUser?.role === "super_admin";
@@ -249,13 +248,10 @@ export default function ProductAnnouncementsPage() {
   };
 
   return (
-    <BackofficeLayout>
-      <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6">
+    <>
+      <div className="space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Product announcements</h1>
-            <p className="mt-1 text-sm text-muted-foreground">Publish targeted “What’s new” cards with a direct path into the feature.</p>
-          </div>
+          <p className="text-sm text-muted-foreground">Publish targeted "What's new" cards with a direct path into the feature.</p>
           <Button onClick={() => { setDraft(emptyDraft); setShowEditor(true); }} disabled={!isSuperAdmin}>
             <Plus className="mr-2 h-4 w-4" /> New announcement
           </Button>
@@ -316,6 +312,6 @@ export default function ProductAnnouncementsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </BackofficeLayout>
+    </>
   );
 }
