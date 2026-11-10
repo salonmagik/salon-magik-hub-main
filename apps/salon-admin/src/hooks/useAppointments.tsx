@@ -325,7 +325,11 @@ export function useAppointmentActions() {
       return { ...appointment, appointmentServices: appointmentServices || [] };
     } catch (err) {
       console.error("Error creating appointment:", err);
-      toast({ title: "Error", description: "Failed to create appointment", variant: "destructive" });
+      const message =
+        err && typeof err === "object" && "message" in err && typeof (err as any).message === "string"
+          ? (err as any).message
+          : "Failed to create appointment";
+      toast({ title: "Error", description: message, variant: "destructive" });
       return null;
     } finally {
       setIsSubmitting(false);
