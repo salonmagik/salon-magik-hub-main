@@ -22,6 +22,7 @@ export function useGrowthProgression(
   const [progressionReason, setProgressionReason] = useState("");
   const [progressionDrafts, setProgressionDrafts] = useState<Record<string, ProgressionDraft>>({});
   const [progressionDirty, setProgressionDirty] = useState(false);
+  const [hasAttemptedProgressionSubmit, setHasAttemptedProgressionSubmit] = useState(false);
 
   useEffect(() => {
     if (progressionDirty || progressionPlans.length === 0) return;
@@ -70,6 +71,10 @@ export function useGrowthProgression(
 
   const saveProgressionMutation = useMutation({
     mutationFn: async () => {
+      setHasAttemptedProgressionSubmit(true);
+      if (!progressionValidation.isValid) {
+        throw new Error(progressionValidation.errors[0] || "Fix the errors before saving.");
+      }
       const rows = Object.values(progressionDrafts);
       for (const draft of rows) {
         const { error } = await supabase
@@ -103,6 +108,7 @@ export function useGrowthProgression(
       toast.success("Growth progression thresholds updated.");
       setProgressionReason("");
       setProgressionDirty(false);
+      setHasAttemptedProgressionSubmit(false);
       queryClient.invalidateQueries({ queryKey: ["backoffice-limits"] });
       queryClient.invalidateQueries({ queryKey: ["backoffice-audit-logs"] });
     },
@@ -115,6 +121,7 @@ export function useGrowthProgression(
     progressionDrafts,
     progressionDirty,
     setProgressionDirty,
+    hasAttemptedProgressionSubmit,
     progressionValidation,
     updateProgressionDraft,
     saveProgressionMutation,

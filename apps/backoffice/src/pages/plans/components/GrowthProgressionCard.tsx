@@ -12,6 +12,7 @@ interface GrowthProgressionCardProps {
   progressionReason: string;
   setProgressionReason: (value: string) => void;
   setProgressionDirty: (dirty: boolean) => void;
+  hasAttemptedProgressionSubmit: boolean;
   progressionValidation: { isValid: boolean; errors: string[] };
   updateProgressionDraft: (planId: string, patch: Partial<ProgressionDraft>) => void;
   saveProgressionMutation: UseMutationResult<void, unknown, void>;
@@ -23,11 +24,13 @@ export function GrowthProgressionCard({
   progressionReason,
   setProgressionReason,
   setProgressionDirty,
+  hasAttemptedProgressionSubmit,
   progressionValidation,
   updateProgressionDraft,
   saveProgressionMutation,
 }: GrowthProgressionCardProps) {
-  const canSubmit = isSuperAdmin && progressionValidation.isValid && !saveProgressionMutation.isPending;
+  const canSubmit = isSuperAdmin && !saveProgressionMutation.isPending;
+  const showErrors = hasAttemptedProgressionSubmit && progressionValidation.errors.length > 0;
 
   return (
     <Card>
@@ -38,7 +41,7 @@ export function GrowthProgressionCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {progressionValidation.errors.length > 0 && (
+        {showErrors && (
           <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3">
             <ul className="list-disc space-y-1 pl-5 text-xs text-destructive">
               {progressionValidation.errors.slice(0, 8).map((error) => <li key={error}>{error}</li>)}
