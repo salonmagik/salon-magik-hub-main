@@ -72,7 +72,7 @@ function CopyBookingLinkButton({
           </button>
         ) : canSetUpPayouts ? (
           <a
-            href="/salon/payouts?tab=accounts"
+            href="/salon/business-settings?tab=booking"
             className="flex-shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Set up online booking"
           >
@@ -91,7 +91,7 @@ function CopyBookingLinkButton({
         {isOnlineBookingEnabled
           ? "Copy your salon's public booking page link."
           : canSetUpPayouts
-            ? "Online booking isn't turned on yet. It needs a payout account set up first. Click to go to Payout Destinations settings."
+            ? "Online booking isn't turned on yet. It needs a payout account set up first. Click to turn on online booking."
             : "Online booking isn't turned on yet. Ask your salon owner or manager to set up a payout account first."}
       </TooltipContent>
     </Tooltip>
