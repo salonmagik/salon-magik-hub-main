@@ -5,6 +5,7 @@ import {
   ArtifactDialogContent,
   ArtifactDialogHeader,
   ArtifactDialogFooter,
+  ArtifactDialogTitle,
   ARTIFACT_DIALOG_BODY_PADDING,
 } from "@/components/dialogs/ArtifactDialogChrome";
 import { cn } from "@shared/utils";
@@ -24,7 +25,7 @@ export function MaintenanceBannerConfirmDialog({ safety }: MaintenanceBannerConf
             <Megaphone className="h-5 w-5 text-warning" />
           </div>
           <ArtifactDialogHeader className="block space-y-0 p-0 text-center">
-            <h2 className="text-[15px] font-bold">Confirm: save maintenance banner</h2>
+            <ArtifactDialogTitle className="text-[15px] font-bold">Confirm: save maintenance banner</ArtifactDialogTitle>
           </ArtifactDialogHeader>
           <DialogDescription className="mt-1 text-[12.5px] text-muted-foreground">
             Confirm with your 2FA code to apply changes
