@@ -482,14 +482,23 @@ export function useAppointmentActions() {
 
     setIsSubmitting(true);
     try {
+      const { data: current, error: fetchError } = await supabase
+        .from("appointments")
+        .select("reschedule_count")
+        .eq("id", appointmentId)
+        .eq("tenant_id", currentTenant.id)
+        .single();
+
+      if (fetchError) throw fetchError;
+
       const { error } = await supabase
         .from("appointments")
-        .update({ 
+        .update({
           scheduled_start: newStart,
           scheduled_end: newEnd,
           status: "scheduled",
           is_unscheduled: false, // Mark as scheduled now
-          reschedule_count: supabase.rpc ? undefined : 1,
+          reschedule_count: (current?.reschedule_count ?? 0) + 1,
         })
         .eq("id", appointmentId)
         .eq("tenant_id", currentTenant.id);
