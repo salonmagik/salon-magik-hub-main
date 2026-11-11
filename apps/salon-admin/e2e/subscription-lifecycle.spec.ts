@@ -41,7 +41,7 @@ test("owner cancels, sees the pending state with the correct date, then resumes 
   await expect(confirmButton).toBeEnabled();
   await confirmButton.click();
 
-  await expect(page.getByText(/Cancellation pending/)).toBeVisible();
+  await expect(page.getByText(/Cancelling: your plan stays active until/)).toBeVisible();
 
   // No payment/checkout prompt anywhere in the cancel flow.
   await expect(page.getByText(/redirecting to payment/i)).toHaveCount(0);
@@ -51,7 +51,7 @@ test("owner cancels, sees the pending state with the correct date, then resumes 
   await expect(resumeButton).toBeVisible();
   await resumeButton.click();
 
-  await expect(page.getByText(/Cancellation pending/)).toHaveCount(0);
+  await expect(page.getByText(/Cancelling: your plan stays active until/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Cancel subscription" })).toBeVisible();
 
   // Resuming took no payment: no checkout/payment prompt appeared here either.
