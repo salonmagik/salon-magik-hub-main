@@ -138,8 +138,12 @@ export default function ClientStoreCreditDetailPage() {
     .reduce((sum, grant) => sum + Number(grant.remaining_amount), 0);
   const reserved = salonGrants.reduce((sum, grant) => sum + Number(grant.reserved_amount), 0);
   const purse = purses.find((entry) => entry.customer_id === customerId);
-  const total = purse ? Number(purse.balance) : paid + storeCredit;
-  const available = Math.max(0, total - reserved);
+  // customer_purses.balance is already net of active reservations (synced as
+  // remaining_amount - reserved_amount across grants), so it's used as-is;
+  // only the paid+storeCredit fallback (raw remaining_amount sums) still
+  // needs reserved subtracted out.
+  const total = purse ? Number(purse.balance) : Math.max(0, paid + storeCredit - reserved);
+  const available = total;
 
   const salonPackages = useMemo(
     () => packages.filter((entitlement) => entitlement.customer_id === customerId),
