@@ -82,18 +82,25 @@ export default function VouchersPage() {
 
   const filteredVouchers = vouchers.filter((voucher) => voucher.code.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  const toCatalogItem = (voucher: (typeof vouchers)[number]): CatalogItem => ({
-    id: voucher.id,
-    type: "voucher",
-    name: voucher.code,
-    description: [
-      voucher.access_type ? `${voucher.access_type} voucher` : "Gift voucher",
-      voucher.expires_at ? `expires ${format(new Date(voucher.expires_at), "MMM d, yyyy")}` : null,
-      `balance ${formatCurrency(Number(voucher.balance))}`,
-    ].filter(Boolean).join(" · "),
-    price: Number(voucher.amount),
-    status: voucher.status,
-  });
+  const toCatalogItem = (voucher: (typeof vouchers)[number]): CatalogItem => {
+    const isPercentagePromotion = voucher.voucher_type === "promotion" && voucher.discount_type === "percentage";
+    const kindLabel = voucher.voucher_type === "promotion" ? "promotion" : "gift";
+    return {
+      id: voucher.id,
+      type: "voucher",
+      name: voucher.code,
+      description: [
+        voucher.access_type ? `${voucher.access_type} ${kindLabel} voucher` : `${kindLabel} voucher`,
+        voucher.expires_at ? `expires ${format(new Date(voucher.expires_at), "MMM d, yyyy")}` : null,
+        isPercentagePromotion
+          ? `${Number(voucher.discount_value)}% off`
+          : `balance ${formatCurrency(Number(voucher.balance))}`,
+      ].filter(Boolean).join(" · "),
+      price: Number(voucher.amount),
+      priceLabel: isPercentagePromotion ? `${Number(voucher.discount_value)}%` : undefined,
+      status: voucher.status,
+    };
+  };
 
   const selectedItemsInfo = useMemo(() => {
     return Array.from(selectedItems)

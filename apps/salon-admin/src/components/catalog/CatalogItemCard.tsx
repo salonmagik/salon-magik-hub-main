@@ -22,6 +22,10 @@ export interface CatalogItem {
   name: string;
   description: string;
   price: number;
+  /** Overrides the formatCurrency(price) display for cases where `price` isn't
+   * actually a currency amount — e.g. a percentage-off promotion voucher,
+   * where the underlying numeric value is a percentage, not money. */
+  priceLabel?: string;
   duration?: number;
   originalPrice?: number;
   stock?: number;
@@ -245,7 +249,7 @@ export function SelectableItemCard({
             </div>
 
             <div className="mt-2 sm:hidden">
-              <p className="font-serif text-base font-semibold">{formatCurrency(item.price)}</p>
+              <p className="font-serif text-base font-semibold">{item.priceLabel ?? formatCurrency(item.price)}</p>
               {item.originalPrice && (
                 <p className="text-xs text-muted-foreground line-through">
                   {formatCurrency(item.originalPrice)}
@@ -256,7 +260,7 @@ export function SelectableItemCard({
 
           <div className="flex items-start gap-1">
             <div className="hidden flex-shrink-0 text-right sm:block">
-              <p className="font-serif text-lg font-semibold">{formatCurrency(item.price)}</p>
+              <p className="font-serif text-lg font-semibold">{item.priceLabel ?? formatCurrency(item.price)}</p>
               {item.originalPrice && (
                 <p className="text-sm text-muted-foreground line-through">
                   {formatCurrency(item.originalPrice)}
