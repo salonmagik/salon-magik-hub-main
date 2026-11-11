@@ -56,7 +56,7 @@ Deno.test("missing tenantId/action returns 400", async () => {
     tenant: tenantRow,
     rpcResults: {},
   });
-  const res = await handleManageSubscriptionCancellation(makeRequest({}), supabase, owner);
+  const res = await handleManageSubscriptionCancellation(makeRequest({}), supabase, supabase, owner);
   assertEquals(res.status, 400);
 });
 
@@ -68,6 +68,7 @@ Deno.test("cancel without a valid reason returns 400", async () => {
   });
   const res = await handleManageSubscriptionCancellation(
     makeRequest({ tenantId: "tenant-1", action: "cancel", reason: "not_a_real_reason" }),
+    supabase,
     supabase,
     owner,
   );
@@ -85,6 +86,7 @@ Deno.test("non-owner is rejected with 403 before any RPC is attempted", async ()
   const res = await handleManageSubscriptionCancellation(
     makeRequest({ tenantId: "tenant-1", action: "cancel", reason: "too_expensive" }),
     supabase,
+    supabase,
     owner,
   );
   assertEquals(res.status, 403);
@@ -99,6 +101,7 @@ Deno.test("tenant not found returns 404", async () => {
   });
   const res = await handleManageSubscriptionCancellation(
     makeRequest({ tenantId: "tenant-1", action: "cancel", reason: "too_expensive" }),
+    supabase,
     supabase,
     owner,
   );
@@ -115,6 +118,7 @@ Deno.test("successful cancel returns 200 with the access-end date", async () => 
   });
   const res = await handleManageSubscriptionCancellation(
     makeRequest({ tenantId: "tenant-1", action: "cancel", reason: "too_expensive", note: "  bye  " }),
+    supabase,
     supabase,
     owner,
   );
@@ -134,6 +138,7 @@ Deno.test("an already-pending cancellation maps SUBSCRIPTION_NOT_CANCELLABLE to 
   const res = await handleManageSubscriptionCancellation(
     makeRequest({ tenantId: "tenant-1", action: "cancel", reason: "too_expensive" }),
     supabase,
+    supabase,
     owner,
   );
   assertEquals(res.status, 409);
@@ -147,7 +152,7 @@ Deno.test("successful resume returns 200 with the next billing date", async () =
       resume_subscription: { data: "2026-10-05T00:00:00.000Z", error: null },
     },
   });
-  const res = await handleManageSubscriptionCancellation(makeRequest({ tenantId: "tenant-1", action: "resume" }), supabase, owner);
+  const res = await handleManageSubscriptionCancellation(makeRequest({ tenantId: "tenant-1", action: "resume" }), supabase, supabase, owner);
   assertEquals(res.status, 200);
   const body = await res.json();
   assertEquals(body.resumed, true);
@@ -162,6 +167,6 @@ Deno.test("resume with nothing pending maps NOTHING_TO_RESUME to 409", async () 
       resume_subscription: { data: null, error: { message: "NOTHING_TO_RESUME" } },
     },
   });
-  const res = await handleManageSubscriptionCancellation(makeRequest({ tenantId: "tenant-1", action: "resume" }), supabase, owner);
+  const res = await handleManageSubscriptionCancellation(makeRequest({ tenantId: "tenant-1", action: "resume" }), supabase, supabase, owner);
   assertEquals(res.status, 409);
 });
