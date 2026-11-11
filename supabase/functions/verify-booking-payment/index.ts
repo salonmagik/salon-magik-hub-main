@@ -190,14 +190,6 @@ serve(async (req) => {
       return json({ error: "Appointments not found or access denied" }, 403);
     }
 
-    // Skip update if all appointments are already paid
-    const anyNeedsUpdate = appointments.some(
-      (a) => !["fully_paid", "deposit_paid"].includes(a.payment_status),
-    );
-    if (!anyNeedsUpdate) {
-      return json({ verified: true, alreadyProcessed: true });
-    }
-
     const totalAppointmentAmount = appointments.reduce(
       (sum, a) => sum + Number(a.total_amount || 0),
       0,
