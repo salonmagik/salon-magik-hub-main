@@ -114,6 +114,7 @@ export default function PlansPage() {
               progressionReason={growthProgression.progressionReason}
               setProgressionReason={growthProgression.setProgressionReason}
               setProgressionDirty={growthProgression.setProgressionDirty}
+              hasAttemptedProgressionSubmit={growthProgression.hasAttemptedProgressionSubmit}
               progressionValidation={growthProgression.progressionValidation}
               updateProgressionDraft={growthProgression.updateProgressionDraft}
               saveProgressionMutation={growthProgression.saveProgressionMutation}

@@ -38,11 +38,22 @@ function jsonResponse(body: Record<string, unknown>, status: number) {
  * below so it can be driven directly by a test with an injected Supabase
  * client and a fake authenticated user — the handler's own job is just
  * CORS, bearer-token extraction, and resolving `user` before calling this.
+ *
+ * Two clients are threaded through deliberately: `supabase` is the
+ * service-role client, used for the privileged reads below that don't need
+ * RLS. `userClient` is bound to the caller's own JWT and MUST be used for
+ * request_subscription_cancellation/resume_subscription specifically —
+ * those RPCs are security-definer functions that authorize via auth.uid(),
+ * which is always null under a service-role client (no end-user JWT), so
+ * calling them via `supabase` makes them unconditionally raise
+ * 'AUTH_REQUIRED' regardless of who the real caller is.
  */
 export async function handleManageSubscriptionCancellation(
   req: Request,
   // deno-lint-ignore no-explicit-any
   supabase: SupabaseClient<any, any, any>,
+  // deno-lint-ignore no-explicit-any
+  userClient: SupabaseClient<any, any, any>,
   user: Pick<User, "id" | "email">,
 ): Promise<Response> {
   const { tenantId, action, reason, note }: ManageCancellationRequest = await req.json();
@@ -79,7 +90,7 @@ export async function handleManageSubscriptionCancellation(
 
   if (action === "cancel") {
     const trimmedNote = (note || "").trim().slice(0, 1000);
-    const { data: cancelAt, error: rpcError } = await supabase.rpc("request_subscription_cancellation", {
+    const { data: cancelAt, error: rpcError } = await userClient.rpc("request_subscription_cancellation", {
       p_tenant_id: tenantId,
       p_reason: reason,
       p_note: trimmedNote || null,
@@ -111,7 +122,7 @@ export async function handleManageSubscriptionCancellation(
   }
 
   // action === "resume"
-  const { data: nextBillingAt, error: rpcError } = await supabase.rpc("resume_subscription", {
+  const { data: nextBillingAt, error: rpcError } = await userClient.rpc("resume_subscription", {
     p_tenant_id: tenantId,
   });
 
@@ -151,7 +162,7 @@ serve(async (req) => {
     }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    return await handleManageSubscriptionCancellation(req, supabase, user);
+    return await handleManageSubscriptionCancellation(req, supabase, userClient, user);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Internal server error";
     console.error("manage-subscription-cancellation error:", error);

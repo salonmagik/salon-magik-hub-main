@@ -7,6 +7,7 @@ import {
   ArtifactDialogContent,
   ArtifactDialogHeader,
   ArtifactDialogFooter,
+  ArtifactDialogTitle,
   ARTIFACT_DIALOG_BODY_PADDING,
 } from "@/components/dialogs/ArtifactDialogChrome";
 import { cn } from "@shared/utils";
@@ -28,9 +29,9 @@ export function KillSwitchConfirmDialog({ safety }: KillSwitchConfirmDialogProps
             <AlertTriangle className="h-5 w-5 text-destructive" />
           </div>
           <ArtifactDialogHeader className="block space-y-0 p-0 text-center">
-            <h2 className="text-[15px] font-bold">
+            <ArtifactDialogTitle className="text-[15px] font-bold">
               Confirm: {pendingKillSwitchState ? "enable" : "disable"} kill switch
-            </h2>
+            </ArtifactDialogTitle>
           </ArtifactDialogHeader>
           <DialogDescription className="mt-1 text-[12.5px] text-muted-foreground">
             {pendingKillSwitchState

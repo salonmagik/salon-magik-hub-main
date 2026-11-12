@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChevronRight, WalletCards } from "lucide-react";
 import { ClientSidebar } from "@/components/ClientSidebar";
-import { useClientAuth, useClientBalance, useClientPurse } from "@/hooks";
+import { useClientAuth, useClientPurse } from "@/hooks";
 import { Skeleton } from "@ui/skeleton";
 import { formatCurrency } from "@shared/currency";
 import { cn } from "@shared/utils";
@@ -18,20 +18,20 @@ export default function ClientStoreCreditPage() {
   const navigate = useNavigate();
   const { customers } = useClientAuth();
   const { purses, isLoading: pursesLoading } = useClientPurse();
-  const { grants, isLoading: balanceLoading } = useClientBalance();
 
-  const isLoading = pursesLoading || balanceLoading;
+  const isLoading = pursesLoading;
 
   const salonBalances = useMemo(
     () =>
       customers.map((customer) => {
-        const salonGrants = grants.filter((grant) => grant.customer_id === customer.id && grant.status === "active");
-        const reserved = salonGrants.reduce((sum, grant) => sum + Number(grant.reserved_amount), 0);
         const purse = purses.find((entry) => entry.customer_id === customer.id);
-        const total = purse ? Number(purse.balance) : 0;
-        return { customer, total, available: Math.max(0, total - reserved) };
+        // customer_purses.balance is already net of any active reservations
+        // (synced by sync_customer_purse_balance as remaining_amount - reserved_amount
+        // across each customer's credit grants), so it's used as-is here.
+        const available = purse ? Number(purse.balance) : 0;
+        return { customer, available };
       }),
-    [customers, grants, purses],
+    [customers, purses],
   );
 
   return (
