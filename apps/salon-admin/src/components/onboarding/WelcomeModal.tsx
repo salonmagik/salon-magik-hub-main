@@ -8,7 +8,10 @@ import { useChainPriceQuote } from "@/hooks/useAdditionalLocationPricing";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { getCurrencySymbol } from "@/hooks/usePlanPricing";
-import { Clock, ArrowRight, Loader2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle } from "@ui/dialog";
+import { Button } from "@ui/button";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { CreditCard, Clock, ArrowRight, Loader2 } from "lucide-react";
 import type { SubscriptionPlan } from "./PlanStep";
 import type { LocationInfo } from "./LocationsStep";
 
@@ -79,6 +82,7 @@ export function WelcomeModal({
 
   const promoExpiry = promoPreview?.expiresAt || promoPreview?.campaignEndsAt || null;
   const isChain = initialPlan === "chain";
+  const hasPromo = Boolean(promoPreview?.valid);
 
   useEffect(() => {
     fireConfetti();
@@ -127,6 +131,7 @@ export function WelcomeModal({
   const locationAddonRows = isChain
     ? (chainPriceQuote?.breakdown || []).filter((row) => row.tier_label !== "Base (1 location)")
     : [];
+  const baseOnlyPrice = isChain ? (basePlanPricing?.monthly_price ?? null) : totalPrice;
 
   const handleExplore = () => {
     onDismiss();
@@ -162,8 +167,8 @@ export function WelcomeModal({
   };
 
   const logoBadge = (
-    <div className="mx-auto mb-[18px] flex h-16 w-16 items-center justify-center rounded-full" style={{ background: "rgba(244,200,78,.14)" }}>
-      <svg width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl" style={{ background: "rgba(244,200,78,.14)" }}>
+      <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true">
         <path
           d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z"
           stroke="#F4C84E"
@@ -176,7 +181,7 @@ export function WelcomeModal({
     </div>
   );
 
-  // --- Welcome Screen ---
+  // --- Welcome Screen — left-aligned editorial, purple throughout ---
   if (screen === "welcome") {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
@@ -184,233 +189,172 @@ export function WelcomeModal({
           className="w-full max-w-md overflow-hidden rounded-[24px] shadow-[0_28px_64px_rgba(20,12,36,0.5)]"
           style={{ background: "#2E1F4E" }}
         >
-          <div className="px-8 pb-6 pt-9 text-center">
+          <div className="px-8 pt-10">
             {logoBadge}
-            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: "#F4C84E" }}>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: "#F4C84E" }}>
               You're all set
             </p>
-            <h1 className="text-[23px] font-medium leading-snug text-white">
+            <h1 className="text-[28px] font-medium leading-[1.25] tracking-[-0.3px] text-white">
               Welcome to Salon Magik, {businessName}!
             </h1>
-            <p className="mt-2.5 text-sm leading-relaxed" style={{ color: "#C9C2DC" }}>
+            <p className="mt-3.5 max-w-[300px] text-[14.5px] leading-relaxed" style={{ color: "#C9C2DC" }}>
               Your salon is live and ready to take bookings.
             </p>
           </div>
 
-          <div className="px-7 pb-7 space-y-3">
-            {/* Trial info */}
-            <div
-              className="flex items-start gap-3 rounded-2xl p-4"
-              style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)" }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" className="mt-0.5 flex-shrink-0" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" stroke="#8FD6A8" strokeWidth="1.6" />
-                <path d="M8 12.3l2.6 2.6 5.4-5.8" stroke="#8FD6A8" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          {/* plain left-aligned lines, no boxes — the bottom border lives on
+              the wrapper so it stays put whether the promo line is there or not */}
+          <div className="mt-6 px-8" style={{ borderBottom: "1px solid rgba(255,255,255,.1)" }}>
+            <div className="flex items-center gap-2.5 py-3.5" style={{ borderTop: "1px solid rgba(255,255,255,.1)" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="flex-shrink-0" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" stroke="#8FD6A8" strokeWidth="1.8" />
+                <path d="M8 12.3l2.6 2.6 5.4-5.8" stroke="#8FD6A8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <div>
-                <p className="text-[13.5px] font-semibold text-white">{trialDays}-day free trial active</p>
-                <p className="mt-0.5 text-[12.5px] leading-relaxed" style={{ color: "#B7AFCB" }}>
-                  Explore every feature free — no card needed until you're ready to go live.
-                </p>
-              </div>
+              <span className="text-[13.5px]" style={{ color: "#EFEAF7" }}>
+                {trialDays}-day free trial, no card needed yet.
+              </span>
             </div>
-
-            {/* Promo countdown */}
-            {promoPreview?.valid && countdown && (
-              <div
-                className="flex items-start gap-3 rounded-2xl p-4"
-                style={{ background: "rgba(244,200,78,.1)", border: "1px solid rgba(244,200,78,.25)" }}
-              >
-                <Clock className="mt-0.5 h-[18px] w-[18px] flex-shrink-0" style={{ color: "#F4C84E" }} />
-                <div>
-                  <p className="text-[13.5px] font-semibold" style={{ color: "#F4C84E" }}>
-                    Promo code active, expires in {countdown}
-                  </p>
-                  <p className="mt-0.5 text-[12.5px] leading-relaxed" style={{ color: "#E3D4A8" }}>
-                    {promoPreview.campaignName} ·{" "}
-                    {promoPreview.discountType === "fixed"
-                      ? `${symbol}${promoPreview.discountValue} off`
-                      : `${promoPreview.discountValue}% off`}{" "}
-                    your first subscription
-                  </p>
-                </div>
+            {hasPromo && countdown && (
+              <div className="flex items-center gap-2.5 py-3.5" style={{ borderTop: "1px solid rgba(255,255,255,.1)" }}>
+                <Clock className="h-4 w-4 flex-shrink-0" style={{ color: "#F4C84E" }} />
+                <span className="text-[13.5px] font-semibold" style={{ color: "#F4C84E" }}>
+                  {promoPreview?.campaignName} ·{" "}
+                  {promoPreview?.discountType === "fixed"
+                    ? `${symbol}${promoPreview.discountValue} off`
+                    : `${promoPreview?.discountValue}% off`}
+                  , {countdown} left
+                </span>
               </div>
             )}
+          </div>
 
-            {/* CTA row: only the owner can reach billing, so only the owner sees Subscribe now */}
-            <div className="flex flex-col gap-2.5 pt-1">
-              {currentRole === "owner" && (
-                <button
-                  type="button"
-                  onClick={() => setScreen("subscribe")}
-                  className="flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-transform hover:-translate-y-px"
-                  style={{ background: "#F4C84E", color: "#2E1F4E" }}
-                >
-                  Subscribe now
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              )}
+          <div className="flex flex-col gap-2.5 px-8 pb-8 pt-6">
+            {currentRole === "owner" && (
               <button
                 type="button"
-                onClick={handleExplore}
-                className="w-full rounded-full px-5 py-[11px] text-sm font-medium text-white transition-colors hover:bg-white/[0.08]"
-                style={{ border: "1px solid rgba(255,255,255,.3)", background: "transparent" }}
+                onClick={() => setScreen("subscribe")}
+                className="flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-transform hover:-translate-y-px"
+                style={{ background: "#F4C84E", color: "#2E1F4E" }}
               >
-                Start exploring
+                Subscribe now
+                <ArrowRight className="h-4 w-4" />
               </button>
-            </div>
+            )}
+            <button
+              type="button"
+              onClick={handleExplore}
+              className="w-full rounded-full px-5 py-[11px] text-sm font-medium text-white transition-colors hover:bg-white/[0.08]"
+              style={{ border: "1px solid rgba(255,255,255,.3)", background: "transparent" }}
+            >
+              Start exploring
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  // --- Subscribe / Review Screen ---
+  // --- Subscribe / Review Screen — the app's real dialog system:
+  // BRAND_DIALOG_STYLE on DialogHeader only (dark), plain white body and
+  // footer, real Button variants via FOOTER_ACCENT_STYLE on DialogFooter. ---
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-      <div
-        className="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-[24px] shadow-[0_28px_64px_rgba(20,12,36,0.5)]"
-        style={{ background: "#2E1F4E" }}
-      >
-        <div className="px-8 pb-[18px] pt-7" style={{ borderBottom: "1px solid rgba(255,255,255,.08)" }}>
-          <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: "#F4C84E" }}>
-            Your subscription
-          </p>
-          <h2 className="text-[20px] font-medium text-white">One base plan, built to grow</h2>
-          <p className="mt-1.5 text-[13px] leading-relaxed" style={{ color: "#C9C2DC" }}>
-            Every salon pays the same base price. Extra locations and team seats are added only as you need them.
-          </p>
-        </div>
+    <Dialog open onOpenChange={(next) => { if (!next) handleExplore(); }}>
+      {/* A min-height at every breakpoint, not just sm+ -- a phone's own
+          DIALOG_BODY_PADDING is smaller than desktop's, so it needs its
+          own (smaller) floor rather than inheriting nothing below 640px.
+          Both values are sized to each breakpoint's tallest real state
+          (chain + 1 location add-on + promo line) so the shorter no-
+          promo/solo state grows to match instead of visibly shrinking. */}
+      <DialogContent className="min-h-[480px] sm:max-w-lg sm:min-h-[530px]">
+        <DialogHeader className="flex flex-row items-center gap-3">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: "rgba(157,134,198,.18)" }}>
+            <CreditCard className="h-[18px] w-[18px]" style={{ color: "#9D86C6" }} />
+          </div>
+          <div>
+            <DialogTitle className="font-serif text-2xl">Your subscription</DialogTitle>
+            <p className="text-sm text-muted-foreground">One base plan, built to grow</p>
+          </div>
+        </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-7 py-5">
-          <div className="rounded-[18px] p-5" style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)" }}>
+        <div className={`${DIALOG_BODY_PADDING} flex-1`}>
+          <div className="rounded-[18px] bg-muted p-[22px]">
             <div className="flex items-baseline justify-between">
-              <span className="text-[12.5px] font-semibold uppercase tracking-[0.06em]" style={{ color: "#B7AFCB" }}>
-                Base subscription
+              <span className="text-[14.5px] font-semibold text-foreground/70">Base subscription</span>
+              <span className="text-[15px] font-semibold text-foreground">
+                {symbol}
+                {(baseOnlyPrice ?? 0).toLocaleString()}/mo
               </span>
-              {discountedPrice !== null && totalPrice !== null ? (
-                <span className="text-right">
-                  <span className="text-[26px] font-medium text-white">
-                    {symbol}
-                    {discountedPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  </span>
-                  <span className="ml-1.5 text-[13px] line-through" style={{ color: "#8E84A6" }}>
-                    {symbol}
-                    {totalPrice.toLocaleString()}
-                  </span>
-                </span>
-              ) : (
-                <span className="text-[26px] font-medium text-white">
-                  {symbol}
-                  {(totalPrice ?? 0).toLocaleString()}
-                  <span className="text-[13px] font-medium" style={{ color: "#9A8FB4" }}>/mo</span>
-                </span>
-              )}
             </div>
-            <p className="mt-2.5 text-[12.5px] leading-relaxed" style={{ color: "#9A8FB4" }}>
-              Covers your first location and up to 3 team seats. Unlimited services, products, packages, vouchers and
-              email marketing included.
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              1 location, up to 3 team seats, unlimited everything else
             </p>
-          </div>
 
-          {locationAddonRows.length > 0 && (
-            <div className="mt-3.5">
-              <p className="mb-2 text-[12px] font-semibold uppercase tracking-[0.06em]" style={{ color: "#B7AFCB" }}>
-                Add-ons for this signup
+            {locationAddonRows.map((row, index) => (
+              <div key={`${row.tier_label}-${index}`} className="mt-4 flex items-baseline justify-between">
+                <span className="text-[14.5px] text-foreground/70">
+                  {row.locations} extra location{row.locations !== 1 ? "s" : ""}
+                </span>
+                <span className="text-[15px] font-semibold text-foreground">
+                  {row.subtotal != null ? `${symbol}${Number(row.subtotal).toLocaleString()}/mo` : "Custom"}
+                </span>
+              </div>
+            ))}
+
+            <div className="my-[18px] border-t border-border" />
+
+            <div className="flex items-baseline justify-between">
+              <span className="text-[15px] font-semibold text-foreground">Monthly total</span>
+              <span className="text-[25px] font-bold text-primary">
+                {symbol}
+                {(discountedPrice ?? totalPrice ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            {hasPromo && discountedPrice !== null && totalPrice !== null && (
+              <p className="mt-1.5 text-[12.5px] font-semibold text-success">
+                {promoPreview?.campaignName} applied —{" "}
+                {promoPreview?.discountType === "percentage"
+                  ? `${promoPreview.discountValue}% off`
+                  : `${symbol}${promoPreview?.discountValue} off`}
+                , was {symbol}
+                {totalPrice.toLocaleString()}
               </p>
-              {locationAddonRows.map((row, index) => (
-                <div
-                  key={`${row.tier_label}-${index}`}
-                  className="flex items-center justify-between py-[11px]"
-                  style={index < locationAddonRows.length - 1 ? { borderBottom: "1px solid rgba(255,255,255,.08)" } : undefined}
-                >
-                  <span className="text-[13.5px] text-white">
-                    {row.locations} extra location{row.locations !== 1 ? "s" : ""} ({row.tier_label})
-                  </span>
-                  <span className="text-[13.5px]" style={{ color: "#C9C2DC" }}>
-                    {row.subtotal != null ? `${symbol}${Number(row.subtotal).toLocaleString()}/mo` : "Custom"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div
-            className="mt-4 flex items-center justify-between pt-4"
-            style={{ borderTop: "1px solid rgba(255,255,255,.12)" }}
-          >
-            <span className="text-sm font-semibold text-white">Estimated monthly total</span>
-            <span className="text-[20px] font-bold" style={{ color: "#F4C84E" }}>
-              {symbol}
-              {(discountedPrice ?? totalPrice ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-            </span>
+            )}
           </div>
 
-          {promoPreview?.valid && discountedPrice !== null && (
-            <div
-              className="mt-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11.5px] font-medium"
-              style={{ background: "rgba(143,214,168,.15)", color: "#8FD6A8" }}
-            >
-              {promoPreview.discountType === "percentage"
-                ? `${promoPreview.discountValue}% off applied`
-                : `${symbol}${promoPreview.discountValue} off applied`}
-            </div>
-          )}
-
-          <div
-            className="mt-4 flex items-start gap-2.5 rounded-2xl p-[13px]"
-            style={{ background: "rgba(244,200,78,.1)", border: "1px solid rgba(244,200,78,.25)" }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="mt-0.5 flex-shrink-0" aria-hidden="true">
-              <circle cx="12" cy="12" r="10" stroke="#F4C84E" strokeWidth="1.6" />
-              <path d="M12 7v6l4 2" stroke="#F4C84E" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <p className="text-[12px] leading-relaxed" style={{ color: "#E3D4A8" }}>
-              Nothing is charged until your {trialDays}-day trial ends. Cancel any time before then.
-            </p>
-          </div>
+          <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            Nothing is charged until your {trialDays}-day trial ends. Cancel any time before then.
+          </p>
         </div>
 
-        <div className="flex flex-col gap-2.5 px-7 pb-[26px] pt-[18px]">
-          <button
-            type="button"
-            disabled={isProcessing}
-            onClick={handleConfirmAndPay}
-            className="flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-transform hover:-translate-y-px disabled:opacity-70"
-            style={{ background: "#F4C84E", color: "#2E1F4E" }}
-          >
-            {isProcessing ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                Confirm & Pay
-                <ArrowRight className="h-4 w-4" />
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            disabled={isProcessing}
-            onClick={() => setScreen("welcome")}
-            className="w-full rounded-full py-2 text-[13px] font-medium disabled:opacity-70"
-            style={{ color: "#C9C2DC" }}
-          >
-            Back
-          </button>
+        <DialogFooter className="flex-row items-center justify-between">
           <button
             type="button"
             disabled={isProcessing}
             onClick={handleExplore}
-            className="w-full text-center text-[12px] disabled:opacity-70"
-            style={{ color: "#8E84A6" }}
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-70"
           >
             Skip for now, I'll subscribe later
           </button>
-        </div>
-      </div>
-    </div>
+          <div className="flex gap-2.5">
+            <Button type="button" variant="outline" disabled={isProcessing} onClick={() => setScreen("welcome")}>
+              Back
+            </Button>
+            <Button type="button" disabled={isProcessing} onClick={handleConfirmAndPay}>
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  Confirm &amp; Pay
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
