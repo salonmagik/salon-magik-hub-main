@@ -107,20 +107,31 @@ serve(async (req) => {
         .select("id")
         .eq("slug", tenant.plan)
         .maybeSingle();
-
       planId = planRow?.id ?? null;
-      if (planRow?.id) {
-        const { data: pricingRow } = await supabase
-          .from("plan_pricing")
-          .select("annual_price, monthly_price")
-          .eq("plan_id", planRow.id)
-          .eq("currency", currency)
-          .is("valid_until", null)
-          .maybeSingle();
-        localPlanAmount = billingCycle === "annual"
-          ? (pricingRow?.annual_price ?? 0)
-          : (pricingRow?.monthly_price ?? 0);
-      }
+    }
+
+    // Solo/Studio/Chain are labels only now — there is one base price, read
+    // from the Solo/Base plan's own pricing regardless of which label the
+    // tenant carries (Studio/Chain no longer have their own plan_pricing
+    // rows at all; reading via `tenant.plan` here would silently resolve to
+    // 0 for a Studio-labeled tenant). The Chain branch below overwrites this
+    // with the real (base + per-location) total.
+    const { data: basePlanRow } = await supabase
+      .from("plans")
+      .select("id")
+      .eq("slug", "solo")
+      .maybeSingle();
+    if (basePlanRow?.id) {
+      const { data: pricingRow } = await supabase
+        .from("plan_pricing")
+        .select("annual_price, monthly_price")
+        .eq("plan_id", basePlanRow.id)
+        .eq("currency", currency)
+        .is("valid_until", null)
+        .maybeSingle();
+      localPlanAmount = billingCycle === "annual"
+        ? (pricingRow?.annual_price ?? 0)
+        : (pricingRow?.monthly_price ?? 0);
     }
 
     const isChain = tenant.plan?.toLowerCase() === "chain";

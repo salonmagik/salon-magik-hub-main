@@ -1,17 +1,17 @@
-import { useState, useEffect, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@ui/button";
-import { Badge } from "@ui/badge";
-import { cn } from "@shared/utils";
-import { formatCurrency } from "@shared/currency";
-import { getCurrencySymbol } from "@/hooks/usePlanPricing";
+import confetti from "canvas-confetti";
+import { useAuth } from "@/hooks/useAuth";
 import { usePlans } from "@/hooks/usePlans";
 import { usePlanPricing } from "@/hooks/usePlanPricing";
-import { useAuth } from "@/hooks/useAuth";
+import { useChainPriceQuote } from "@/hooks/useAdditionalLocationPricing";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { Sparkles, Check, Clock, ArrowRight, PauseCircle, Loader2 } from "lucide-react";
+import { getCurrencySymbol } from "@/hooks/usePlanPricing";
+import { Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle } from "@ui/dialog";
+import { Button } from "@ui/button";
+import { DIALOG_BODY_PADDING } from "@ui/dialog-brand";
+import { CreditCard, Clock, ArrowRight, Loader2 } from "lucide-react";
 import type { SubscriptionPlan } from "./PlanStep";
 import type { LocationInfo } from "./LocationsStep";
 
@@ -37,14 +37,6 @@ interface WelcomeModalProps {
 
 type Screen = "welcome" | "subscribe";
 
-const PLAN_NAMES: Record<SubscriptionPlan, string> = {
-  solo: "Solo",
-  studio: "Studio",
-  chain: "Chain",
-};
-
-const PLAN_ORDER: SubscriptionPlan[] = ["solo", "studio", "chain"];
-
 function formatCountdown(target: string): string {
   const diff = new Date(target).getTime() - Date.now();
   if (diff <= 0) return "expired";
@@ -53,6 +45,21 @@ function formatCountdown(target: string): string {
   if (h > 48) return `${Math.ceil(h / 24)} days`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+const CONFETTI_COLORS = ["#2E1F4E", "#F4C84E", "#F5F1FC"];
+
+function fireConfetti() {
+  const duration = 1400;
+  const end = Date.now() + duration;
+
+  const frame = () => {
+    confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, colors: CONFETTI_COLORS, zIndex: 10000 });
+    confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors: CONFETTI_COLORS, zIndex: 10000 });
+    if (Date.now() < end) requestAnimationFrame(frame);
+  };
+
+  frame();
 }
 
 export function WelcomeModal({
@@ -67,9 +74,6 @@ export function WelcomeModal({
   const navigate = useNavigate();
   const { currentTenant, currentRole } = useAuth();
   const [screen, setScreen] = useState<Screen>("welcome");
-  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>(initialPlan);
-  const [selectedBillingCycle] = useState<"monthly" | "annual">("monthly");
-  const [branchesToPause, setBranchesToPause] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [countdown, setCountdown] = useState<string | null>(null);
 
@@ -77,6 +81,12 @@ export function WelcomeModal({
   const { data: pricing } = usePlanPricing(currency);
 
   const promoExpiry = promoPreview?.expiresAt || promoPreview?.campaignEndsAt || null;
+  const isChain = initialPlan === "chain";
+  const hasPromo = Boolean(promoPreview?.valid);
+
+  useEffect(() => {
+    fireConfetti();
+  }, []);
 
   // Live countdown timer
   useEffect(() => {
@@ -87,40 +97,18 @@ export function WelcomeModal({
     return () => clearInterval(id);
   }, [promoExpiry]);
 
-  const getPlanPricing = (slug: SubscriptionPlan) => {
-    const plan = (plans || []).find((p) => p.slug === slug);
-    if (!plan) return null;
-    return (pricing || []).find((p) => p.plan_id === plan.id) || null;
-  };
+  // There is one base subscription price now — Solo/Studio/Chain are labels
+  // derived from location/seat counts, not separately-priced plans. Always
+  // read the base price from the Solo/Base plan regardless of initialPlan.
+  const basePlan = (plans || []).find((p) => p.slug === "solo");
+  const basePlanPricing = (pricing || []).find((p) => p.plan_id === basePlan?.id);
 
-  const activePlanPricing = getPlanPricing(selectedPlan);
-  const initialPlanPricing = getPlanPricing(initialPlan);
-
-  // Chain pricing isn't flat -- it's the base plan price plus tiered
-  // per-location pricing, same as what create-checkout-session actually
-  // charges (compute_chain_price is the single source of truth for both).
-  // A Chain signup can configure multiple branches during onboarding
-  // (chainLocations), so showing just the 1-location base price here would
-  // quote a lower number than what Confirm & Pay actually charges.
-  const chainTotalLocations = Math.max(chainLocations.length, 1);
-  const { data: chainPriceQuote } = useQuery({
-    queryKey: ["chain-price-quote", selectedPlan, currency, chainTotalLocations],
-    queryFn: async () => {
-      const plan = (plans || []).find((p) => p.slug === "chain");
-      if (!plan) return null;
-      const { data, error } = await supabase.rpc("compute_chain_price", {
-        p_plan_id: plan.id,
-        p_currency: currency,
-        p_total_locations: chainTotalLocations,
-        p_billing_cycle: "monthly",
-      });
-      if (error) throw error;
-      return data?.[0] ?? null;
-    },
-    // Fetched regardless of which plan is currently selected: the plan-pill
-    // row below shows every available plan's price, chain included.
-    enabled: Boolean(plans?.length),
-  });
+  const totalLocations = Math.max(chainLocations.length, 1);
+  const { data: chainPriceQuote } = useChainPriceQuote(
+    isChain ? (plans || []).find((p) => p.slug === "chain")?.id || null : null,
+    currency,
+    totalLocations,
+  );
 
   const computeDiscountedPrice = (base: number): number | null => {
     if (!promoPreview?.valid || !promoPreview.discountValue) return null;
@@ -135,32 +123,15 @@ export function WelcomeModal({
     return null;
   };
 
-  const basePrice = selectedPlan === "chain"
-    ? (chainPriceQuote?.total_price ?? activePlanPricing?.monthly_price ?? null)
-    : (activePlanPricing?.monthly_price ?? null);
-  const discountedPrice = basePrice !== null ? computeDiscountedPrice(basePrice) : null;
+  const totalPrice = isChain
+    ? (chainPriceQuote?.total_price ?? basePlanPricing?.monthly_price ?? null)
+    : (basePlanPricing?.monthly_price ?? null);
+  const discountedPrice = totalPrice !== null ? computeDiscountedPrice(totalPrice) : null;
   const symbol = getCurrencySymbol(currency);
-
-  // Determine if we're downgrading from chain
-  const wasChain = initialPlan === "chain";
-  const isDowngrading = wasChain && selectedPlan !== "chain";
-  const maxLocationsForPlan = selectedPlan === "chain" ? Infinity : selectedPlan === "studio" ? 2 : 1;
-  const excessLocations = isDowngrading
-    ? chainLocations.slice(maxLocationsForPlan)
+  const locationAddonRows = isChain
+    ? (chainPriceQuote?.breakdown || []).filter((row) => row.tier_label !== "Base (1 location)")
     : [];
-
-  // Validate branch pause selection
-  const pauseRequired = isDowngrading && excessLocations.length > 0;
-  const pauseCount = excessLocations.length;
-  const canConfirm = !isProcessing && (!pauseRequired || branchesToPause.length === pauseCount);
-
-  const availablePlans = useMemo(() =>
-    PLAN_ORDER.filter((slug) => {
-      const p = (plans || []).find((pl) => pl.slug === slug);
-      return p && getPlanPricing(slug);
-    }),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  [plans, pricing]);
+  const baseOnlyPrice = isChain ? (basePlanPricing?.monthly_price ?? null) : totalPrice;
 
   const handleExplore = () => {
     onDismiss();
@@ -169,31 +140,8 @@ export function WelcomeModal({
 
   const handleConfirmAndPay = async () => {
     if (!currentTenant?.id) return;
-    if (!canConfirm) return;
-
     setIsProcessing(true);
     try {
-      // 1. If plan changed, update tenant plan first
-      if (selectedPlan !== initialPlan) {
-        const { error: planErr } = await supabase
-          .from("tenants")
-          .update({ plan: selectedPlan })
-          .eq("id", currentTenant.id);
-        if (planErr) throw planErr;
-      }
-
-      // 2. Pause selected branches (if downgrading from chain)
-      if (branchesToPause.length > 0) {
-        const { data: pauseResult, error: pauseErr } = await (supabase.rpc as any)("pause_locations", {
-          p_tenant_id: currentTenant.id,
-          p_location_ids: branchesToPause,
-          p_reason: `Paused on plan downgrade from Chain to ${PLAN_NAMES[selectedPlan]}.`,
-        });
-        if (pauseErr) throw pauseErr;
-        if (!pauseResult?.success) throw new Error(pauseResult?.message || "Failed to pause branches");
-      }
-
-      // 3. Create Paystack checkout session
       const origin = window.location.origin;
       const { data: checkoutData, error: checkoutErr } = await supabase.functions.invoke(
         "create-checkout-session",
@@ -202,7 +150,7 @@ export function WelcomeModal({
             tenantId: currentTenant.id,
             successUrl: `${origin}/salon/subscription?subscription=success`,
             cancelUrl: `${origin}/salon/overview`,
-            billingCycle: selectedBillingCycle,
+            billingCycle: "monthly",
           },
         },
       );
@@ -218,229 +166,195 @@ export function WelcomeModal({
     }
   };
 
-  // --- Welcome Screen ---
+  const logoBadge = (
+    <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl" style={{ background: "rgba(244,200,78,.14)" }}>
+      <svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path
+          d="M16 16 C9 9 3 11 3 16 C3 21 9 23 16 16 C23 9 29 11 29 16 C29 21 23 23 16 16 Z"
+          stroke="#F4C84E"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          fill="none"
+        />
+        <circle cx="16" cy="16" r="1.8" fill="#ffffff" />
+      </svg>
+    </div>
+  );
+
+  // --- Welcome Screen — left-aligned editorial, purple throughout ---
   if (screen === "welcome") {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-        <div className="bg-background rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-          {/* Green header band */}
-          <div className="bg-green-500 text-white px-6 py-8 text-center">
-            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Sparkles className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold">Welcome to Salon Magik!</h1>
-            <p className="text-green-100 text-sm mt-1">{businessName} is ready to go.</p>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+        <div
+          className="w-full max-w-md overflow-hidden rounded-[24px] shadow-[0_28px_64px_rgba(20,12,36,0.5)]"
+          style={{ background: "#2E1F4E" }}
+        >
+          <div className="px-8 pt-10">
+            {logoBadge}
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.08em]" style={{ color: "#F4C84E" }}>
+              You're all set
+            </p>
+            <h1 className="text-[28px] font-medium leading-[1.25] tracking-[-0.3px] text-white">
+              Welcome to Salon Magik, {businessName}!
+            </h1>
+            <p className="mt-3.5 max-w-[300px] text-[14.5px] leading-relaxed" style={{ color: "#C9C2DC" }}>
+              Your salon is live and ready to take bookings.
+            </p>
           </div>
 
-          <div className="px-6 py-6 space-y-5">
-            {/* Trial info */}
-            <div className="flex items-start gap-3 rounded-lg border p-4">
-              <Check className="w-5 h-5 text-green-500 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="font-medium text-sm">{trialDays}-day free trial active</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  You're on the <strong>{PLAN_NAMES[initialPlan]}</strong> plan. Explore all features free for {trialDays} days.
-                </p>
-              </div>
+          {/* plain left-aligned lines, no boxes — the bottom border lives on
+              the wrapper so it stays put whether the promo line is there or not */}
+          <div className="mt-6 px-8" style={{ borderBottom: "1px solid rgba(255,255,255,.1)" }}>
+            <div className="flex items-center gap-2.5 py-3.5" style={{ borderTop: "1px solid rgba(255,255,255,.1)" }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="flex-shrink-0" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" stroke="#8FD6A8" strokeWidth="1.8" />
+                <path d="M8 12.3l2.6 2.6 5.4-5.8" stroke="#8FD6A8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="text-[13.5px]" style={{ color: "#EFEAF7" }}>
+                {trialDays}-day free trial, no card needed yet.
+              </span>
             </div>
-
-            {/* Promo countdown */}
-            {promoPreview?.valid && countdown && (
-              <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-950/20 p-4">
-                <Clock className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="font-medium text-sm text-amber-700 dark:text-amber-400">
-                    Promo code active, expires in {countdown}
-                  </p>
-                  <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
-                    {promoPreview.campaignName} ·{" "}
-                    {promoPreview.discountType === "fixed"
-                      ? `${symbol}${promoPreview.discountValue} off`
-                      : `${promoPreview.discountValue}% off`}{" "}
-                    subscription
-                  </p>
-                </div>
+            {hasPromo && countdown && (
+              <div className="flex items-center gap-2.5 py-3.5" style={{ borderTop: "1px solid rgba(255,255,255,.1)" }}>
+                <Clock className="h-4 w-4 flex-shrink-0" style={{ color: "#F4C84E" }} />
+                <span className="text-[13.5px] font-semibold" style={{ color: "#F4C84E" }}>
+                  {promoPreview?.campaignName} ·{" "}
+                  {promoPreview?.discountType === "fixed"
+                    ? `${symbol}${promoPreview.discountValue} off`
+                    : `${promoPreview?.discountValue}% off`}
+                  , {countdown} left
+                </span>
               </div>
             )}
+          </div>
 
-            {/* CTA row: only the owner can reach billing, so only the owner sees Subscribe now */}
-            <div className="flex flex-col gap-3 pt-2">
-              {currentRole === "owner" && (
-                <Button className="w-full gap-2" onClick={() => setScreen("subscribe")}>
-                  Subscribe now
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              )}
-              <Button
-                variant={currentRole === "owner" ? "outline" : "default"}
-                className="w-full"
-                onClick={handleExplore}
+          <div className="flex flex-col gap-2.5 px-8 pb-8 pt-6">
+            {currentRole === "owner" && (
+              <button
+                type="button"
+                onClick={() => setScreen("subscribe")}
+                className="flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold transition-transform hover:-translate-y-px"
+                style={{ background: "#F4C84E", color: "#2E1F4E" }}
               >
-                Start exploring
-              </Button>
-            </div>
+                Subscribe now
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleExplore}
+              className="w-full rounded-full px-5 py-[11px] text-sm font-medium text-white transition-colors hover:bg-white/[0.08]"
+              style={{ border: "1px solid rgba(255,255,255,.3)", background: "transparent" }}
+            >
+              Start exploring
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  // --- Subscribe / Review Screen ---
+  // --- Subscribe / Review Screen — the app's real dialog system:
+  // BRAND_DIALOG_STYLE on DialogHeader only (dark), plain white body and
+  // footer, real Button variants via FOOTER_ACCENT_STYLE on DialogFooter. ---
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="bg-background rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
-        <div className="px-6 pt-6 pb-4 border-b">
-          <h2 className="text-lg font-bold">Choose your plan</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">Lock in your discount before the promo expires.</p>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-5">
-          {/* Plan pills */}
+    <Dialog open onOpenChange={(next) => { if (!next) handleExplore(); }}>
+      {/* A min-height at every breakpoint, not just sm+ -- a phone's own
+          DIALOG_BODY_PADDING is smaller than desktop's, so it needs its
+          own (smaller) floor rather than inheriting nothing below 640px.
+          Both values are sized to each breakpoint's tallest real state
+          (chain + 1 location add-on + promo line) so the shorter no-
+          promo/solo state grows to match instead of visibly shrinking. */}
+      <DialogContent className="min-h-[480px] sm:max-w-lg sm:min-h-[530px]">
+        <DialogHeader className="flex flex-row items-center gap-3">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: "rgba(157,134,198,.18)" }}>
+            <CreditCard className="h-[18px] w-[18px]" style={{ color: "#9D86C6" }} />
+          </div>
           <div>
-            <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">Plan</p>
-            <div className="flex gap-2 flex-wrap">
-              {availablePlans.map((slug) => {
-                const pp = getPlanPricing(slug);
-                return (
-                  <button
-                    key={slug}
-                    type="button"
-                    onClick={() => {
-                      setSelectedPlan(slug);
-                      setBranchesToPause([]);
-                    }}
-                    className={cn(
-                      "flex-1 min-w-[80px] rounded-lg border px-4 py-3 text-sm font-medium transition-all",
-                      selectedPlan === slug
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "border-border hover:border-primary/40"
-                    )}
-                  >
-                    <span className="block">{PLAN_NAMES[slug]}</span>
-                    {pp && (
-                      <span className="block text-xs text-muted-foreground mt-0.5">
-                        {symbol}
-                        {(slug === "chain" ? (chainPriceQuote?.total_price ?? pp.monthly_price) : pp.monthly_price).toLocaleString()}
-                        /mo
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
+            <DialogTitle className="font-serif text-2xl">Your subscription</DialogTitle>
+            <p className="text-sm text-muted-foreground">One base plan, built to grow</p>
+          </div>
+        </DialogHeader>
+
+        <div className={`${DIALOG_BODY_PADDING} flex-1`}>
+          <div className="rounded-[18px] bg-muted p-[22px]">
+            <div className="flex items-baseline justify-between">
+              <span className="text-[14.5px] font-semibold text-foreground/70">Base subscription</span>
+              <span className="text-[15px] font-semibold text-foreground">
+                {symbol}
+                {(baseOnlyPrice ?? 0).toLocaleString()}/mo
+              </span>
             </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
+              1 location, up to 3 team seats, unlimited everything else
+            </p>
+
+            {locationAddonRows.map((row, index) => (
+              <div key={`${row.tier_label}-${index}`} className="mt-4 flex items-baseline justify-between">
+                <span className="text-[14.5px] text-foreground/70">
+                  {row.locations} extra location{row.locations !== 1 ? "s" : ""}
+                </span>
+                <span className="text-[15px] font-semibold text-foreground">
+                  {row.subtotal != null ? `${symbol}${Number(row.subtotal).toLocaleString()}/mo` : "Custom"}
+                </span>
+              </div>
+            ))}
+
+            <div className="my-[18px] border-t border-border" />
+
+            <div className="flex items-baseline justify-between">
+              <span className="text-[15px] font-semibold text-foreground">Monthly total</span>
+              <span className="text-[25px] font-bold text-primary">
+                {symbol}
+                {(discountedPrice ?? totalPrice ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </span>
+            </div>
+            {hasPromo && discountedPrice !== null && totalPrice !== null && (
+              <p className="mt-1.5 text-[12.5px] font-semibold text-success">
+                {promoPreview?.campaignName} applied —{" "}
+                {promoPreview?.discountType === "percentage"
+                  ? `${promoPreview.discountValue}% off`
+                  : `${symbol}${promoPreview?.discountValue} off`}
+                , was {symbol}
+                {totalPrice.toLocaleString()}
+              </p>
+            )}
           </div>
 
-          {/* Pricing comparison */}
-          {activePlanPricing && (
-            <div className="rounded-lg border p-4 space-y-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pricing</p>
-              <div className="flex items-baseline gap-2">
-                {discountedPrice !== null ? (
-                  <>
-                    <span className="text-2xl font-bold text-green-600">
-                      {symbol}{discountedPrice.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </span>
-                    <span className="text-sm text-muted-foreground line-through">
-                      {symbol}{activePlanPricing.monthly_price.toLocaleString()}
-                    </span>
-                    <span className="text-xs text-muted-foreground">/month</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-2xl font-bold">
-                      {symbol}{activePlanPricing.monthly_price.toLocaleString()}
-                    </span>
-                    <span className="text-xs text-muted-foreground">/month</span>
-                  </>
-                )}
-              </div>
-              {promoPreview?.valid && discountedPrice !== null && (
-                <Badge variant="success" className="text-xs">
-                  {promoPreview.discountType === "percentage"
-                    ? `${promoPreview.discountValue}% off applied`
-                    : `${symbol}${promoPreview.discountValue} off applied`}
-                </Badge>
-              )}
-              {selectedPlan !== initialPlan && initialPlanPricing && (
-                <p className="text-xs text-muted-foreground">
-                  Changing from <strong>{PLAN_NAMES[initialPlan]}</strong> (
-                  {symbol}{initialPlanPricing.monthly_price.toLocaleString()}/mo)
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Branch pausing selection */}
-          {isDowngrading && excessLocations.length > 0 && (
-            <div className="rounded-lg border border-orange-200 bg-orange-50/40 dark:border-orange-800 dark:bg-orange-950/20 p-4 space-y-3">
-              <div className="flex items-start gap-2">
-                <PauseCircle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-orange-700 dark:text-orange-400">
-                    {pauseCount} branch{pauseCount !== 1 ? "es" : ""} will be paused
-                  </p>
-                  <p className="text-xs text-orange-600 dark:text-orange-500 mt-0.5">
-                    {PLAN_NAMES[selectedPlan]} supports {maxLocationsForPlan === 1 ? "1 branch" : `up to ${maxLocationsForPlan} branches`}.
-                    Select which to pause. All data is kept and branches can be revived later.
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {excessLocations.map((loc) => (
-                  <label key={loc.id} className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="w-4 h-4"
-                      checked={branchesToPause.includes(loc.id)}
-                      onChange={(e) => {
-                        setBranchesToPause((prev) =>
-                          e.target.checked
-                            ? [...prev, loc.id]
-                            : prev.filter((id) => id !== loc.id)
-                        );
-                      }}
-                    />
-                    <span className="text-sm">
-                      {loc.name || "Unnamed branch"}{loc.city ? ` · ${loc.city}` : ""}
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {pauseRequired && branchesToPause.length < pauseCount && (
-                <p className="text-xs text-destructive">
-                  Please select all {pauseCount} branch{pauseCount !== 1 ? "es" : ""} to pause to continue.
-                </p>
-              )}
-            </div>
-          )}
+          <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            Nothing is charged until your {trialDays}-day trial ends. Cancel any time before then.
+          </p>
         </div>
 
-        <div className="px-6 py-4 border-t flex flex-col gap-2">
-          <Button
-            className="w-full gap-2"
-            disabled={!canConfirm}
-            onClick={handleConfirmAndPay}
+        <DialogFooter className="flex-row items-center justify-between">
+          <button
+            type="button"
+            disabled={isProcessing}
+            onClick={handleExplore}
+            className="text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-70"
           >
-            {isProcessing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              <>
-                Confirm & Pay
-                <ArrowRight className="w-4 h-4" />
-              </>
-            )}
-          </Button>
-          <Button variant="ghost" className="w-full" onClick={() => setScreen("welcome")} disabled={isProcessing}>
-            Back
-          </Button>
-          <Button variant="link" className="w-full text-muted-foreground text-xs" onClick={handleExplore} disabled={isProcessing}>
             Skip for now, I'll subscribe later
-          </Button>
-        </div>
-      </div>
-    </div>
+          </button>
+          <div className="flex gap-2.5">
+            <Button type="button" variant="outline" disabled={isProcessing} onClick={() => setScreen("welcome")}>
+              Back
+            </Button>
+            <Button type="button" disabled={isProcessing} onClick={handleConfirmAndPay}>
+              {isProcessing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  Confirm &amp; Pay
+                  <ArrowRight className="h-4 w-4" />
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
